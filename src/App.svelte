@@ -3,34 +3,47 @@
 	import { onMount } from 'svelte'
 	import jsPDF from 'jspdf'
 
+	// Data structure for hierarchical subjects/assessments
+	let subjects = $state([])
+	let currentSubjectId = $state(null)
+	let currentAssessmentId = $state(null)
+	let currentSubject = $state(null)
+	let currentAssessment = $state(null)
+
+	// Current assessment data
 	let newParagraph = $state('')
 	let paragraphs = $state([])
 	let selectedParagraphs = $state(new Set())
 	let studentName = $state('')
 	let studentImage = $state('')
 
-	async function loadData() {
+	// UI state
+	let showAddSubject = $state(false)
+	let showAddAssessment = $state(false)
+	let newSubjectName = $state('')
+	let newAssessmentName = $state('')
+
+	// Generate unique ID
+	function generateId() {
+		return Date.now().toString(36) + Math.random().toString(36).substr(2)
+	}
+
+	async function loadSubjects() {
 		try {
 			// Try Tauri first (desktop app)
 			const data = await invoke('read_portable')
 			if (data) {
 				const parsed = JSON.parse(data)
-				paragraphs = parsed.paragraphs || []
-				selectedParagraphs = new Set(parsed.selectedParagraphs || [])
-				studentName = parsed.studentName || ''
-				studentImage = parsed.studentImage || ''
+				subjects = parsed.subjects || []
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
 			// Fallback to localStorage for web development
 			try {
-				const data = localStorage.getItem('feedback-data')
+				const data = localStorage.getItem('feedback-subjects')
 				if (data) {
 					const parsed = JSON.parse(data)
-					paragraphs = parsed.paragraphs || []
-					selectedParagraphs = new Set(parsed.selectedParagraphs || [])
-					studentName = parsed.studentName || ''
-					studentImage = parsed.studentImage || ''
+					subjects = parsed.subjects || []
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
@@ -38,7 +51,68 @@
 		}
 	}
 
-	async function saveData() {
+	async function saveSubjects() {
+		const data = { subjects }
+		
+		try {
+			// Try Tauri first (desktop app)
+			await invoke('write_portable', { data: JSON.stringify(data, null, 2) })
+		} catch (error) {
+			console.log('Tauri not available, saving to browser storage')
+			// Fallback to localStorage for web development
+			try {
+				localStorage.setItem('feedback-subjects', JSON.stringify(data))
+			} catch (localError) {
+				console.error('Failed to save to localStorage:', localError)
+			}
+		}
+	}
+
+	async function loadAssessmentData(subjectId, assessmentId) {
+		try {
+			// Try Tauri first (desktop app)
+			const data = await invoke('read_subject_data', { subjectId: `${subjectId}-${assessmentId}` })
+			if (data) {
+				const parsed = JSON.parse(data)
+				paragraphs = parsed.paragraphs || []
+				selectedParagraphs = new Set(parsed.selectedParagraphs || [])
+				studentName = parsed.studentName || ''
+				studentImage = parsed.studentImage || ''
+			} else {
+				// Initialize empty data
+				paragraphs = []
+				selectedParagraphs = new Set()
+				studentName = ''
+				studentImage = ''
+			}
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			// Fallback to localStorage for web development
+			try {
+				const key = `feedback-assessment-${subjectId}-${assessmentId}`
+				const data = localStorage.getItem(key)
+				if (data) {
+					const parsed = JSON.parse(data)
+					paragraphs = parsed.paragraphs || []
+					selectedParagraphs = new Set(parsed.selectedParagraphs || [])
+					studentName = parsed.studentName || ''
+					studentImage = parsed.studentImage || ''
+				} else {
+					// Initialize empty data
+					paragraphs = []
+					selectedParagraphs = new Set()
+					studentName = ''
+					studentImage = ''
+				}
+			} catch (localError) {
+				console.error('Failed to load from localStorage:', localError)
+			}
+		}
+	}
+
+	async function saveAssessmentData() {
+		if (!currentSubjectId || !currentAssessmentId) return
+
 		const data = {
 			paragraphs,
 			selectedParagraphs: Array.from(selectedParagraphs),
@@ -48,23 +122,92 @@
 		
 		try {
 			// Try Tauri first (desktop app)
-			await invoke('write_portable', { data: JSON.stringify(data, null, 2) })
+			await invoke('write_subject_data', { 
+				subjectId: `${currentSubjectId}-${currentAssessmentId}`, 
+				data: JSON.stringify(data, null, 2) 
+			})
 		} catch (error) {
 			console.log('Tauri not available, saving to browser storage')
 			// Fallback to localStorage for web development
 			try {
-				localStorage.setItem('feedback-data', JSON.stringify(data))
+				const key = `feedback-assessment-${currentSubjectId}-${currentAssessmentId}`
+				localStorage.setItem(key, JSON.stringify(data))
 			} catch (localError) {
 				console.error('Failed to save to localStorage:', localError)
 			}
 		}
 	}
 
+	function addSubject() {
+		if (newSubjectName.trim()) {
+			const subject = {
+				id: generateId(),
+				name: newSubjectName.trim(),
+				assessments: []
+			}
+			subjects.push(subject)
+			newSubjectName = ''
+			showAddSubject = false
+			saveSubjects()
+		}
+	}
+
+	function addAssessment() {
+		if (newAssessmentName.trim() && currentSubject) {
+			const assessment = {
+				id: generateId(),
+				name: newAssessmentName.trim()
+			}
+			currentSubject.assessments.push(assessment)
+			newAssessmentName = ''
+			showAddAssessment = false
+			saveSubjects()
+		}
+	}
+
+	function selectSubject(subject) {
+		currentSubjectId = subject.id
+		currentSubject = subject
+		currentAssessmentId = null
+		currentAssessment = null
+		// Clear current assessment data
+		paragraphs = []
+		selectedParagraphs = new Set()
+		studentName = ''
+		studentImage = ''
+	}
+
+	function selectAssessment(assessment) {
+		currentAssessmentId = assessment.id
+		currentAssessment = assessment
+		loadAssessmentData(currentSubjectId, currentAssessmentId)
+	}
+
+	function goBackToSubjects() {
+		currentSubjectId = null
+		currentSubject = null
+		currentAssessmentId = null
+		currentAssessment = null
+		paragraphs = []
+		selectedParagraphs = new Set()
+		studentName = ''
+		studentImage = ''
+	}
+
+	function goBackToAssessments() {
+		currentAssessmentId = null
+		currentAssessment = null
+		paragraphs = []
+		selectedParagraphs = new Set()
+		studentName = ''
+		studentImage = ''
+	}
+
 	function addParagraph() {
 		if (newParagraph.trim()) {
 			paragraphs.push(newParagraph.trim())
 			newParagraph = ''
-			saveData()
+			saveAssessmentData()
 		}
 	}
 
@@ -75,7 +218,7 @@
 			selectedParagraphs.add(index)
 		}
 		selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
-		saveData()
+		saveAssessmentData()
 	}
 
 	function getSelectedText() {
@@ -88,11 +231,13 @@
 	function handleImageUpload(event) {
 		const file = event.target.files[0]
 		if (file) {
-			const reader = new FileReader()
-			reader.onload = function(e) {
+					const reader = new FileReader()
+		reader.onload = function(e) {
+			if (typeof e.target.result === 'string') {
 				studentImage = e.target.result
-				saveData()
+				saveAssessmentData()
 			}
+		}
 			reader.readAsDataURL(file)
 		}
 	}
@@ -138,7 +283,7 @@
 					
 					// Continue with the rest of the PDF generation
 					let currentY = yPosition + imageHeight + 15
-					generateRestOfPDF(doc, currentY, margin, pageWidth, maxLineWidth, selectedText, studentName)
+					generateRestOfPDF(doc, currentY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
 				}
 				img.src = studentImage
 				return // Exit here as the rest will be handled in onload
@@ -148,10 +293,10 @@
 		}
 		
 		// If no image, continue with normal PDF generation (with margin)
-		generateRestOfPDF(doc, margin, margin, pageWidth, maxLineWidth, selectedText, studentName)
+		generateRestOfPDF(doc, margin, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
 	}
 
-	function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName) {
+	function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName) {
 		// Try to set a font that's closer to Oxygen (Arial or Helvetica)
 		try {
 			doc.setFont('helvetica', 'normal')
@@ -160,8 +305,19 @@
 			console.log('Helvetica not available, using default font')
 		}
 		
-		// Student info
+		// Header info
+		doc.setFontSize(16)
+		if (subjectName) {
+			doc.text(`Subject: ${subjectName}`, margin, yPosition)
+			yPosition += 12
+		}
+		
 		doc.setFontSize(14)
+		if (assessmentName) {
+			doc.text(`Assessment: ${assessmentName}`, margin, yPosition)
+			yPosition += 10
+		}
+		
 		if (studentName) {
 			doc.text(`Student: ${studentName}`, margin, yPosition)
 			yPosition += 10
@@ -190,8 +346,10 @@
 			yPosition += lineHeight
 		})
 		
-		// Generate filename with student name if provided
+		// Generate filename with subject, assessment, and student name
 		let filename = 'feedback-report'
+		if (subjectName) filename += `-${subjectName.replace(/[^a-zA-Z0-9]/g, '-')}`
+		if (assessmentName) filename += `-${assessmentName.replace(/[^a-zA-Z0-9]/g, '-')}`
 		if (studentName) filename += `-${studentName.replace(/[^a-zA-Z0-9]/g, '-')}`
 		filename += '.pdf'
 		
@@ -200,27 +358,29 @@
 	}
 
 	onMount(() => {
-		loadData()
+		loadSubjects()
 	})
 </script>
 
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">My App</a>
+		<a class="navbar-brand" href="/">Feedback Manager</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
 		<div class="collapse navbar-collapse" id="navbarNav">
 			<ul class="navbar-nav ms-auto">
 				<li class="nav-item">
-					<a class="nav-link" href="#home">Home</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link" href="#about">About</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link" href="#contact">Contact</a>
+					<span class="nav-link text-light">
+						{#if currentSubject && currentAssessment}
+							{currentSubject.name} → {currentAssessment.name}
+						{:else if currentSubject}
+							{currentSubject.name}
+						{:else}
+							All Subjects
+						{/if}
+					</span>
 				</li>
 			</ul>
 		</div>
@@ -230,119 +390,272 @@
 <main>
 	<div class="w-100 mt-4" style="padding: 0 16px; margin: 0; display: flex; width: calc(100vw - 32px); gap: 16px;">
 		<!-- Sidebar -->
-		<div style="width: 220px; min-width: 220px; flex-shrink: 0;">
+		<div style="width: 280px; min-width: 280px; flex-shrink: 0;">
 			<div class="p-3 border bg-light position-sticky" style="top: 20px; height: calc(100vh - 120px); overflow-y: auto; border-radius: 8px;">
 				<h5>Navigation</h5>
-				<ul class="nav nav-pills flex-column">
-					<li class="nav-item">
-						<a class="nav-link active" href="#home">Home</a>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link" href="#about">About</a>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link" href="#services">Services</a>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link" href="#contact">Contact</a>
-					</li>
-				</ul>
+				
+				{#if !currentSubject}
+					<!-- Subject List -->
+					<div class="mb-3">
+						<div class="d-flex justify-content-between align-items-center mb-2">
+							<h6 class="mb-0">Subjects</h6>
+							<button 
+								class="btn btn-primary btn-sm" 
+								onclick={() => showAddSubject = true}
+							>
+								+ Add
+							</button>
+						</div>
+						
+						{#if showAddSubject}
+							<div class="mb-2">
+								<input 
+									type="text" 
+									class="form-control form-control-sm mb-2" 
+									placeholder="Subject name"
+									bind:value={newSubjectName}
+									onkeydown={(e) => e.key === 'Enter' && addSubject()}
+								>
+								<div class="btn-group w-100">
+									<button class="btn btn-success btn-sm" onclick={addSubject}>Add</button>
+									<button class="btn btn-secondary btn-sm" onclick={() => showAddSubject = false}>Cancel</button>
+								</div>
+							</div>
+						{/if}
+						
+						{#each subjects as subject}
+							<button 
+								class="btn btn-outline-primary w-100 mb-1 text-start" 
+								onclick={() => selectSubject(subject)}
+							>
+								{subject.name} ({subject.assessments.length})
+							</button>
+						{/each}
+						
+						{#if subjects.length === 0}
+							<p class="text-muted small">No subjects yet. Add your first subject above.</p>
+						{/if}
+					</div>
+				{:else if !currentAssessment}
+					<!-- Assessment List -->
+					<div class="mb-3">
+						<button class="btn btn-secondary btn-sm mb-3" onclick={goBackToSubjects}>
+							← Back to Subjects
+						</button>
+						
+						<div class="d-flex justify-content-between align-items-center mb-2">
+							<h6 class="mb-0">Assessments in {currentSubject.name}</h6>
+							<button 
+								class="btn btn-primary btn-sm" 
+								onclick={() => showAddAssessment = true}
+							>
+								+ Add
+							</button>
+						</div>
+						
+						{#if showAddAssessment}
+							<div class="mb-2">
+								<input 
+									type="text" 
+									class="form-control form-control-sm mb-2" 
+									placeholder="Assessment name"
+									bind:value={newAssessmentName}
+									onkeydown={(e) => e.key === 'Enter' && addAssessment()}
+								>
+								<div class="btn-group w-100">
+									<button class="btn btn-success btn-sm" onclick={addAssessment}>Add</button>
+									<button class="btn btn-secondary btn-sm" onclick={() => showAddAssessment = false}>Cancel</button>
+								</div>
+							</div>
+						{/if}
+						
+						{#each currentSubject.assessments as assessment}
+							<button 
+								class="btn btn-outline-success w-100 mb-1 text-start" 
+								onclick={() => selectAssessment(assessment)}
+							>
+								{assessment.name}
+							</button>
+						{/each}
+						
+						{#if currentSubject.assessments.length === 0}
+							<p class="text-muted small">No assessments yet. Add your first assessment above.</p>
+						{/if}
+					</div>
+				{:else}
+					<!-- Feedback Mode Navigation -->
+					<div class="mb-3">
+						<button class="btn btn-secondary btn-sm mb-2 w-100" onclick={goBackToAssessments}>
+							← Back to Assessments
+						</button>
+						<button class="btn btn-outline-secondary btn-sm w-100" onclick={goBackToSubjects}>
+							← Back to Subjects
+						</button>
+					</div>
+					
+					<div class="alert alert-info p-2">
+						<small>
+							<strong>Current:</strong><br>
+							Subject: {currentSubject.name}<br>
+							Assessment: {currentAssessment.name}
+						</small>
+					</div>
+				{/if}
 			</div>
 		</div>
 
 		<!-- Main Content -->
 		<div style="flex: 1; min-width: 0;">
-			<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
-				<h2>Feedback Manager</h2>
-				
-				<!-- Student Info Section -->
-				<div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: end; width: 100%;">
-					<div style="flex: 1;">
-						<label for="studentNameInput" class="form-label">Student Name:</label>
-						<input 
-							id="studentNameInput" 
-							type="text" 
-							class="form-control" 
-							bind:value={studentName} 
-							placeholder="Enter student name"
-							onchange={saveData}
-						>
-					</div>
-					<div style="flex: 1;">
-						<label for="studentImageInput" class="form-label">Student Photo:</label>
-						<div class="d-flex align-items-center gap-3">
-							<input 
-								id="studentImageInput" 
-								type="file" 
-								class="form-control" 
-								accept="image/*"
-								onchange={handleImageUpload}
-							>
-							{#if studentImage}
-								<img 
-									src={studentImage} 
-									alt="Student" 
-									class="rounded border"
-									style="width: 60px; height: 60px; object-fit: cover;"
-								>
-							{/if}
-						</div>
-					</div>
-				</div>
-				
-				<!-- Add Paragraph Form -->
-				<div class="mb-3">
-					<label for="paragraphInput" class="form-label">Add a new paragraph:</label>
-					<div class="input-group">
-						<textarea id="paragraphInput" class="form-control" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
-						<button class="btn btn-primary" type="button" onclick={addParagraph}>Add</button>
-					</div>
-				</div>
-
-				<!-- Display Paragraphs -->
-				<div class="paragraphs">
-					{#each paragraphs as paragraph, index}
-						<div class="mb-3 p-2 border-start border-primary border-3 bg-white d-flex align-items-start">
-							<div class="form-check me-3">
-								<input 
-									class="form-check-input" 
-									type="checkbox" 
-									id="paragraph-{index}"
-									checked={selectedParagraphs.has(index)}
-									onchange={() => toggleParagraph(index)}
-								>
-								<label class="form-check-label" for="paragraph-{index}">
-									Select
-								</label>
-							</div>
-							<p class="mb-0 flex-grow-1">{paragraph}</p>
-						</div>
-					{/each}
+			{#if !currentSubject}
+				<!-- Welcome Screen -->
+				<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
+					<h2>Welcome to Feedback Manager</h2>
+					<p>Select a subject from the sidebar to get started, or create a new subject.</p>
 					
-					{#if paragraphs.length === 0}
-						<p class="text-muted">No paragraphs added yet. Use the textbox above to add your first paragraph.</p>
+					{#if subjects.length > 0}
+						<div class="row">
+							{#each subjects as subject}
+								<div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+									<div class="card h-100 shadow-sm border-0 subject-card">
+										<div class="card-body d-flex flex-column text-center p-4">
+											<div class="subject-icon mb-3">
+												📚
+											</div>
+											<h5 class="card-title mb-3 text-primary fw-bold">{subject.name}</h5>
+											<p class="card-text text-muted mb-4 flex-grow-1">
+												{subject.assessments.length} assessment{subject.assessments.length !== 1 ? 's' : ''}
+											</p>
+											<button class="btn btn-primary w-100 mt-auto subject-btn" onclick={() => selectSubject(subject)}>
+												Open
+											</button>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
 					{/if}
 				</div>
-
-				<!-- Selection Info -->
-				{#if selectedParagraphs.size > 0}
-					<div class="alert alert-info mt-3">
-						<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
+			{:else if !currentAssessment}
+				<!-- Subject Overview -->
+				<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
+					<h2>{currentSubject.name}</h2>
+					<p>Select an assessment to start working on feedback, or create a new assessment.</p>
+					
+					{#if currentSubject.assessments.length > 0}
+						<div class="row">
+							{#each currentSubject.assessments as assessment}
+								<div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+									<div class="card h-100 shadow-sm border-0 assessment-card">
+										<div class="card-body d-flex flex-column text-center p-4">
+											<div class="assessment-icon mb-3">
+												📝
+											</div>
+											<h5 class="card-title mb-4 text-success fw-bold">{assessment.name}</h5>
+											<button class="btn btn-success w-100 mt-auto assessment-btn" onclick={() => selectAssessment(assessment)}>
+												Open
+											</button>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{:else}
+				<!-- Feedback Editor -->
+				<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
+					<h2>Feedback for {currentAssessment.name}</h2>
+					<p class="text-muted">Subject: {currentSubject.name}</p>
+					
+					<!-- Student Info Section -->
+					<div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: end; width: 100%;">
+						<div style="flex: 1;">
+							<label for="studentNameInput" class="form-label">Student Name:</label>
+							<input 
+								id="studentNameInput" 
+								type="text" 
+								class="form-control" 
+								bind:value={studentName} 
+								placeholder="Enter student name"
+								onchange={saveAssessmentData}
+							>
+						</div>
+						<div style="flex: 1;">
+							<label for="studentImageInput" class="form-label">Student Photo:</label>
+							<div class="d-flex align-items-center gap-3">
+								<input 
+									id="studentImageInput" 
+									type="file" 
+									class="form-control" 
+									accept="image/*"
+									onchange={handleImageUpload}
+								>
+								{#if studentImage}
+									<img 
+										src={studentImage} 
+										alt="Student" 
+										class="rounded border"
+										style="width: 60px; height: 60px; object-fit: cover;"
+									>
+								{/if}
+							</div>
+						</div>
 					</div>
-				{/if}
-			</div>
+					
+					<!-- Add Paragraph Form -->
+					<div class="mb-3">
+						<label for="paragraphInput" class="form-label">Add a new paragraph:</label>
+						<div class="input-group">
+							<textarea id="paragraphInput" class="form-control" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
+							<button class="btn btn-primary" type="button" onclick={addParagraph}>Add</button>
+						</div>
+					</div>
+
+					<!-- Display Paragraphs -->
+					<div class="paragraphs">
+						{#each paragraphs as paragraph, index}
+							<div class="mb-3 p-2 border-start border-primary border-3 bg-white d-flex align-items-start">
+								<div class="form-check me-3">
+									<input 
+										class="form-check-input" 
+										type="checkbox" 
+										id="paragraph-{index}"
+										checked={selectedParagraphs.has(index)}
+										onchange={() => toggleParagraph(index)}
+									>
+									<label class="form-check-label" for="paragraph-{index}">
+										Select
+									</label>
+								</div>
+								<p class="mb-0 flex-grow-1">{paragraph}</p>
+							</div>
+						{/each}
+						
+						{#if paragraphs.length === 0}
+							<p class="text-muted">No paragraphs added yet. Use the textbox above to add your first paragraph.</p>
+						{/if}
+					</div>
+
+					<!-- Selection Info -->
+					{#if selectedParagraphs.size > 0}
+						<div class="alert alert-info mt-3">
+							<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 </main>
 
-<!-- Selected Text Section -->
-{#if selectedParagraphs.size > 0}
+<!-- Selected Text Section - Only show when in feedback mode with selections -->
+{#if currentAssessment && selectedParagraphs.size > 0}
 	<div class="container-fluid mt-4 mb-4">
 		<div class="row">
 			<div class="col-12">
 				<div class="card">
 					<div class="card-header d-flex justify-content-between align-items-center">
-						<h5 class="mb-0">Selected Paragraphs</h5>
+						<h5 class="mb-0">Selected Paragraphs for {currentAssessment.name}</h5>
 						<div class="btn-group">
 							<button class="btn btn-success btn-sm" onclick={copyToClipboard}>
 								📋 Copy to Clipboard
@@ -358,7 +671,7 @@
 							rows="10" 
 							readonly 
 							value={getSelectedText()}
-							style="font-family: 'Oxygen', helvetica, system-ui, sans-serif; font-size: 10px; line-height: 1.3;"
+							style="font-family: 'Roboto', system-ui, sans-serif; font-size: 10px; line-height: 1.3;"
 						></textarea>
 					</div>
 				</div>
@@ -370,12 +683,15 @@
 <!-- Footer -->
 <footer class="bg-dark text-light text-center py-3 mt-5">
 	<div class="container-fluid">
-		<p class="mb-0">&copy; 2025 My App. All rights reserved.</p>
+		<p class="mb-0">&copy; 2025 Feedback Manager. All rights reserved.</p>
 		<small class="text-muted">Built with Bootstrap and Svelte</small>
 	</div>
 </footer>
 
 <style>
+	/* Google Fonts Import */
+	@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700;1,900&display=swap');
+
 	/* Global reset and font setup */
 	:global(html, body) {
 		width: 100% !important;
@@ -383,7 +699,7 @@
 		margin: 0 !important;
 		padding: 0 !important;
 		overflow-x: hidden !important;
-		font-family: 'Oxygen', system-ui, Avenir, Helvetica, Arial, sans-serif !important;
+		font-family: 'Roboto', system-ui, Helvetica, Arial, sans-serif !important;
 	}
 	
 	/* Base font sizing - more conservative approach */
@@ -418,7 +734,7 @@
 	
 	/* Form elements */
 	:global(.form-control) {
-		font-family: 'Oxygen', system-ui, sans-serif !important;
+		font-family: 'Roboto', system-ui, sans-serif !important;
 		font-size: 12px !important;
 		padding: 6px 10px !important;
 		line-height: 1.3 !important;
@@ -529,5 +845,75 @@
 	/* Box sizing for all elements */
 	:global(*) {
 		box-sizing: border-box !important;
+	}
+
+	/* Enhanced Card Styling */
+	:global(.subject-card, .assessment-card) {
+		transition: all 0.3s ease !important;
+		border-radius: 16px !important;
+		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+		min-height: 240px !important;
+	}
+
+	:global(.subject-card:hover, .assessment-card:hover) {
+		transform: translateY(-6px) !important;
+		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15) !important;
+	}
+
+	:global(.subject-icon, .assessment-icon) {
+		font-size: 40px !important;
+		opacity: 0.9;
+		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+	}
+
+	:global(.subject-card .card-title) {
+		font-size: 20px !important;
+		font-weight: 700 !important;
+		line-height: 1.2 !important;
+		min-height: 48px !important;
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+	}
+
+	:global(.assessment-card .card-title) {
+		font-size: 18px !important;
+		font-weight: 700 !important;
+		line-height: 1.2 !important;
+		min-height: 48px !important;
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+	}
+
+	:global(.subject-btn, .assessment-btn) {
+		font-weight: 600 !important;
+		font-size: 14px !important;
+		padding: 12px 24px !important;
+		border-radius: 8px !important;
+		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15) !important;
+		transition: all 0.2s ease !important;
+		border: none !important;
+		text-transform: uppercase !important;
+		letter-spacing: 0.5px !important;
+	}
+
+	:global(.subject-btn:hover, .assessment-btn:hover) {
+		transform: translateY(-2px) !important;
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25) !important;
+	}
+
+	:global(.subject-btn) {
+		background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+	}
+
+	:global(.assessment-btn) {
+		background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+	}
+
+	/* Welcome and Subject Overview improvements */
+	:global(.bg-light) {
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+		border: 1px solid #dee2e6 !important;
 	}
 </style>

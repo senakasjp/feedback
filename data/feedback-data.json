@@ -1,0 +1,23 @@
+{
+  "subjects": [
+    {
+      "id": "mf1xsaj3gu74u4uhju5",
+      "name": "Studio 6",
+      "assessments": [
+        {
+          "id": "mf1xupfy3pq0nfp39dc",
+          "name": "Mid-PDR"
+        },
+        {
+          "id": "mf1xuzhf3evuktc72rw",
+          "name": "Final PDR"
+        }
+      ]
+    },
+    {
+      "id": "mf1xsq0h2i6xoaah3r5",
+      "name": "Studio 5",
+      "assessments": []
+    }
+  ]
+}
