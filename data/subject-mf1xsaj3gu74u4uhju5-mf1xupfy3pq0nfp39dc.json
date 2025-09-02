@@ -1,8 +1,10 @@
 {
   "paragraphs": [
-    "Test"
+    "Sub Objective 1.2: Test",
+    "Sub Objective 1.1: Test"
   ],
   "selectedParagraphs": [
+    1,
     0
   ],
   "studentName": "Senaka",

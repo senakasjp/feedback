@@ -121,24 +121,24 @@ fn generate_pdf_file(
     let mut y_position = 270.0; // Start from top
     let margin = 20.0;
     
-    // Add header information
+    // Add header information with reduced spacing
     if let Some(subject) = &subject_name {
         current_layer.use_text(format!("Subject: {}", subject), 16.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 10.0;
+        y_position -= 8.0;
     }
     
     if let Some(assessment) = &assessment_name {
         current_layer.use_text(format!("Assessment: {}", assessment), 14.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 8.0;
+        y_position -= 6.0;
     }
     
     if let Some(student) = &student_name {
         current_layer.use_text(format!("Student: {}", student), 14.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 8.0;
+        y_position -= 6.0;
     }
     
-    // Add separator
-    y_position -= 10.0;
+    // Add separator with reduced spacing
+    y_position -= 6.0;
     
     // Add content
     let lines: Vec<&str> = content.split('\n').collect();
@@ -149,17 +149,20 @@ fn generate_pdf_file(
         }
         
         if line.trim().is_empty() {
-            y_position -= 4.0;
+            y_position -= 2.0; // Reduced empty line spacing
             continue;
         }
         
-        // Check if it's a section header (contains "Objective" or ends with ":")
-        if line.contains("Objective") || line.ends_with(':') {
-            current_layer.use_text(line.to_string(), 12.0, Mm(margin), Mm(y_position), &font);
+        // Check if it's a category header (Sub Objective X.X, Report, Decision followed by ':')
+        if line.trim().ends_with(':') && (line.contains("Sub Objective") || line.contains("Report") || line.contains("Decision")) {
+            // Bold font for category headers, slightly larger
+            current_layer.use_text(line.to_string(), 11.0, Mm(margin), Mm(y_position), &font);
+            y_position -= 5.0; // Reduced spacing after headers
         } else {
-            current_layer.use_text(line.to_string(), 11.0, Mm(margin), Mm(y_position), &regular_font);
+            // Regular content with smaller font
+            current_layer.use_text(line.to_string(), 10.0, Mm(margin), Mm(y_position), &regular_font);
+            y_position -= 4.0; // Further reduced line spacing
         }
-        y_position -= 6.0;
     }
     
     // Save the PDF

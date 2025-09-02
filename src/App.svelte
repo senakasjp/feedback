@@ -23,6 +23,19 @@
 	let newSubjectName = $state('')
 	let newAssessmentName = $state('')
 
+	// Category selection for Studio 6 PDR assessments
+	let selectedCategory = $state('')
+	let pdrCategories = [
+		'Sub Objective 1.1',
+		'Sub Objective 1.2', 
+		'Sub Objective 2.1',
+		'Sub Objective 2.2',
+		'Sub Objective 3.1',
+		'Sub Objective 3.2',
+		'Report',
+		'Decision'
+	]
+
 	// Generate unique ID
 	function generateId() {
 		return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -205,10 +218,23 @@
 
 	function addParagraph() {
 		if (newParagraph.trim()) {
-			paragraphs.push(newParagraph.trim())
+			let paragraphText = newParagraph.trim()
+			
+			// For Studio 6 PDR assessments, add category prefix if selected
+			if (isStudio6PDR() && selectedCategory) {
+				paragraphText = `${selectedCategory}: ${paragraphText}`
+			}
+			
+			paragraphs.push(paragraphText)
 			newParagraph = ''
 			saveAssessmentData()
 		}
+	}
+
+	// Helper function to check if current assessment is Studio 6 PDR
+	function isStudio6PDR() {
+		return currentSubject?.name === "Studio 6" && 
+		       (currentAssessment?.name === "Mid-PDR" || currentAssessment?.name === "Final-PDR")
 	}
 
 	function toggleParagraph(index) {
@@ -221,11 +247,123 @@
 		saveAssessmentData()
 	}
 
+	function deleteParagraph(index) {
+		// Remove from paragraphs array
+		paragraphs.splice(index, 1)
+		
+		// Update selected paragraphs indices (shift down for indices after deleted one)
+		const newSelectedParagraphs = new Set()
+		selectedParagraphs.forEach(selectedIndex => {
+			if (selectedIndex < index) {
+				// Keep indices before deleted paragraph unchanged
+				newSelectedParagraphs.add(selectedIndex)
+			} else if (selectedIndex > index) {
+				// Shift down indices after deleted paragraph
+				newSelectedParagraphs.add(selectedIndex - 1)
+			}
+			// Don't add the deleted index
+		})
+		selectedParagraphs = newSelectedParagraphs
+		
+		saveAssessmentData()
+	}
+
+	function getSectionOrder(paragraph) {
+		// First check for Sub Objective patterns and extract numbers
+		const subObjectiveMatch = paragraph.match(/^Sub Objective (\d)\.(\d):/i)
+		if (subObjectiveMatch) {
+			const major = parseInt(subObjectiveMatch[1])
+			const minor = parseInt(subObjectiveMatch[2])
+			// Create numeric order: 1.1=11, 1.2=12, 2.1=21, 2.2=22, 3.1=31, 3.2=32
+			return major * 10 + minor
+		}
+		
+		// Check for Report and Decision
+		if (paragraph.match(/^Report:/i)) {
+			return 100 // After all sub objectives
+		}
+		if (paragraph.match(/^Decision:/i)) {
+			return 101 // After Report
+		}
+		
+		return 999 // Paragraphs without sections go to the end
+	}
+
+	function getOrderedParagraphs() {
+		const ordered = paragraphs
+			.map((paragraph, originalIndex) => ({ paragraph, originalIndex }))
+			.sort((a, b) => {
+				const orderA = getSectionOrder(a.paragraph)
+				const orderB = getSectionOrder(b.paragraph)
+				if (orderA !== orderB) {
+					return orderA - orderB
+				}
+				// If same section, maintain original order
+				return a.originalIndex - b.originalIndex
+			})
+		
+		// Debug logging to verify order
+		console.log('Ordered paragraphs:')
+		ordered.forEach(({ paragraph, originalIndex }) => {
+			const order = getSectionOrder(paragraph)
+			const preview = paragraph.substring(0, 50) + (paragraph.length > 50 ? '...' : '')
+			console.log(`Order ${order}: ${preview}`)
+		})
+		
+		return ordered
+	}
+
 	function getSelectedText() {
-		return Array.from(selectedParagraphs)
-			.sort((a, b) => a - b)
+		const orderedParagraphs = getOrderedParagraphs()
+		const selectedOrderedParagraphs = Array.from(selectedParagraphs)
+			.sort((a, b) => {
+				// Find the ordered positions of these indices
+				const posA = orderedParagraphs.findIndex(item => item.originalIndex === a)
+				const posB = orderedParagraphs.findIndex(item => item.originalIndex === b)
+				return posA - posB
+			})
 			.map(index => paragraphs[index])
-			.join('\n\n')
+		
+		// Group paragraphs by section and format for display
+		const groupedSections = {}
+		selectedOrderedParagraphs.forEach(paragraph => {
+			const match = paragraph.match(/^(Sub Objective \d\.\d|Report|Decision):\s*(.*)$/i)
+			if (match) {
+				const section = match[1]
+				const content = match[2]
+				if (!groupedSections[section]) {
+					groupedSections[section] = []
+				}
+				groupedSections[section].push(content)
+			} else {
+				// Paragraph without section
+				if (!groupedSections['Other']) {
+					groupedSections['Other'] = []
+				}
+				groupedSections['Other'].push(paragraph)
+			}
+		})
+		
+		// Format output with section headers in proper numerical order
+		const sectionOrder = ['Sub Objective 1.1', 'Sub Objective 1.2', 'Sub Objective 2.1', 'Sub Objective 2.2', 'Sub Objective 3.1', 'Sub Objective 3.2', 'Report', 'Decision', 'Other']
+		const result = []
+		
+		sectionOrder.forEach(section => {
+			if (groupedSections[section]) {
+				result.push(`${section}:`)
+				groupedSections[section].forEach(content => {
+					result.push(content)
+				})
+				result.push('') // Add blank line between sections
+			}
+		})
+		
+		// Remove trailing empty line
+		if (result[result.length - 1] === '') {
+			result.pop()
+		}
+		
+		return result.join('\n\n')
 	}
 
 	function handleImageUpload(event) {
@@ -305,45 +443,72 @@
 			console.log('Helvetica not available, using default font')
 		}
 		
-		// Header info
+		// Header info with reduced spacing
 		doc.setFontSize(16)
 		if (subjectName) {
 			doc.text(`Subject: ${subjectName}`, margin, yPosition)
-			yPosition += 12
+			yPosition += 10
 		}
 		
 		doc.setFontSize(14)
 		if (assessmentName) {
 			doc.text(`Assessment: ${assessmentName}`, margin, yPosition)
-			yPosition += 10
+			yPosition += 8
 		}
 		
 		if (studentName) {
 			doc.text(`Student: ${studentName}`, margin, yPosition)
-			yPosition += 10
+			yPosition += 8
 		}
 		
-		// Add separator line
-		yPosition += 5
+		// Add separator line with reduced spacing
+		yPosition += 3
 		doc.setLineWidth(0.5)
 		doc.line(margin, yPosition, pageWidth - margin, yPosition)
-		yPosition += 15
+		yPosition += 10
 		
-		// Content
-		doc.setFontSize(12)
-		const lines = doc.splitTextToSize(selectedText, maxLineWidth)
-		const lineHeight = 7
+		// Content with smaller font and bold category names
+		doc.setFontSize(10) // Smaller font size
+		const lineHeight = 4 // Further reduced line height for tighter spacing
 		const pageHeight = doc.internal.pageSize.getHeight()
 		
-		lines.forEach((line) => {
+		// Split the text into lines and process each line
+		const textLines = selectedText.split('\n')
+		
+		textLines.forEach((line) => {
 			// Check if we need a new page
 			if (yPosition > pageHeight - margin) {
 				doc.addPage()
 				yPosition = margin + 10
 			}
 			
-			doc.text(line, margin, yPosition)
-			yPosition += lineHeight
+			// Skip empty lines but add minimal spacing
+			if (line.trim() === '') {
+				yPosition += lineHeight * 0.3
+				return
+			}
+			
+			// Check if this line is a category header (ends with ':')
+			if (line.match(/^(Sub Objective \d\.\d|Report|Decision):$/i)) {
+				// Bold font for category headers
+				doc.setFont('helvetica', 'bold')
+				doc.setFontSize(11) // Slightly larger for headers
+				doc.text(line, margin, yPosition)
+				doc.setFont('helvetica', 'normal') // Reset to normal
+				doc.setFontSize(10) // Back to small font
+				yPosition += lineHeight + 1 // Minimal extra spacing after headers
+			} else {
+				// Regular content - split long lines
+				const wrappedLines = doc.splitTextToSize(line, maxLineWidth)
+				wrappedLines.forEach((wrappedLine) => {
+					if (yPosition > pageHeight - margin) {
+						doc.addPage()
+						yPosition = margin + 10
+					}
+					doc.text(wrappedLine, margin, yPosition)
+					yPosition += lineHeight
+				})
+			}
 		})
 		
 		// Generate filename with subject, assessment, and student name
@@ -568,8 +733,8 @@
 					<p class="text-muted">Subject: {currentSubject.name}</p>
 					
 					<!-- Student Info Section -->
-					<div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: end; width: 100%;">
-						<div style="flex: 1;">
+					<div class="row mb-3">
+						<div class="col-md-6">
 							<label for="studentNameInput" class="form-label">Student Name:</label>
 							<input 
 								id="studentNameInput" 
@@ -580,7 +745,7 @@
 								onchange={saveAssessmentData}
 							>
 						</div>
-						<div style="flex: 1;">
+						<div class="col-md-6">
 							<label for="studentImageInput" class="form-label">Student Photo:</label>
 							<div class="d-flex align-items-center gap-3">
 								<input 
@@ -589,13 +754,14 @@
 									class="form-control" 
 									accept="image/*"
 									onchange={handleImageUpload}
+									style="flex: 1;"
 								>
 								{#if studentImage}
 									<img 
 										src={studentImage} 
 										alt="Student" 
 										class="rounded border"
-										style="width: 60px; height: 60px; object-fit: cover;"
+										style="width: 60px; height: 60px; object-fit: cover; flex-shrink: 0;"
 									>
 								{/if}
 							</div>
@@ -604,6 +770,22 @@
 					
 					<!-- Add Paragraph Form -->
 					<div class="mb-3">
+						{#if isStudio6PDR()}
+							<!-- Category selector for Studio 6 PDR -->
+							<div class="mb-3">
+								<label for="categorySelect" class="form-label">Select category:</label>
+								<select id="categorySelect" class="form-select form-control" bind:value={selectedCategory}>
+									<option value="">No category (optional)</option>
+									{#each pdrCategories as category}
+										<option value={category}>{category}</option>
+									{/each}
+								</select>
+								{#if selectedCategory}
+									<small class="text-muted">Paragraph will be prefixed with: <strong>{selectedCategory}</strong></small>
+								{/if}
+							</div>
+						{/if}
+						
 						<label for="paragraphInput" class="form-label">Add a new paragraph:</label>
 						<div class="input-group">
 							<textarea id="paragraphInput" class="form-control" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
@@ -613,21 +795,28 @@
 
 					<!-- Display Paragraphs -->
 					<div class="paragraphs">
-						{#each paragraphs as paragraph, index}
+						{#each getOrderedParagraphs() as { paragraph, originalIndex }}
 							<div class="mb-3 p-2 border-start border-primary border-3 bg-white d-flex align-items-start">
 								<div class="form-check me-3">
 									<input 
 										class="form-check-input" 
 										type="checkbox" 
-										id="paragraph-{index}"
-										checked={selectedParagraphs.has(index)}
-										onchange={() => toggleParagraph(index)}
+										id="paragraph-{originalIndex}"
+										checked={selectedParagraphs.has(originalIndex)}
+										onchange={() => toggleParagraph(originalIndex)}
 									>
-									<label class="form-check-label" for="paragraph-{index}">
+									<label class="form-check-label" for="paragraph-{originalIndex}">
 										Select
 									</label>
 								</div>
 								<p class="mb-0 flex-grow-1">{paragraph}</p>
+								<button 
+									class="btn btn-outline-danger btn-sm ms-2 delete-btn" 
+									onclick={() => deleteParagraph(originalIndex)}
+									title="Delete paragraph"
+								>
+									×
+								</button>
 							</div>
 						{/each}
 						
@@ -671,7 +860,7 @@
 							rows="10" 
 							readonly 
 							value={getSelectedText()}
-							style="font-family: 'Roboto', system-ui, sans-serif; font-size: 10px; line-height: 1.3;"
+							style="font-family: 'Roboto', system-ui, sans-serif; font-size: 11px; line-height: 1.3;"
 						></textarea>
 					</div>
 				</div>
@@ -702,87 +891,87 @@
 		font-family: 'Roboto', system-ui, Helvetica, Arial, sans-serif !important;
 	}
 	
-	/* Base font sizing - more conservative approach */
+	/* Base font sizing - larger approach */
 	:global(body) {
-		font-size: 13px !important;
-		line-height: 1.4 !important;
+		font-size: 14px !important;
+		line-height: 1.5 !important;
 	}
 	
 	/* Headers */
-	:global(h1) { font-size: 24px !important; }
-	:global(h2) { font-size: 20px !important; }
-	:global(h3) { font-size: 18px !important; }
-	:global(h4) { font-size: 16px !important; }
-	:global(h5) { font-size: 14px !important; }
-	:global(h6) { font-size: 13px !important; }
+	:global(h1) { font-size: 28px !important; }
+	:global(h2) { font-size: 24px !important; }
+	:global(h3) { font-size: 20px !important; }
+	:global(h4) { font-size: 18px !important; }
+	:global(h5) { font-size: 16px !important; }
+	:global(h6) { font-size: 14px !important; }
 	
 	/* Navigation */
 	:global(.navbar) {
-		padding: 8px 16px !important;
-		font-size: 13px !important;
+		padding: 10px 20px !important;
+		font-size: 14px !important;
 	}
 	
 	:global(.navbar-brand) {
-		font-size: 18px !important;
+		font-size: 20px !important;
 		font-weight: 600 !important;
 	}
 	
 	:global(.nav-link) {
-		font-size: 12px !important;
-		padding: 4px 8px !important;
+		font-size: 13px !important;
+		padding: 6px 10px !important;
 	}
 	
 	/* Form elements */
 	:global(.form-control) {
 		font-family: 'Roboto', system-ui, sans-serif !important;
-		font-size: 12px !important;
-		padding: 6px 10px !important;
-		line-height: 1.3 !important;
+		font-size: 13px !important;
+		padding: 8px 12px !important;
+		line-height: 1.4 !important;
 	}
 	
 	:global(.form-label) {
-		font-size: 12px !important;
+		font-size: 13px !important;
 		font-weight: 500 !important;
-		margin-bottom: 4px !important;
+		margin-bottom: 6px !important;
 	}
 	
 	/* Buttons */
 	:global(.btn) {
-		font-size: 12px !important;
-		padding: 6px 12px !important;
-		line-height: 1.2 !important;
+		font-size: 13px !important;
+		padding: 8px 16px !important;
+		line-height: 1.3 !important;
 	}
 	
 	:global(.btn-sm) {
-		font-size: 11px !important;
-		padding: 4px 8px !important;
+		font-size: 12px !important;
+		padding: 6px 10px !important;
 	}
 	
 	/* Cards */
 	:global(.card) {
-		font-size: 12px !important;
-	}
-	
-	:global(.card-header) {
-		padding: 10px 15px !important;
 		font-size: 13px !important;
 	}
 	
+	:global(.card-header) {
+		padding: 12px 18px !important;
+		font-size: 14px !important;
+	}
+	
 	:global(.card-body) {
-		padding: 15px !important;
+		padding: 18px !important;
 	}
 	
 	:global(.card-title) {
-		font-size: 14px !important;
-		margin-bottom: 10px !important;
+		font-size: 16px !important;
+		margin-bottom: 12px !important;
 		font-weight: 600 !important;
 	}
 	
 	/* Text and paragraphs */
 	:global(p) {
-		font-size: 12px !important;
-		line-height: 1.4 !important;
-		margin-bottom: 8px !important;
+		font-size: 13px !important;
+		line-height: 1.5 !important;
+		margin-bottom: 10px !important;
 	}
 	
 	/* Layout fixes */
@@ -826,20 +1015,20 @@
 	
 	/* Form checks */
 	:global(.form-check) {
-		font-size: 11px !important;
+		font-size: 12px !important;
 	}
 	
 	:global(.form-check-label) {
-		font-size: 11px !important;
+		font-size: 12px !important;
 	}
 	
 	/* Utility */
 	:global(.text-muted) {
-		font-size: 11px !important;
+		font-size: 12px !important;
 	}
 	
 	:global(.small) {
-		font-size: 10px !important;
+		font-size: 11px !important;
 	}
 	
 	/* Box sizing for all elements */
@@ -847,12 +1036,32 @@
 		box-sizing: border-box !important;
 	}
 
+	/* Small delete button styling */
+	:global(.delete-btn) {
+		font-size: 16px !important;
+		padding: 2px 8px !important;
+		line-height: 1 !important;
+		min-width: 28px !important;
+		height: 28px !important;
+		border-radius: 4px !important;
+		opacity: 0.6 !important;
+		transition: all 0.2s ease !important;
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+	}
+
+	:global(.delete-btn:hover) {
+		opacity: 1 !important;
+		transform: scale(1.1) !important;
+	}
+
 	/* Enhanced Card Styling */
 	:global(.subject-card, .assessment-card) {
 		transition: all 0.3s ease !important;
-		border-radius: 16px !important;
+		border-radius: 18px !important;
 		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
-		min-height: 240px !important;
+		min-height: 280px !important;
 	}
 
 	:global(.subject-card:hover, .assessment-card:hover) {
@@ -861,26 +1070,26 @@
 	}
 
 	:global(.subject-icon, .assessment-icon) {
-		font-size: 40px !important;
+		font-size: 48px !important;
 		opacity: 0.9;
 		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 	}
 
 	:global(.subject-card .card-title) {
-		font-size: 20px !important;
+		font-size: 22px !important;
 		font-weight: 700 !important;
 		line-height: 1.2 !important;
-		min-height: 48px !important;
+		min-height: 54px !important;
 		display: flex !important;
 		align-items: center !important;
 		justify-content: center !important;
 	}
 
 	:global(.assessment-card .card-title) {
-		font-size: 18px !important;
+		font-size: 20px !important;
 		font-weight: 700 !important;
 		line-height: 1.2 !important;
-		min-height: 48px !important;
+		min-height: 54px !important;
 		display: flex !important;
 		align-items: center !important;
 		justify-content: center !important;
@@ -888,9 +1097,9 @@
 
 	:global(.subject-btn, .assessment-btn) {
 		font-weight: 600 !important;
-		font-size: 14px !important;
-		padding: 12px 24px !important;
-		border-radius: 8px !important;
+		font-size: 15px !important;
+		padding: 14px 28px !important;
+		border-radius: 10px !important;
 		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15) !important;
 		transition: all 0.2s ease !important;
 		border: none !important;
