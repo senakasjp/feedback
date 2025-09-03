@@ -18,6 +18,25 @@
       "id": "mf1xsq0h2i6xoaah3r5",
       "name": "Studio 5",
       "assessments": []
+    },
+    {
+      "id": "mf3abktff8honwjjqm9",
+      "name": "Studio 5",
+      "assessments": []
+    },
+    {
+      "id": "mf3b9ezabnnp1sdc3xp",
+      "name": "Studio 4",
+      "assessments": [
+        {
+          "id": "mf3bvw1cpo7msgxqls",
+          "name": "Mid-PDR"
+        },
+        {
+          "id": "mf3bwg5g9o5unrif9yi",
+          "name": "Final-PDR"
+        }
+      ]
     }
   ]
 }

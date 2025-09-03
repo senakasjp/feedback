@@ -96,7 +96,7 @@ fn generate_pdf_file(
     let dir = portable_data_dir()?;
     
     // Generate filename
-    let mut filename = "feedback-report".to_string();
+    let mut filename = "Feedback-report".to_string();
     if let Some(subject) = &subject_name {
         filename = format!("{}-{}", filename, subject.replace(|c: char| !c.is_alphanumeric(), "-"));
     }
@@ -121,20 +121,20 @@ fn generate_pdf_file(
     let mut y_position = 270.0; // Start from top
     let margin = 20.0;
     
-    // Add header information with reduced spacing
+    // Add header information with smaller font size and bold font
     if let Some(subject) = &subject_name {
-        current_layer.use_text(format!("Subject: {}", subject), 16.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 8.0;
+        current_layer.use_text(format!("Subject: {}", subject), 10.0, Mm(margin), Mm(y_position), &font);
+        y_position -= 6.0;
     }
     
     if let Some(assessment) = &assessment_name {
-        current_layer.use_text(format!("Assessment: {}", assessment), 14.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 6.0;
+        current_layer.use_text(format!("Assessment: {}", assessment), 10.0, Mm(margin), Mm(y_position), &font);
+        y_position -= 5.0;
     }
     
     if let Some(student) = &student_name {
-        current_layer.use_text(format!("Student: {}", student), 14.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 6.0;
+        current_layer.use_text(format!("Student: {}", student), 10.0, Mm(margin), Mm(y_position), &font);
+        y_position -= 5.0;
     }
     
     // Add separator with reduced spacing
@@ -153,10 +153,10 @@ fn generate_pdf_file(
             continue;
         }
         
-        // Check if it's a category header (Sub Objective X.X, Report, Decision followed by ':')
-        if line.trim().ends_with(':') && (line.contains("Sub Objective") || line.contains("Report") || line.contains("Decision")) {
-            // Bold font for category headers, slightly larger
-            current_layer.use_text(line.to_string(), 11.0, Mm(margin), Mm(y_position), &font);
+        // Check if it's a category header (Sub Objective X.X, Sub Learning Objective X.X, Report, Decision followed by ':')
+        if line.trim().ends_with(':') && (line.contains("Sub Objective") || line.contains("Sub Learning Objective") || line.contains("Report") || line.contains("Decision")) {
+            // Bold font for category headers, same size as content
+            current_layer.use_text(line.to_string(), 10.0, Mm(margin), Mm(y_position), &font);
             y_position -= 5.0; // Reduced spacing after headers
         } else {
             // Regular content with smaller font

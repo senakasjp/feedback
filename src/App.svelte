@@ -36,9 +36,25 @@
 		'Decision'
 	]
 
+	// Category selection for Studio 4 PDR assessments
+	let studio4Categories = [
+		'Sub Learning Objective 1.1',
+		'Sub Learning Objective 1.2',
+		'Sub Learning Objective 2.1',
+		'Sub Learning Objective 2.2',
+		'Report',
+		'Decision'
+	]
+
 	// Generate unique ID
 	function generateId() {
 		return Date.now().toString(36) + Math.random().toString(36).substr(2)
+	}
+
+	// Debug function to test if any JS is working
+	function testFunction() {
+		alert('JavaScript is working!')
+		console.log('Test function called successfully')
 	}
 
 	async function loadSubjects() {
@@ -190,6 +206,40 @@
 		studentImage = ''
 	}
 
+	function deleteSubject(subjectToDelete) {
+		alert('DELETE FUNCTION CALLED!') // Simple test
+		console.log('deleteSubject called with:', subjectToDelete)
+		
+		// Show confirmation dialog
+		const confirmed = confirm(`Are you sure you want to delete "${subjectToDelete.name}" and all its assessments? This action cannot be undone.`)
+		console.log('User confirmed deletion:', confirmed)
+		
+		if (confirmed) {
+			console.log('Subjects before deletion:', subjects.length)
+			
+			// Remove subject from array
+			subjects = subjects.filter(subject => subject.id !== subjectToDelete.id)
+			console.log('Subjects after deletion:', subjects.length)
+			
+			// Save updated subjects list
+			saveSubjects()
+			
+			// If we're currently viewing the deleted subject, go back to welcome
+			if (currentSubject?.id === subjectToDelete.id) {
+				currentSubject = null
+				currentAssessment = null
+				currentSubjectId = null
+				currentAssessmentId = null
+				paragraphs = []
+				selectedParagraphs = new Set()
+				studentName = ''
+				studentImage = ''
+			}
+			
+			console.log(`Subject "${subjectToDelete.name}" deleted successfully`)
+		}
+	}
+
 	function selectAssessment(assessment) {
 		currentAssessmentId = assessment.id
 		currentAssessment = assessment
@@ -220,8 +270,8 @@
 		if (newParagraph.trim()) {
 			let paragraphText = newParagraph.trim()
 			
-			// For Studio 6 PDR assessments, add category prefix if selected
-			if (isStudio6PDR() && selectedCategory) {
+			// For Studio 6 or Studio 4 PDR assessments, add category prefix if selected
+			if (needsCategorySelection() && selectedCategory) {
 				paragraphText = `${selectedCategory}: ${paragraphText}`
 			}
 			
@@ -244,6 +294,36 @@
 		})
 		
 		return result
+	}
+
+	// Helper function to check if current assessment is Studio 4 PDR
+	function isStudio4PDR() {
+		const result = currentSubject?.name === "Studio 4" && 
+		       (currentAssessment?.name === "Mid-PDR" || currentAssessment?.name === "Final-PDR")
+		
+		// Debug logging
+		console.log('isStudio4PDR check:', {
+			currentSubject: currentSubject?.name,
+			currentAssessment: currentAssessment?.name,
+			result: result
+		})
+		
+		return result
+	}
+
+	// Helper function to check if current assessment needs category selection
+	function needsCategorySelection() {
+		return isStudio6PDR() || isStudio4PDR()
+	}
+
+	// Helper function to get the appropriate categories for current assessment
+	function getCurrentCategories() {
+		if (isStudio6PDR()) {
+			return pdrCategories
+		} else if (isStudio4PDR()) {
+			return studio4Categories
+		}
+		return []
 	}
 
 	function toggleParagraph(index) {
@@ -278,12 +358,21 @@
 	}
 
 	function getSectionOrder(paragraph) {
-		// First check for Sub Objective patterns and extract numbers
+		// Check for Sub Objective patterns (Studio 6) and extract numbers
 		const subObjectiveMatch = paragraph.match(/^Sub Objective (\d)\.(\d):/i)
 		if (subObjectiveMatch) {
 			const major = parseInt(subObjectiveMatch[1])
 			const minor = parseInt(subObjectiveMatch[2])
 			// Create numeric order: 1.1=11, 1.2=12, 2.1=21, 2.2=22, 3.1=31, 3.2=32
+			return major * 10 + minor
+		}
+
+		// Check for Sub Learning Objective patterns (Studio 4) and extract numbers
+		const subLearningObjectiveMatch = paragraph.match(/^Sub Learning Objective (\d)\.(\d):/i)
+		if (subLearningObjectiveMatch) {
+			const major = parseInt(subLearningObjectiveMatch[1])
+			const minor = parseInt(subLearningObjectiveMatch[2])
+			// Create numeric order: 1.1=11, 1.2=12, 2.1=21, 2.2=22
 			return major * 10 + minor
 		}
 		
@@ -336,7 +425,7 @@
 		// Group paragraphs by section and format for display
 		const groupedSections = {}
 		selectedOrderedParagraphs.forEach(paragraph => {
-			const match = paragraph.match(/^(Sub Objective \d\.\d|Report|Decision):\s*(.*)$/i)
+			const match = paragraph.match(/^(Sub (?:Objective|Learning Objective) \d\.\d|Report|Decision):\s*(.*)$/i)
 			if (match) {
 				const section = match[1]
 				const content = match[2]
@@ -354,7 +443,11 @@
 		})
 		
 		// Format output with section headers in proper numerical order
-		const sectionOrder = ['Sub Objective 1.1', 'Sub Objective 1.2', 'Sub Objective 2.1', 'Sub Objective 2.2', 'Sub Objective 3.1', 'Sub Objective 3.2', 'Report', 'Decision', 'Other']
+		const sectionOrder = [
+			'Sub Objective 1.1', 'Sub Objective 1.2', 'Sub Objective 2.1', 'Sub Objective 2.2', 'Sub Objective 3.1', 'Sub Objective 3.2',
+			'Sub Learning Objective 1.1', 'Sub Learning Objective 1.2', 'Sub Learning Objective 2.1', 'Sub Learning Objective 2.2',
+			'Report', 'Decision', 'Other'
+		]
 		const result = []
 		
 		sectionOrder.forEach(section => {
@@ -452,23 +545,26 @@
 			console.log('Helvetica not available, using default font')
 		}
 		
-		// Header info with reduced spacing
-		doc.setFontSize(16)
+		// Header info with reduced spacing and bold font
+		doc.setFont('helvetica', 'bold')
+		doc.setFontSize(10)
 		if (subjectName) {
 			doc.text(`Subject: ${subjectName}`, margin, yPosition)
-			yPosition += 10
+			yPosition += 8
 		}
 		
-		doc.setFontSize(14)
 		if (assessmentName) {
 			doc.text(`Assessment: ${assessmentName}`, margin, yPosition)
-			yPosition += 8
+			yPosition += 6
 		}
 		
 		if (studentName) {
 			doc.text(`Student: ${studentName}`, margin, yPosition)
-			yPosition += 8
+			yPosition += 6
 		}
+		
+		// Reset font to normal for content
+		doc.setFont('helvetica', 'normal')
 		
 		// Add separator line with reduced spacing
 		yPosition += 3
@@ -498,10 +594,10 @@
 			}
 			
 			// Check if this line is a category header (ends with ':')
-			if (line.match(/^(Sub Objective \d\.\d|Report|Decision):$/i)) {
+			if (line.match(/^(Sub (?:Objective|Learning Objective) \d\.\d|Report|Decision):$/i)) {
 				// Bold font for category headers
 				doc.setFont('helvetica', 'bold')
-				doc.setFontSize(11) // Slightly larger for headers
+				doc.setFontSize(10) // Same size as other content
 				doc.text(line, margin, yPosition)
 				doc.setFont('helvetica', 'normal') // Reset to normal
 				doc.setFontSize(10) // Back to small font
@@ -521,7 +617,7 @@
 		})
 		
 		// Generate filename with subject, assessment, and student name
-		let filename = 'feedback-report'
+		let filename = 'Feedback-report'
 		if (subjectName) filename += `-${subjectName.replace(/[^a-zA-Z0-9]/g, '-')}`
 		if (assessmentName) filename += `-${assessmentName.replace(/[^a-zA-Z0-9]/g, '-')}`
 		if (studentName) filename += `-${studentName.replace(/[^a-zA-Z0-9]/g, '-')}`
@@ -686,12 +782,33 @@
 					<h2>Welcome to Feedback Manager</h2>
 					<p>Select a subject from the sidebar to get started, or create a new subject.</p>
 					
+					<!-- DEBUG TEST BUTTONS -->
+					<div class="mb-4 p-3 bg-warning bg-opacity-25 rounded">
+						<h6>Debug Test Buttons:</h6>
+						<button class="btn btn-primary btn-sm me-2" onclick={() => alert('Simple alert works!')}>Test Alert</button>
+						<button class="btn btn-success btn-sm me-2" onclick={() => testFunction()}>Test Function</button>
+						<button class="btn btn-danger btn-sm" onclick={() => console.log('Console test')}>Test Console</button>
+					</div>
+					
 					{#if subjects.length > 0}
 						<div class="row">
 							{#each subjects as subject}
 								<div class="col-xl-3 col-lg-4 col-md-6 mb-4">
 									<div class="card h-100 shadow-sm border-0 subject-card">
-										<div class="card-body d-flex flex-column text-center p-4">
+										<div class="card-body d-flex flex-column text-center p-4 position-relative">
+											<!-- Delete button in top-right corner -->
+											<button 
+												class="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2 delete-subject-btn" 
+												onclick={(e) => {
+													console.log('Delete button clicked!', subject.name);
+													e.stopPropagation(); 
+													deleteSubject(subject);
+												}}
+												title="Delete subject"
+											>
+												×
+											</button>
+											
 											<div class="subject-icon mb-3">
 												📚
 											</div>
@@ -699,6 +816,19 @@
 											<p class="card-text text-muted mb-4 flex-grow-1">
 												{subject.assessments.length} assessment{subject.assessments.length !== 1 ? 's' : ''}
 											</p>
+											<!-- Test delete button (temporary) -->
+											<button 
+												class="btn btn-danger btn-sm mb-2" 
+												onclick={() => alert('TEST BUTTON CLICKED!')}
+											>
+												Test Click
+											</button>
+											<button 
+												class="btn btn-warning btn-sm mb-2" 
+												onclick={() => deleteSubject(subject)}
+											>
+												Delete {subject.name}
+											</button>
 											<button class="btn btn-primary w-100 mt-auto subject-btn" onclick={() => selectSubject(subject)}>
 												Open
 											</button>
@@ -779,13 +909,13 @@
 					
 					<!-- Add Paragraph Form -->
 					<div class="mb-3">
-						{#if isStudio6PDR()}
-							<!-- Category selector for Studio 6 PDR -->
+						{#if needsCategorySelection()}
+							<!-- Category selector for Studio 6 and Studio 4 PDR -->
 							<div class="mb-3">
 								<label for="categorySelect" class="form-label">Select category:</label>
 								<select id="categorySelect" class="form-select form-control" bind:value={selectedCategory}>
 									<option value="">No category (optional)</option>
-									{#each pdrCategories as category}
+									{#each getCurrentCategories() as category}
 										<option value={category}>{category}</option>
 									{/each}
 								</select>
@@ -859,7 +989,7 @@
 								📋 Copy to Clipboard
 							</button>
 							<button class="btn btn-danger btn-sm" onclick={generatePDF}>
-								📄 Generate PDF
+								📄 Print to Download
 							</button>
 						</div>
 					</div>
@@ -1062,6 +1192,34 @@
 
 	:global(.delete-btn:hover) {
 		opacity: 1 !important;
+		transform: scale(1.1) !important;
+	}
+
+	/* Subject Delete Button Styling */
+	:global(.delete-subject-btn) {
+		width: 28px !important;
+		height: 28px !important;
+		border-radius: 50% !important;
+		font-size: 16px !important;
+		font-weight: bold !important;
+		line-height: 1 !important;
+		padding: 0 !important;
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+		opacity: 0.7 !important;
+		transition: all 0.2s ease !important;
+		z-index: 1000 !important;
+		position: relative !important;
+		pointer-events: auto !important;
+		cursor: pointer !important;
+	}
+
+	:global(.delete-subject-btn:hover) {
+		opacity: 1 !important;
+		background-color: #dc3545 !important;
+		border-color: #dc3545 !important;
+		color: white !important;
 		transform: scale(1.1) !important;
 	}
 
