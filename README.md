@@ -204,9 +204,39 @@ This project is open source. See the LICENSE file for details.
 4. Test thoroughly
 5. Submit a pull request
 
+## PDF Font Standardization
+
+### 🎯 PDF Typography Optimization (v1.4.0)
+
+The PDF output now uses **10px as the standard font size** for consistent, compact formatting:
+
+#### **PDF Output Font Sizes:**
+- **Headers**: 10px bold (Subject, Assessment, Student)
+- **Category headers**: 10px bold (Sub Objectives, Sub Learning Objectives, Report, Decision)
+- **Content text**: 10px normal weight
+- **All elements**: Uniform 10px sizing throughout PDF
+
+#### **Interface Font Sizes (Unchanged):**
+- **Base font**: 14px for body text
+- **Forms/Labels**: 13px for optimal readability
+- **Buttons**: 13px regular, 12px for small buttons
+- **Headers**: H1: 28px, H2: 24px, H3: 20px, H4: 18px, H5: 16px, H6: 14px
+- **Cards**: 13px content, 16px titles
+- **Special elements**: Subject cards (22px titles), Assessment cards (20px titles)
+
+#### **Benefits:**
+- ✅ **Compact PDF output** with maximum information density
+- ✅ **Professional PDF appearance** with uniform typography
+- ✅ **Readable interface** with comfortable font sizes
+- ✅ **Optimized for different contexts** - screen vs. print
+- ✅ **Small PDF file sizes** due to consistent formatting
+
+This approach optimizes PDF output for print density while maintaining comfortable screen readability.
+
 ## Version History
 
 - **v1.0.0** - Initial release with basic feedback management
 - **v1.1.0** - Added PDF generation capabilities
 - **v1.2.0** - Implemented student photo support
 - **v1.3.0** - Full-width PDF headers and improved UI
+- **v1.4.0** - PDF font standardization to 10px (interface fonts unchanged)

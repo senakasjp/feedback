@@ -22,6 +22,7 @@
 	let showAddAssessment = $state(false)
 	let newSubjectName = $state('')
 	let newAssessmentName = $state('')
+	let showMobileSidebar = $state(false)
 
 	// Category selection for Studio 6 PDR assessments
 	let selectedCategory = $state('')
@@ -658,10 +659,19 @@
 </nav>
 
 <main>
-	<div class="w-100 mt-4" style="padding: 0 16px; margin: 0; display: flex; width: calc(100vw - 32px); gap: 16px;">
-		<!-- Sidebar -->
-		<div style="width: 280px; min-width: 280px; flex-shrink: 0;">
-			<div class="p-3 border bg-light position-sticky" style="top: 20px; height: calc(100vh - 120px); overflow-y: auto; border-radius: 8px;">
+	<div class="container-fluid mt-4">
+		<div class="row">
+			<!-- Sidebar -->
+			<div class="col-lg-3 col-md-4 col-12 mb-4">
+				<div class="p-3 border bg-light position-sticky d-lg-block" style="top: 20px; border-radius: 8px;">
+					<!-- Mobile toggle button -->
+					<div class="d-lg-none mb-3">
+						<button class="btn btn-outline-primary w-100" onclick={() => showMobileSidebar = !showMobileSidebar}>
+							{showMobileSidebar ? '🔼 Hide Navigation' : '🔽 Show Navigation'}
+						</button>
+					</div>
+					
+					<div class="{showMobileSidebar ? 'd-block' : 'd-none'} d-lg-block">
 				<h5>Navigation</h5>
 				
 				{#if !currentSubject}
@@ -771,11 +781,12 @@
 						</small>
 					</div>
 				{/if}
+					</div>
+				</div>
 			</div>
-		</div>
 
-		<!-- Main Content -->
-		<div style="flex: 1; min-width: 0;">
+			<!-- Main Content -->
+			<div class="col-lg-9 col-md-8 col-12">
 			{#if !currentSubject}
 				<!-- Welcome Screen -->
 				<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
@@ -793,7 +804,7 @@
 					{#if subjects.length > 0}
 						<div class="row">
 							{#each subjects as subject}
-								<div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+								<div class="col-xl-3 col-lg-4 col-md-6 col-sm-12 mb-4">
 									<div class="card h-100 shadow-sm border-0 subject-card">
 										<div class="card-body d-flex flex-column text-center p-4 position-relative">
 											<!-- Delete button in top-right corner -->
@@ -848,7 +859,7 @@
 					{#if currentSubject.assessments.length > 0}
 						<div class="row">
 							{#each currentSubject.assessments as assessment}
-								<div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+								<div class="col-xl-3 col-lg-4 col-md-6 col-sm-12 mb-4">
 									<div class="card h-100 shadow-sm border-0 assessment-card">
 										<div class="card-body d-flex flex-column text-center p-4">
 											<div class="assessment-icon mb-3">
@@ -872,8 +883,8 @@
 					<p class="text-muted">Subject: {currentSubject.name}</p>
 					
 					<!-- Student Info Section -->
-					<div class="row mb-3">
-						<div class="col-md-6">
+					<div class="row mb-3 g-3">
+						<div class="col-lg-6 col-md-12">
 							<label for="studentNameInput" class="form-label">Student Name:</label>
 							<input 
 								id="studentNameInput" 
@@ -884,16 +895,15 @@
 								onchange={saveAssessmentData}
 							>
 						</div>
-						<div class="col-md-6">
+						<div class="col-lg-6 col-md-12">
 							<label for="studentImageInput" class="form-label">Student Photo:</label>
-							<div class="d-flex align-items-center gap-3">
+							<div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3">
 								<input 
 									id="studentImageInput" 
 									type="file" 
-									class="form-control" 
+									class="form-control flex-grow-1" 
 									accept="image/*"
 									onchange={handleImageUpload}
-									style="flex: 1;"
 								>
 								{#if studentImage}
 									<img 
@@ -926,8 +936,8 @@
 						{/if}
 						
 						<label for="paragraphInput" class="form-label">Add a new paragraph:</label>
-						<div class="input-group">
-							<textarea id="paragraphInput" class="form-control" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
+						<div class="input-group flex-column flex-sm-row">
+							<textarea id="paragraphInput" class="form-control mb-2 mb-sm-0" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
 							<button class="btn btn-primary" type="button" onclick={addParagraph}>Add</button>
 						</div>
 					</div>
@@ -935,10 +945,10 @@
 					<!-- Display Paragraphs -->
 					<div class="paragraphs">
 						{#each getOrderedParagraphs() as { paragraph, originalIndex }}
-							<div class="mb-3 p-2 border-start border-primary border-3 bg-white d-flex align-items-start">
-								<div class="form-check me-3">
+							<div class="mb-3 p-2 border-start border-primary border-3 bg-white d-flex flex-column flex-sm-row align-items-start">
+								<div class="form-check me-sm-3 mb-2 mb-sm-0 d-flex align-items-center">
 									<input 
-										class="form-check-input" 
+										class="form-check-input me-2" 
 										type="checkbox" 
 										id="paragraph-{originalIndex}"
 										checked={selectedParagraphs.has(originalIndex)}
@@ -950,7 +960,7 @@
 								</div>
 								<p class="mb-0 flex-grow-1">{paragraph}</p>
 								<button 
-									class="btn btn-outline-danger btn-sm ms-2 delete-btn" 
+									class="btn btn-outline-danger btn-sm ms-sm-2 mt-2 mt-sm-0 delete-btn align-self-start" 
 									onclick={() => deleteParagraph(originalIndex)}
 									title="Delete paragraph"
 								>
@@ -972,6 +982,7 @@
 					{/if}
 				</div>
 			{/if}
+			</div>
 		</div>
 	</div>
 </main>
@@ -1173,6 +1184,71 @@
 	/* Box sizing for all elements */
 	:global(*) {
 		box-sizing: border-box !important;
+	}
+
+	/* Responsive improvements */
+	@media (max-width: 768px) {
+		:global(.navbar-brand) {
+			font-size: 18px !important;
+		}
+		
+		:global(.btn) {
+			font-size: 12px !important;
+			padding: 6px 12px !important;
+		}
+		
+		:global(.card-body) {
+			padding: 12px !important;
+		}
+		
+		:global(.subject-card .card-title, .assessment-card .card-title) {
+			font-size: 18px !important;
+			min-height: 40px !important;
+		}
+		
+		:global(.subject-icon, .assessment-icon) {
+			font-size: 36px !important;
+		}
+		
+		:global(h2) {
+			font-size: 20px !important;
+		}
+		
+		:global(h5, h6) {
+			font-size: 13px !important;
+		}
+	}
+
+	@media (max-width: 576px) {
+		:global(.container-fluid) {
+			padding-left: 8px !important;
+			padding-right: 8px !important;
+		}
+		
+		:global(.card) {
+			margin-bottom: 16px !important;
+		}
+		
+		:global(.btn-sm) {
+			font-size: 10px !important;
+			padding: 4px 8px !important;
+		}
+		
+		:global(.form-control) {
+			font-size: 14px !important;
+		}
+		
+		:global(.alert) {
+			padding: 6px 10px !important;
+			font-size: 11px !important;
+		}
+	}
+
+	/* Mobile sidebar improvements */
+	@media (max-width: 991px) {
+		:global(.position-sticky) {
+			position: relative !important;
+		}
 	}
 
 	/* Small delete button styling */
