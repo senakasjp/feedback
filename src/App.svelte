@@ -233,8 +233,17 @@
 
 	// Helper function to check if current assessment is Studio 6 PDR
 	function isStudio6PDR() {
-		return currentSubject?.name === "Studio 6" && 
-		       (currentAssessment?.name === "Mid-PDR" || currentAssessment?.name === "Final-PDR")
+		const result = currentSubject?.name === "Studio 6" && 
+		       (currentAssessment?.name === "Mid-PDR" || currentAssessment?.name === "Final PDR")
+		
+		// Debug logging
+		console.log('isStudio6PDR check:', {
+			currentSubject: currentSubject?.name,
+			currentAssessment: currentAssessment?.name,
+			result: result
+		})
+		
+		return result
 	}
 
 	function toggleParagraph(index) {
