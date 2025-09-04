@@ -2,6 +2,11 @@
 	import { invoke } from '@tauri-apps/api/core'
 	import { onMount } from 'svelte'
 	import jsPDF from 'jspdf'
+	import Sidebar from './lib/Sidebar.svelte'
+	import WelcomeScreen from './lib/WelcomeScreen.svelte'
+	import SubjectOverview from './lib/SubjectOverview.svelte'
+	import FeedbackEditor from './lib/FeedbackEditor.svelte'
+	import SelectedTextSection from './lib/SelectedTextSection.svelte'
 
 	// Data structure for hierarchical subjects/assessments
 	let subjects = $state([])
@@ -52,11 +57,6 @@
 		return Date.now().toString(36) + Math.random().toString(36).substr(2)
 	}
 
-	// Debug function to test if any JS is working
-	function testFunction() {
-		alert('JavaScript is working!')
-		console.log('Test function called successfully')
-	}
 
 	async function loadSubjects() {
 		try {
@@ -472,13 +472,13 @@
 	function handleImageUpload(event) {
 		const file = event.target.files[0]
 		if (file) {
-					const reader = new FileReader()
-		reader.onload = function(e) {
+			const reader = new FileReader()
+			reader.onload = function(e) {
 			if (typeof e.target.result === 'string') {
 				studentImage = e.target.result
 				saveAssessmentData()
 			}
-		}
+			}
 			reader.readAsDataURL(file)
 		}
 	}
@@ -599,7 +599,7 @@
 				// Bold font for category headers
 				doc.setFont('helvetica', 'bold')
 				doc.setFontSize(10) // Same size as other content
-				doc.text(line, margin, yPosition)
+			doc.text(line, margin, yPosition)
 				doc.setFont('helvetica', 'normal') // Reset to normal
 				doc.setFontSize(10) // Back to small font
 				yPosition += lineHeight + 1 // Minimal extra spacing after headers
@@ -612,7 +612,7 @@
 						yPosition = margin + 10
 					}
 					doc.text(wrappedLine, margin, yPosition)
-					yPosition += lineHeight
+			yPosition += lineHeight
 				})
 			}
 		})
@@ -663,369 +663,73 @@
 		<div class="row">
 			<!-- Sidebar -->
 			<div class="col-lg-3 col-md-4 col-12 mb-4">
-				<div class="p-3 border bg-light position-sticky d-lg-block" style="top: 20px; border-radius: 8px;">
-					<!-- Mobile toggle button -->
-					<div class="d-lg-none mb-3">
-						<button class="btn btn-outline-primary w-100" onclick={() => showMobileSidebar = !showMobileSidebar}>
-							{showMobileSidebar ? '🔼 Hide Navigation' : '🔽 Show Navigation'}
-						</button>
-					</div>
-					
-					<div class="{showMobileSidebar ? 'd-block' : 'd-none'} d-lg-block">
-				<h5>Navigation</h5>
-				
-				{#if !currentSubject}
-					<!-- Subject List -->
-					<div class="mb-3">
-						<div class="d-flex justify-content-between align-items-center mb-2">
-							<h6 class="mb-0">Subjects</h6>
-							<button 
-								class="btn btn-primary btn-sm" 
-								onclick={() => showAddSubject = true}
-							>
-								+ Add
-							</button>
-						</div>
-						
-						{#if showAddSubject}
-							<div class="mb-2">
-								<input 
-									type="text" 
-									class="form-control form-control-sm mb-2" 
-									placeholder="Subject name"
-									bind:value={newSubjectName}
-									onkeydown={(e) => e.key === 'Enter' && addSubject()}
-								>
-								<div class="btn-group w-100">
-									<button class="btn btn-success btn-sm" onclick={addSubject}>Add</button>
-									<button class="btn btn-secondary btn-sm" onclick={() => showAddSubject = false}>Cancel</button>
-								</div>
-							</div>
-						{/if}
-						
-						{#each subjects as subject}
-							<button 
-								class="btn btn-outline-primary w-100 mb-1 text-start" 
-								onclick={() => selectSubject(subject)}
-							>
-								{subject.name} ({subject.assessments.length})
-							</button>
-						{/each}
-						
-						{#if subjects.length === 0}
-							<p class="text-muted small">No subjects yet. Add your first subject above.</p>
-						{/if}
-					</div>
-				{:else if !currentAssessment}
-					<!-- Assessment List -->
-					<div class="mb-3">
-						<button class="btn btn-secondary btn-sm mb-3" onclick={goBackToSubjects}>
-							← Back to Subjects
-						</button>
-						
-						<div class="d-flex justify-content-between align-items-center mb-2">
-							<h6 class="mb-0">Assessments in {currentSubject.name}</h6>
-							<button 
-								class="btn btn-primary btn-sm" 
-								onclick={() => showAddAssessment = true}
-							>
-								+ Add
-							</button>
-						</div>
-						
-						{#if showAddAssessment}
-							<div class="mb-2">
-								<input 
-									type="text" 
-									class="form-control form-control-sm mb-2" 
-									placeholder="Assessment name"
-									bind:value={newAssessmentName}
-									onkeydown={(e) => e.key === 'Enter' && addAssessment()}
-								>
-								<div class="btn-group w-100">
-									<button class="btn btn-success btn-sm" onclick={addAssessment}>Add</button>
-									<button class="btn btn-secondary btn-sm" onclick={() => showAddAssessment = false}>Cancel</button>
-								</div>
-							</div>
-						{/if}
-						
-						{#each currentSubject.assessments as assessment}
-							<button 
-								class="btn btn-outline-success w-100 mb-1 text-start" 
-								onclick={() => selectAssessment(assessment)}
-							>
-								{assessment.name}
-							</button>
-						{/each}
-						
-						{#if currentSubject.assessments.length === 0}
-							<p class="text-muted small">No assessments yet. Add your first assessment above.</p>
-						{/if}
-					</div>
-				{:else}
-					<!-- Feedback Mode Navigation -->
-					<div class="mb-3">
-						<button class="btn btn-secondary btn-sm mb-2 w-100" onclick={goBackToAssessments}>
-							← Back to Assessments
-						</button>
-						<button class="btn btn-outline-secondary btn-sm w-100" onclick={goBackToSubjects}>
-							← Back to Subjects
-						</button>
-					</div>
-					
-					<div class="alert alert-info p-2">
-						<small>
-							<strong>Current:</strong><br>
-							Subject: {currentSubject.name}<br>
-							Assessment: {currentAssessment.name}
-						</small>
-					</div>
-				{/if}
-					</div>
-				</div>
+				<Sidebar 
+					{subjects}
+					{currentSubject}
+					{currentAssessment}
+					{showAddSubject}
+					{showAddAssessment}
+					{newSubjectName}
+					{newAssessmentName}
+					{showMobileSidebar}
+					onSelectSubject={selectSubject}
+					onSelectAssessment={selectAssessment}
+					onAddSubject={addSubject}
+					onAddAssessment={addAssessment}
+					onGoBackToSubjects={goBackToSubjects}
+					onGoBackToAssessments={goBackToAssessments}
+					onToggleMobileSidebar={() => showMobileSidebar = !showMobileSidebar}
+					onToggleShowAddSubject={() => showAddSubject = !showAddSubject}
+					onToggleShowAddAssessment={() => showAddAssessment = !showAddAssessment}
+				/>
 			</div>
 
 			<!-- Main Content -->
 			<div class="col-lg-9 col-md-8 col-12">
-			{#if !currentSubject}
-				<!-- Welcome Screen -->
-				<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
-					<h2>Welcome to Feedback Manager</h2>
-					<p>Select a subject from the sidebar to get started, or create a new subject.</p>
-					
-					<!-- DEBUG TEST BUTTONS -->
-					<div class="mb-4 p-3 bg-warning bg-opacity-25 rounded">
-						<h6>Debug Test Buttons:</h6>
-						<button class="btn btn-primary btn-sm me-2" onclick={() => alert('Simple alert works!')}>Test Alert</button>
-						<button class="btn btn-success btn-sm me-2" onclick={() => testFunction()}>Test Function</button>
-						<button class="btn btn-danger btn-sm" onclick={() => console.log('Console test')}>Test Console</button>
-					</div>
-					
-					{#if subjects.length > 0}
-						<div class="row">
-							{#each subjects as subject}
-								<div class="col-xl-3 col-lg-4 col-md-6 col-sm-12 mb-4">
-									<div class="card h-100 shadow-sm border-0 subject-card">
-										<div class="card-body d-flex flex-column text-center p-4 position-relative">
-											<!-- Delete button in top-right corner -->
-											<button 
-												class="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2 delete-subject-btn" 
-												onclick={(e) => {
-													console.log('Delete button clicked!', subject.name);
-													e.stopPropagation(); 
-													deleteSubject(subject);
-												}}
-												title="Delete subject"
-											>
-												×
-											</button>
-											
-											<div class="subject-icon mb-3">
-												📚
-											</div>
-											<h5 class="card-title mb-3 text-primary fw-bold">{subject.name}</h5>
-											<p class="card-text text-muted mb-4 flex-grow-1">
-												{subject.assessments.length} assessment{subject.assessments.length !== 1 ? 's' : ''}
-											</p>
-											<!-- Test delete button (temporary) -->
-											<button 
-												class="btn btn-danger btn-sm mb-2" 
-												onclick={() => alert('TEST BUTTON CLICKED!')}
-											>
-												Test Click
-											</button>
-											<button 
-												class="btn btn-warning btn-sm mb-2" 
-												onclick={() => deleteSubject(subject)}
-											>
-												Delete {subject.name}
-											</button>
-											<button class="btn btn-primary w-100 mt-auto subject-btn" onclick={() => selectSubject(subject)}>
-												Open
-											</button>
-										</div>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			{:else if !currentAssessment}
-				<!-- Subject Overview -->
-				<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
-					<h2>{currentSubject.name}</h2>
-					<p>Select an assessment to start working on feedback, or create a new assessment.</p>
-					
-					{#if currentSubject.assessments.length > 0}
-						<div class="row">
-							{#each currentSubject.assessments as assessment}
-								<div class="col-xl-3 col-lg-4 col-md-6 col-sm-12 mb-4">
-									<div class="card h-100 shadow-sm border-0 assessment-card">
-										<div class="card-body d-flex flex-column text-center p-4">
-											<div class="assessment-icon mb-3">
-												📝
-											</div>
-											<h5 class="card-title mb-4 text-success fw-bold">{assessment.name}</h5>
-											<button class="btn btn-success w-100 mt-auto assessment-btn" onclick={() => selectAssessment(assessment)}>
-												Open
-											</button>
-										</div>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			{:else}
-				<!-- Feedback Editor -->
-				<div class="p-3 border bg-light" style="margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">
-					<h2>Feedback for {currentAssessment.name}</h2>
-					<p class="text-muted">Subject: {currentSubject.name}</p>
-					
-					<!-- Student Info Section -->
-					<div class="row mb-3 g-3">
-						<div class="col-lg-6 col-md-12">
-							<label for="studentNameInput" class="form-label">Student Name:</label>
-							<input 
-								id="studentNameInput" 
-								type="text" 
-								class="form-control" 
-								bind:value={studentName} 
-								placeholder="Enter student name"
-								onchange={saveAssessmentData}
-							>
-						</div>
-						<div class="col-lg-6 col-md-12">
-							<label for="studentImageInput" class="form-label">Student Photo:</label>
-							<div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3">
-								<input 
-									id="studentImageInput" 
-									type="file" 
-									class="form-control flex-grow-1" 
-									accept="image/*"
-									onchange={handleImageUpload}
-								>
-								{#if studentImage}
-									<img 
-										src={studentImage} 
-										alt="Student" 
-										class="rounded border"
-										style="width: 60px; height: 60px; object-fit: cover; flex-shrink: 0;"
-									>
-								{/if}
-							</div>
-						</div>
-					</div>
-					
-					<!-- Add Paragraph Form -->
-					<div class="mb-3">
-						{#if needsCategorySelection()}
-							<!-- Category selector for Studio 6 and Studio 4 PDR -->
-							<div class="mb-3">
-								<label for="categorySelect" class="form-label">Select category:</label>
-								<select id="categorySelect" class="form-select form-control" bind:value={selectedCategory}>
-									<option value="">No category (optional)</option>
-									{#each getCurrentCategories() as category}
-										<option value={category}>{category}</option>
-									{/each}
-								</select>
-								{#if selectedCategory}
-									<small class="text-muted">Paragraph will be prefixed with: <strong>{selectedCategory}</strong></small>
-								{/if}
-							</div>
-						{/if}
-						
-						<label for="paragraphInput" class="form-label">Add a new paragraph:</label>
-						<div class="input-group flex-column flex-sm-row">
-							<textarea id="paragraphInput" class="form-control mb-2 mb-sm-0" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
-							<button class="btn btn-primary" type="button" onclick={addParagraph}>Add</button>
-						</div>
-					</div>
-
-					<!-- Display Paragraphs -->
-					<div class="paragraphs">
-						{#each getOrderedParagraphs() as { paragraph, originalIndex }}
-							<div class="mb-3 p-2 border-start border-primary border-3 bg-white d-flex flex-column flex-sm-row align-items-start">
-								<div class="form-check me-sm-3 mb-2 mb-sm-0 d-flex align-items-center">
-									<input 
-										class="form-check-input me-2" 
-										type="checkbox" 
-										id="paragraph-{originalIndex}"
-										checked={selectedParagraphs.has(originalIndex)}
-										onchange={() => toggleParagraph(originalIndex)}
-									>
-									<label class="form-check-label" for="paragraph-{originalIndex}">
-										Select
-									</label>
-								</div>
-								<p class="mb-0 flex-grow-1">{paragraph}</p>
-								<button 
-									class="btn btn-outline-danger btn-sm ms-sm-2 mt-2 mt-sm-0 delete-btn align-self-start" 
-									onclick={() => deleteParagraph(originalIndex)}
-									title="Delete paragraph"
-								>
-									×
-								</button>
-							</div>
-						{/each}
-						
-						{#if paragraphs.length === 0}
-							<p class="text-muted">No paragraphs added yet. Use the textbox above to add your first paragraph.</p>
-						{/if}
-					</div>
-
-					<!-- Selection Info -->
-					{#if selectedParagraphs.size > 0}
-						<div class="alert alert-info mt-3">
-							<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
-						</div>
-					{/if}
-				</div>
-			{/if}
+				{#if !currentSubject}
+					<WelcomeScreen 
+						{subjects}
+						onSelectSubject={selectSubject}
+						onDeleteSubject={deleteSubject}
+					/>
+				{:else if !currentAssessment}
+					<SubjectOverview 
+						{currentSubject}
+						onSelectAssessment={selectAssessment}
+					/>
+				{:else}
+					<FeedbackEditor 
+						{currentSubject}
+						{currentAssessment}
+						{paragraphs}
+						{selectedParagraphs}
+						{studentName}
+						{studentImage}
+						{newParagraph}
+						{selectedCategory}
+						needsCategorySelection={needsCategorySelection()}
+						getCurrentCategories={getCurrentCategories()}
+						getOrderedParagraphs={getOrderedParagraphs()}
+						onUpdateStudentName={saveAssessmentData}
+						onAddParagraph={addParagraph}
+						onToggleParagraph={toggleParagraph}
+						onDeleteParagraph={deleteParagraph}
+						onHandleImageUpload={handleImageUpload}
+					/>
+				{/if}
 			</div>
 		</div>
 	</div>
 </main>
 
-<!-- Selected Text Section - Only show when in feedback mode with selections -->
-{#if currentAssessment && selectedParagraphs.size > 0}
-	<div class="container-fluid mt-4 mb-4">
-		<div class="row">
-			<div class="col-12">
-				<div class="card">
-					<div class="card-header d-flex justify-content-between align-items-center">
-						<h5 class="mb-0">Selected Paragraphs for {currentAssessment.name}</h5>
-						<div class="btn-group">
-							<button class="btn btn-success btn-sm" onclick={copyToClipboard}>
-								📋 Copy to Clipboard
-							</button>
-							<button class="btn btn-danger btn-sm" onclick={generatePDF}>
-								📄 Print to Download
-							</button>
-						</div>
-					</div>
-					<div class="card-body">
-						<textarea 
-							class="form-control" 
-							rows="10" 
-							readonly 
-							value={getSelectedText()}
-							style="font-family: 'Roboto', system-ui, sans-serif; font-size: 11px; line-height: 1.3;"
-						></textarea>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+<SelectedTextSection 
+	{currentAssessment}
+	{selectedParagraphs}
+	onCopyToClipboard={copyToClipboard}
+	onGeneratePDF={generatePDF}
+	onGetSelectedText={getSelectedText}
+/>
 
-<!-- Footer -->
-<footer class="bg-dark text-light text-center py-3 mt-5">
-	<div class="container-fluid">
-		<p class="mb-0">&copy; 2025 Feedback Manager. All rights reserved.</p>
-		<small class="text-muted">Built with Bootstrap and Svelte</small>
-	</div>
-</footer>
 
 <style>
 	/* Google Fonts Import */
@@ -1034,7 +738,7 @@
 	/* Global reset and font setup */
 	:global(html, body) {
 		width: 100% !important;
-		max-width: 100% !important;
+		height: 100vh !important;
 		margin: 0 !important;
 		padding: 0 !important;
 		overflow-x: hidden !important;
@@ -1045,6 +749,8 @@
 	:global(body) {
 		font-size: 14px !important;
 		line-height: 1.5 !important;
+		background-color: #f8f9fa !important;
+		color: #333 !important;
 	}
 	
 	/* Headers */
@@ -1059,6 +765,16 @@
 	:global(.navbar) {
 		padding: 10px 20px !important;
 		font-size: 14px !important;
+		width: 100% !important;
+		position: relative !important;
+		z-index: 1000 !important;
+	}
+	
+	:global(.navbar .container-fluid) {
+		max-width: 1800px !important;
+		margin: 0 auto !important;
+		padding-left: 24px !important;
+		padding-right: 24px !important;
 	}
 	
 	:global(.navbar-brand) {
@@ -1093,7 +809,7 @@
 	}
 	
 	:global(.btn-sm) {
-		font-size: 12px !important;
+		font-size: 14px !important;
 		padding: 6px 10px !important;
 	}
 	
@@ -1108,7 +824,51 @@
 	}
 	
 	:global(.card-body) {
-		padding: 18px !important;
+		padding: 20px !important;
+	}
+	
+	/* Specific spacing for subject cards */
+	:global(.subject-card .card-body) {
+		padding: 20px !important;
+		display: flex !important;
+		flex-direction: column !important;
+		justify-content: space-between !important;
+		height: 100% !important;
+		overflow: hidden !important;
+		box-sizing: border-box !important;
+	}
+	
+	/* Make sidebar and content areas with small margins */
+	:global(.col-lg-3 .p-3.border.bg-light) {
+		min-height: calc(100vh - 160px) !important;
+		flex: 1 !important;
+		display: flex !important;
+		flex-direction: column !important;
+		margin-top: 20px !important;
+		margin-bottom: 20px !important;
+	}
+	
+	:global(.content-area) {
+		min-height: calc(100vh - 200px) !important;
+		flex: 1 !important;
+		display: flex !important;
+		flex-direction: column !important;
+	}
+	
+	/* Button group spacing in cards */
+	:global(.subject-card .btn) {
+		margin-bottom: 8px !important;
+		flex-shrink: 0 !important;
+	}
+	
+	:global(.subject-card .btn:last-child) {
+		margin-bottom: 0 !important;
+	}
+	
+	/* Ensure button fits within card */
+	:global(.subject-card .subject-btn) {
+		height: 40px !important;
+		flex-shrink: 0 !important;
 	}
 	
 	:global(.card-title) {
@@ -1119,7 +879,7 @@
 	
 	/* Text and paragraphs */
 	:global(p) {
-		font-size: 13px !important;
+		font-size: 14px !important;
 		line-height: 1.5 !important;
 		margin-bottom: 10px !important;
 	}
@@ -1127,24 +887,87 @@
 	/* Layout fixes */
 	:global(.container-fluid) {
 		width: 100% !important;
-		max-width: 100% !important;
-		padding-left: 16px !important;
-		padding-right: 16px !important;
+		max-width: 1800px !important;
+		margin: 0 auto !important;
+		padding-left: 24px !important;
+		padding-right: 24px !important;
 	}
 	
 	:global(.row) {
-		margin: 0 -8px !important;
-		width: calc(100% + 16px) !important;
-		max-width: calc(100% + 16px) !important;
+		margin: 0 -12px !important;
+		width: 100% !important;
+		min-height: calc(100vh - 160px) !important;
 	}
 	
-	:global(.col-12) {
-		padding: 0 8px !important;
+	:global([class*="col-"]) {
+		padding-left: 12px !important;
+		padding-right: 12px !important;
+	}
+	
+	/* Make columns stretch to full height */
+	:global(.col-lg-3, .col-lg-9, .col-md-4, .col-md-8) {
+		display: flex !important;
+		flex-direction: column !important;
+		min-height: calc(100vh - 160px) !important;
+	}
+	
+	/* Prevent column stretching for card containers */
+	:global(.col-xl-3, .col-lg-4, .col-md-6, .col-sm-12) {
+		display: flex !important;
+		align-items: flex-start !important;
+		margin-bottom: 16px !important;
 	}
 	
 	/* Main layout spacing */
 	:global(.w-100) {
 		max-width: 100% !important;
+	}
+	
+	/* Content area full width */
+	:global(.content-area) {
+		width: 100% !important;
+		max-width: 100% !important;
+		box-sizing: border-box !important;
+		margin: 0 !important;
+		display: block !important;
+	}
+	
+	/* Ensure all page content areas use full width */
+	:global(.col-lg-9 .content-area),
+	:global(.col-md-8 .content-area) {
+		width: 100% !important;
+		max-width: none !important;
+	}
+	
+	/* Ensure card grids within content areas use full width */
+	:global(.content-area .row) {
+		width: 100% !important;
+		margin: 0 -12px !important;
+		align-items: flex-start !important;
+		display: flex !important;
+		flex-wrap: wrap !important;
+	}
+	
+	/* Debug: ensure no unexpected width constraints */
+	:global(.container-fluid *) {
+		box-sizing: border-box !important;
+	}
+	
+	/* Ensure main element uses available space with proper spacing */
+	:global(main) {
+		width: 100% !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		box-sizing: border-box !important;
+	}
+	
+	/* Override any app.css constraints */
+	:global(#app) {
+		width: 100% !important;
+		max-width: none !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		text-align: left !important;
 	}
 	
 	/* Flexbox gap fallback for older browsers */
@@ -1154,31 +977,82 @@
 	
 	/* Alerts */
 	:global(.alert) {
-		font-size: 12px !important;
+		font-size: 14px !important;
 		padding: 8px 12px !important;
 	}
 	
 	/* Input groups */
 	:global(.input-group) {
-		font-size: 12px !important;
+		font-size: 14px !important;
 	}
 	
 	/* Form checks */
 	:global(.form-check) {
-		font-size: 12px !important;
+		font-size: 14px !important;
 	}
 	
 	:global(.form-check-label) {
-		font-size: 12px !important;
+		font-size: 14px !important;
 	}
 	
 	/* Utility */
 	:global(.text-muted) {
-		font-size: 12px !important;
+		font-size: 14px !important;
 	}
 	
 	:global(.small) {
-		font-size: 11px !important;
+		font-size: 13px !important;
+	}
+	
+	/* Dark Blue Color Scheme */
+	:global(.bg-primary) {
+		background-color: #1e3a8a !important; /* Dark blue background */
+	}
+	
+	:global(.btn-primary) {
+		background-color: #1e3a8a !important; /* Dark blue button */
+		border-color: #1e3a8a !important;
+		color: white !important;
+	}
+	
+	:global(.btn-primary:hover) {
+		background-color: #1e40af !important; /* Slightly lighter on hover */
+		border-color: #1e40af !important;
+		color: white !important;
+	}
+	
+	:global(.btn-primary:focus, .btn-primary:active) {
+		background-color: #1d4ed8 !important; /* Even lighter for active/focus */
+		border-color: #1d4ed8 !important;
+		color: white !important;
+		box-shadow: 0 0 0 0.2rem rgba(30, 58, 138, 0.25) !important;
+	}
+	
+	:global(.text-primary) {
+		color: #1e3a8a !important; /* Dark blue text */
+	}
+	
+	:global(.border-primary) {
+		border-color: #1e3a8a !important; /* Dark blue borders */
+	}
+	
+	:global(.btn-outline-primary) {
+		color: #1e3a8a !important; /* Dark blue text */
+		border-color: #1e3a8a !important; /* Dark blue border */
+		background-color: transparent !important;
+	}
+	
+	:global(.btn-outline-primary:hover) {
+		background-color: #1e3a8a !important; /* Dark blue background on hover */
+		border-color: #1e3a8a !important;
+		color: white !important;
+	}
+	
+	:global(.btn-outline-primary:focus, .btn-outline-primary:active) {
+		background-color: #1e3a8a !important;
+		border-color: #1e3a8a !important;
+		color: white !important;
+		box-shadow: 0 0 0 0.2rem rgba(30, 58, 138, 0.25) !important;
 	}
 	
 	/* Box sizing for all elements */
@@ -1193,7 +1067,7 @@
 		}
 		
 		:global(.btn) {
-			font-size: 12px !important;
+			font-size: 14px !important;
 			padding: 6px 12px !important;
 		}
 		
@@ -1203,7 +1077,7 @@
 		
 		:global(.subject-card .card-title, .assessment-card .card-title) {
 			font-size: 18px !important;
-			min-height: 40px !important;
+			min-height: 25px !important;
 		}
 		
 		:global(.subject-icon, .assessment-icon) {
@@ -1216,6 +1090,12 @@
 		
 		:global(h5, h6) {
 			font-size: 13px !important;
+		}
+		
+		/* Adjusted margins for tablet */
+		:global(.container-fluid) {
+			padding-left: 16px !important;
+			padding-right: 16px !important;
 		}
 	}
 
@@ -1230,7 +1110,7 @@
 		}
 		
 		:global(.btn-sm) {
-			font-size: 10px !important;
+			font-size: 12px !important;
 			padding: 4px 8px !important;
 		}
 		
@@ -1240,8 +1120,10 @@
 		
 		:global(.alert) {
 			padding: 6px 10px !important;
-			font-size: 11px !important;
+			font-size: 13px !important;
 		}
+		
+		/* Smaller margins for mobile - removed conflicting main padding */
 	}
 
 	/* Mobile sidebar improvements */
@@ -1304,7 +1186,16 @@
 		transition: all 0.3s ease !important;
 		border-radius: 18px !important;
 		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
-		min-height: 280px !important;
+		height: 220px !important;
+		max-height: 220px !important;
+		overflow: hidden !important;
+	}
+	
+	/* Override Bootstrap h-100 class for cards */
+	:global(.subject-card.h-100, .assessment-card.h-100) {
+		height: 220px !important;
+		max-height: 220px !important;
+		overflow: hidden !important;
 	}
 
 	:global(.subject-card:hover, .assessment-card:hover) {
@@ -1322,7 +1213,7 @@
 		font-size: 22px !important;
 		font-weight: 700 !important;
 		line-height: 1.2 !important;
-		min-height: 54px !important;
+		min-height: 30px !important;
 		display: flex !important;
 		align-items: center !important;
 		justify-content: center !important;
@@ -1332,7 +1223,7 @@
 		font-size: 20px !important;
 		font-weight: 700 !important;
 		line-height: 1.2 !important;
-		min-height: 54px !important;
+		min-height: 30px !important;
 		display: flex !important;
 		align-items: center !important;
 		justify-content: center !important;
