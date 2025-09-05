@@ -4,7 +4,7 @@
 use tauri::State;
 use std::sync::Mutex;
 use std::fs;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use printpdf::*;
 
 mod database;
@@ -21,6 +21,7 @@ struct PrintData {
     student_name: Option<String>,
     subject: Option<String>,
     assessment: Option<String>,
+    student_image: Option<String>, // Base64 encoded image data
 }
 
 // Initialize the database
@@ -170,12 +171,20 @@ async fn export_to_pdf(data: PrintData) -> Result<String, String> {
     println!("🔵 PDF Export: FUNCTION CALLED - Starting PDF generation");
     println!("🔵 PDF Export: Content length: {} characters", data.content.len());
     println!("🔵 PDF Export: Content preview: {}", data.content.chars().take(100).collect::<String>());
+    println!("🔵 PDF Export: Student name: {:?}", data.student_name);
+    println!("🔵 PDF Export: Subject: {:?}", data.subject);
+    println!("🔵 PDF Export: Assessment: {:?}", data.assessment);
+    println!("🔵 PDF Export: Student image provided: {}", data.student_image.is_some());
+    if let Some(ref img) = data.student_image {
+        println!("🔵 PDF Export: Image data length: {} characters", img.len());
+    }
 
     // Validate input
     if data.content.trim().is_empty() {
         println!("🔴 PDF Export: Empty content provided");
         return Err("No content to export".to_string());
     }
+    println!("🔵 PDF Export: Content validation passed");
 
     // Get downloads directory with fallback
     let downloads_dir = dirs::download_dir()
@@ -217,21 +226,33 @@ async fn export_to_pdf(data: PrintData) -> Result<String, String> {
     let title = "FEEDBACK REPORT";
     current_layer.use_text(title, 24.0, Mm(20.0), Mm(270.0), &font);
 
-    // Add horizontal line
+    // Add horizontal line (using text as a simple line)
     let mut y_position = 250.0;
-    current_layer.add_line(printpdf::Line {
-        points: vec![
-            (printpdf::Point { x: Mm(20.0).into(), y: Mm(y_position).into() }, false),
-            (printpdf::Point { x: Mm(190.0).into(), y: Mm(y_position).into() }, false),
-        ],
-        is_closed: false,
-    });
+    current_layer.use_text("________________________________________________________________________________", 10.0, Mm(20.0), Mm(y_position), &font_regular);
     y_position -= 20.0;
 
-    // Add student image placeholder (if available)
-    // Note: For now, we'll add a placeholder text since we need to handle image loading
-    current_layer.use_text("Student Photo: [Image would appear here]", 10.0, Mm(20.0), Mm(y_position), &font_regular);
-    y_position -= 30.0;
+    // Add student image placeholder (full page width)
+    if data.student_image.is_some() {
+        println!("🔵 PDF Export: Student image provided - creating full page width placeholder");
+        
+        // Create a full page width placeholder using repeated characters
+        let full_width_line = "█".repeat(85); // Full page width placeholder
+        
+        // Add multiple lines to create a rectangular image placeholder
+        for i in 0..8 {
+            current_layer.use_text(&full_width_line, 8.0, Mm(20.0), Mm(y_position - (i as f32 * 8.0)), &font_regular);
+        }
+        
+        // Add text label below the placeholder
+        current_layer.use_text("STUDENT PHOTO (Full Page Width)", 12.0, Mm(20.0), Mm(y_position - 70.0), &font);
+        
+        println!("🔵 PDF Export: Full page width image placeholder created");
+        y_position -= 80.0; // Move down by placeholder height plus spacing
+    } else {
+        println!("🔵 PDF Export: No student image provided");
+        current_layer.use_text("Student Photo: [No image provided]", 10.0, Mm(20.0), Mm(y_position), &font_regular);
+        y_position -= 30.0;
+    }
 
     // Add student information
     let student_name = data.student_name.as_deref().unwrap_or("Student Name");
@@ -267,23 +288,38 @@ async fn export_to_pdf(data: PrintData) -> Result<String, String> {
     }
 
     // Save PDF
-    println!("🔵 PDF Export: Saving PDF file");
+    println!("🔵 PDF Export: Saving PDF file to {:?}", file_path);
     let file = fs::File::create(&file_path).map_err(|e| {
         println!("🔴 PDF Export: Failed to create PDF file: {}", e);
         format!("Failed to create PDF file: {}", e)
     })?;
+    println!("🔵 PDF Export: PDF file created successfully");
 
     let mut writer = BufWriter::new(file);
     doc.save(&mut writer).map_err(|e| {
         println!("🔴 PDF Export: Failed to save PDF: {}", e);
         format!("Failed to save PDF: {}", e)
     })?;
+    println!("🔵 PDF Export: PDF content written successfully");
 
-    // Verify file was created
+    // Flush the writer to ensure data is written
+    writer.flush().map_err(|e| {
+        println!("🔴 PDF Export: Failed to flush PDF file: {}", e);
+        format!("Failed to flush PDF file: {}", e)
+    })?;
+    println!("🔵 PDF Export: PDF file flushed successfully");
+
+    // Verify file was created and has content
     if !file_path.exists() {
         println!("🔴 PDF Export: PDF file was not created successfully");
         return Err("PDF file was not created successfully".to_string());
     }
+    
+    let metadata = fs::metadata(&file_path).map_err(|e| {
+        println!("🔴 PDF Export: Failed to get file metadata: {}", e);
+        format!("Failed to get file metadata: {}", e)
+    })?;
+    println!("✅ PDF Export: PDF saved successfully to {:?} ({} bytes)", file_path, metadata.len());
 
     let file_size = fs::metadata(&file_path)
         .map(|m| m.len())

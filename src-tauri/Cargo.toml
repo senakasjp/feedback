@@ -27,4 +27,6 @@ chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 printpdf = "0.7"
+image = "0.24"
+base64 = "0.21"
 
