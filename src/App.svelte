@@ -576,12 +576,13 @@
 					// Calculate dimensions maintaining aspect ratio
 					const aspectRatio = img.width / img.height
 					
-					// Use absolute full width (edge to edge)
-					let imageWidth = pageWidth
-					let imageHeight = pageWidth / aspectRatio
+					// Use full width with margins (not edge to edge)
+					let imageWidth = pageWidth - (margin * 2)
+					let imageHeight = imageWidth / aspectRatio
 					
-					// Position at absolute top-left (0,0)
-					const xPosition = 0
+					// Position with margin from top and sides
+					const xPosition = margin
+					const yPosition = margin
 					
 					doc.addImage(studentImage, 'JPEG', xPosition, yPosition, imageWidth, imageHeight)
 					
@@ -758,224 +759,307 @@
 				/>
 
 				{#if currentView === 'subjects'}
-					<SubjectManager 
-						{subjects}
-						onSelectSubject={(subject) => {
-							currentSubject = subject
-							currentSubjectId = subject.id
-							currentView = 'assessments'
-						}}
-						onUpdateSubjects={(updatedSubjects) => {
-							subjects = updatedSubjects;
-							saveSubjects();
-						}}
-					/>
-				{:else if currentView === 'assessments'}
-					<div class="d-flex justify-content-between align-items-center mb-3">
-						<div>
-							<h2>{currentSubject?.name}</h2>
-							<p class="text-muted mb-0">Manage assessments and categories</p>
+					<div class="row">
+						<div class="col-12">
+							<div class="d-flex justify-content-between align-items-center mb-4">
+								<div>
+									<h1 class="display-6 mb-2">Subjects</h1>
+									<p class="lead text-muted">Manage your subjects and assessments</p>
+								</div>
+								<button 
+									class="btn btn-primary btn-lg"
+									onclick={() => showAddSubject = true}
+								>
+									<i class="bi bi-plus-circle me-2"></i>Add Subject
+								</button>
+							</div>
+							<SubjectManager 
+								{subjects}
+								onSelectSubject={(subject) => {
+									currentSubject = subject
+									currentSubjectId = subject.id
+									currentView = 'assessments'
+								}}
+								onUpdateSubjects={(updatedSubjects) => {
+									subjects = updatedSubjects;
+									saveSubjects();
+								}}
+							/>
 						</div>
-						<button 
-							class="btn btn-outline-secondary"
-							onclick={() => updateView('subjects')}
-						>
-							← Back to Subjects
-						</button>
 					</div>
-					<AssessmentManager 
-						assessments={currentSubject?.assessments || []}
-						onSelectAssessment={(assessment) => {
-							currentAssessment = assessment
-							currentAssessmentId = assessment.id
-							updateView('feedback')
-							loadAssessmentData(currentSubjectId, currentAssessmentId)
-						}}
-						onUpdateAssessments={(updatedAssessments) => {
-							if (currentSubject) {
-								currentSubject.assessments = updatedAssessments;
-								saveSubjects();
-							}
-						}}
-					/>
-				{:else if currentView === 'feedback'}
-					<div class="d-flex justify-content-between align-items-center mb-3">
-  <div>
-							<h2>Feedback for {currentAssessment?.name}</h2>
-							<p class="text-muted mb-0">Subject: {currentSubject?.name}</p>
+				{:else if currentView === 'assessments'}
+					<div class="row">
+						<div class="col-12">
+							<div class="d-flex justify-content-between align-items-center mb-4">
+								<div>
+									<h1 class="display-6 mb-2">{currentSubject?.name}</h1>
+									<p class="lead text-muted">Manage assessments and categories</p>
+								</div>
+								<div class="btn-group" role="group">
+									<button 
+										class="btn btn-outline-secondary"
+										onclick={() => updateView('subjects')}
+									>
+										<i class="bi bi-arrow-left me-2"></i>Back to Subjects
+									</button>
+									<button 
+										class="btn btn-primary"
+										onclick={() => showAddAssessment = true}
+									>
+										<i class="bi bi-plus-circle me-2"></i>Add Assessment
+									</button>
+								</div>
+							</div>
+							<AssessmentManager 
+								assessments={currentSubject?.assessments || []}
+								onSelectAssessment={(assessment) => {
+									currentAssessment = assessment
+									currentAssessmentId = assessment.id
+									updateView('feedback')
+									loadAssessmentData(currentSubjectId, currentAssessmentId)
+								}}
+								onUpdateAssessments={(updatedAssessments) => {
+									if (currentSubject) {
+										currentSubject.assessments = updatedAssessments;
+										saveSubjects();
+									}
+								}}
+							/>
 						</div>
-						<button 
-							class="btn btn-outline-secondary"
-							onclick={() => updateView('assessments')}
-						>
-							← Back to Assessments
-						</button>
+					</div>
+				{:else if currentView === 'feedback'}
+					<div class="row">
+						<div class="col-12">
+							<div class="d-flex justify-content-between align-items-center mb-4">
+								<div>
+									<h1 class="display-6 mb-2">Feedback for {currentAssessment?.name}</h1>
+									<p class="lead text-muted">Subject: {currentSubject?.name}</p>
+								</div>
+								<button 
+									class="btn btn-outline-secondary btn-lg"
+									onclick={() => updateView('assessments')}
+								>
+									<i class="bi bi-arrow-left me-2"></i>Back to Assessments
+								</button>
+							</div>
+						</div>
 					</div>
 					
 					<!-- Category Selection (only for PDR assessments) -->
 					{#if needsCategorySelection()}
-						<div class="card mb-3">
-							<div class="card-body">
-								<h6 class="card-title">Category Selection</h6>
-								<div class="mb-3">
-									<label for="categorySelect" class="form-label">Select Category:</label>
-									<select 
-										id="categorySelect" 
-										class="form-select" 
-										bind:value={selectedCategory}
-										style="font-size: 12px;"
-									>
-										<option value="">Choose a category...</option>
-										{#each getCurrentCategories() as category}
-											<option value={category}>{category}</option>
-										{/each}
-									</select>
-								</div>
-								{#if selectedCategory}
-									<div class="alert alert-info" style="font-size: 11px; padding: 8px 12px;">
-										<strong>Selected:</strong> {selectedCategory}
-										<small class="d-block text-muted mt-1">
-											Paragraphs will be prefixed with this category when added.
-										</small>
+						<div class="row mb-4">
+							<div class="col-12">
+								<div class="card border-primary">
+									<div class="card-header bg-primary text-white">
+										<h5 class="card-title mb-0">
+											<i class="bi bi-tags me-2"></i>Category Selection
+										</h5>
 									</div>
-								{/if}
+									<div class="card-body">
+										<div class="mb-3">
+											<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
+											<select 
+												id="categorySelect" 
+												class="form-select form-select-lg" 
+												bind:value={selectedCategory}
+											>
+												<option value="">Choose a category...</option>
+												{#each getCurrentCategories() as category}
+													<option value={category}>{category}</option>
+												{/each}
+											</select>
+										</div>
+										{#if selectedCategory}
+											<div class="alert alert-success d-flex align-items-center" role="alert">
+												<i class="bi bi-check-circle-fill me-2"></i>
+  <div>
+													<strong>Selected:</strong> {selectedCategory}
+													<small class="d-block text-muted mt-1">
+														Paragraphs will be prefixed with this category when added.
+													</small>
+												</div>
+											</div>
+										{/if}
+									</div>
+								</div>
 							</div>
 						</div>
 					{/if}
 					
 					<!-- Student Info Section -->
-					<div class="card mb-3">
-						<div class="card-body">
-							<h6 class="card-title">Student Information</h6>
-							<div class="row">
-								<div class="col-md-6">
-									<label for="studentNameInput" class="form-label">Student Name:</label>
-									<input 
-										id="studentNameInput" 
-										type="text" 
-										class="form-control" 
-										bind:value={studentName} 
-										placeholder="Enter student name"
-										onchange={saveAssessmentData}
-										style="font-size: 12px;"
-									>
+					<div class="row mb-4">
+						<div class="col-12">
+							<div class="card border-info">
+								<div class="card-header bg-info text-white">
+									<h5 class="card-title mb-0">
+										<i class="bi bi-person-circle me-2"></i>Student Information
+									</h5>
 								</div>
-								<div class="col-md-6">
-									<label for="studentImageInput" class="form-label">Student Photo:</label>
-									<div class="d-flex align-items-center gap-2">
-										<input 
-											id="studentImageInput" 
-											type="file" 
-											class="form-control" 
-											accept="image/*"
-											onchange={handleImageUpload}
-											style="font-size: 12px;"
-										>
-										{#if studentImage}
-											<img 
-												src={studentImage} 
-												alt="Student" 
-												class="rounded border"
-												style="width: 40px; height: 40px; object-fit: cover;"
+								<div class="card-body">
+									<div class="row g-3">
+										<div class="col-md-6">
+											<label for="studentNameInput" class="form-label fw-bold">Student Name:</label>
+											<input 
+												id="studentNameInput" 
+												type="text" 
+												class="form-control form-control-lg" 
+												bind:value={studentName} 
+												placeholder="Enter student name"
+												onchange={saveAssessmentData}
 											>
+										</div>
+										<div class="col-md-6">
+											<label for="studentImageInput" class="form-label fw-bold">Student Photo:</label>
+											<div class="input-group input-group-lg">
+												<input 
+													id="studentImageInput" 
+													type="file" 
+													class="form-control" 
+													accept="image/*"
+													onchange={handleImageUpload}
+												>
+												{#if studentImage}
+													<span class="input-group-text">
+														<img 
+															src={studentImage} 
+															alt="Student" 
+															class="rounded"
+															style="width: 40px; height: 40px; object-fit: cover;"
+														>
+													</span>
+												{/if}
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+  </div>
+					
+					<!-- Add Paragraph Form -->
+					<div class="row mb-4">
+						<div class="col-12">
+							<div class="card border-success">
+								<div class="card-header bg-success text-white">
+									<h5 class="card-title mb-0">
+										<i class="bi bi-plus-circle me-2"></i>Add Paragraph
+									</h5>
+								</div>
+								<div class="card-body">
+									<div class="mb-3">
+										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
+										<div class="input-group input-group-lg">
+											<textarea 
+												id="paragraphInput" 
+												class="form-control" 
+												rows="4" 
+												bind:value={newParagraph} 
+												placeholder="Type your paragraph here..."
+											></textarea>
+											<button class="btn btn-primary btn-lg" type="button" onclick={addParagraph}>
+												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
+											</button>
+										</div>
+										{#if needsCategorySelection() && !selectedCategory}
+											<div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
+												<i class="bi bi-exclamation-triangle-fill me-2"></i>
+												<strong>Warning:</strong> Please select a category first to properly organize this paragraph.
+											</div>
 										{/if}
 									</div>
 								</div>
 							</div>
 						</div>
 					</div>
-					
-					<!-- Add Paragraph Form -->
-					<div class="card mb-3">
-						<div class="card-body">
-							<h6 class="card-title">Add Paragraph</h6>
-							<div class="mb-3">
-								<label for="paragraphInput" class="form-label">New paragraph:</label>
-								<div class="input-group">
-									<textarea 
-										id="paragraphInput" 
-										class="form-control" 
-										rows="3" 
-										bind:value={newParagraph} 
-										placeholder="Type your paragraph here..."
-										style="font-size: 12px;"
-									></textarea>
-									<button class="btn btn-primary" type="button" onclick={addParagraph} style="font-size: 12px;">
-										Add Paragraph
-									</button>
-								</div>
-								{#if needsCategorySelection() && !selectedCategory}
-									<small class="text-warning d-block mt-1">
-										⚠️ Please select a category first to properly organize this paragraph.
-									</small>
-								{/if}
-							</div>
-						</div>
-  </div>
 
 					<!-- Student Photo Display (if uploaded) -->
 					{#if studentImage}
-						<div class="card mb-3">
-							<div class="card-body p-0">
-								<h6 class="card-title p-3 mb-0">Student Photo</h6>
-								<div class="text-center">
-									<img 
-										src={studentImage} 
-										alt="Student" 
-										class="rounded-bottom"
-										style="width: 100%; max-height: 600px; object-fit: contain;"
-									>
+						<div class="row mb-4">
+							<div class="col-12">
+								<div class="card border-warning">
+									<div class="card-header bg-warning text-dark">
+										<h5 class="card-title mb-0">
+											<i class="bi bi-image me-2"></i>Student Photo
+										</h5>
+									</div>
+									<div class="card-body p-0">
+										<div class="text-center">
+											<img 
+												src={studentImage} 
+												alt="Student" 
+												class="rounded-bottom"
+												style="width: 100%; max-height: 600px; object-fit: contain;"
+											>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
 					{/if}
 
 					<!-- Display Paragraphs -->
-  <div class="card">
-						<div class="card-body">
-							<h6 class="card-title">Paragraphs</h6>
-							{#if paragraphs.length === 0}
-								<p class="text-muted text-center py-4" style="font-size: 12px;">
-									No paragraphs added yet. Use the form above to add your first paragraph.
-								</p>
-							{:else}
-								<div class="paragraphs">
-									{#each getOrderedParagraphs() as {paragraph, originalIndex}}
-										<div class="mb-3 p-2 border-start border-primary border-3 bg-light d-flex align-items-start">
-											<div class="form-check me-3">
-												<input 
-													class="form-check-input" 
-													type="checkbox" 
-													id="paragraph-{originalIndex}"
-													checked={selectedParagraphs.has(originalIndex)}
-													onchange={() => toggleParagraph(originalIndex)}
-													style="font-size: 12px;"
-												>
-												<label class="form-check-label" for="paragraph-{originalIndex}" style="font-size: 11px;">
-													Select
-												</label>
-											</div>
-											<div class="flex-grow-1 me-2">
-												<p class="mb-0" style="font-size: 12px; line-height: 1.4;">{paragraph}</p>
-											</div>
-											<button 
-												class="btn btn-outline-danger btn-sm" 
-												onclick={() => deleteParagraph(originalIndex)}
-												style="font-size: 10px; padding: 2px 6px;"
-											>
-												×
-											</button>
+					<div class="row">
+						<div class="col-12">
+							<div class="card border-secondary">
+								<div class="card-header bg-secondary text-white">
+									<h5 class="card-title mb-0">
+										<i class="bi bi-list-ul me-2"></i>Paragraphs
+									</h5>
+								</div>
+								<div class="card-body">
+									{#if paragraphs.length === 0}
+										<div class="text-center py-5">
+											<i class="bi bi-journal-text display-1 text-muted mb-3"></i>
+											<h5 class="text-muted">No paragraphs added yet</h5>
+											<p class="text-muted">Use the form above to add your first paragraph.</p>
 										</div>
-									{/each}
+									{:else}
+										<div class="paragraphs">
+											{#each getOrderedParagraphs() as {paragraph, originalIndex}}
+												<div class="card mb-3 border-start border-primary border-4">
+													<div class="card-body">
+														<div class="d-flex align-items-start">
+															<div class="form-check me-3">
+																<input 
+																	class="form-check-input form-check-input-lg" 
+																	type="checkbox" 
+																	id="paragraph-{originalIndex}"
+																	checked={selectedParagraphs.has(originalIndex)}
+																	onchange={() => toggleParagraph(originalIndex)}
+																>
+																<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
+																	Select
+																</label>
+															</div>
+															<div class="flex-grow-1 me-3">
+																<p class="mb-0 fs-6 lh-base">{paragraph}</p>
+															</div>
+															<button 
+																class="btn btn-outline-danger btn-sm" 
+																onclick={() => deleteParagraph(originalIndex)}
+																title="Delete paragraph"
+																aria-label="Delete paragraph"
+															>
+																<i class="bi bi-trash"></i>
+															</button>
+														</div>
+													</div>
+												</div>
+											{/each}
   </div>
 
-								<!-- Selection Info -->
-								{#if selectedParagraphs.size > 0}
-									<div class="alert alert-info mt-3" style="font-size: 11px; padding: 8px 12px;">
-										<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
-									</div>
-								{/if}
-							{/if}
+										<!-- Selection Info -->
+										{#if selectedParagraphs.size > 0}
+											<div class="alert alert-info d-flex align-items-center mt-4" role="alert">
+												<i class="bi bi-info-circle-fill me-2"></i>
+												<div>
+													<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
+												</div>
+											</div>
+										{/if}
+									{/if}
+								</div>
+							</div>
 						</div>
 					</div>
 					
