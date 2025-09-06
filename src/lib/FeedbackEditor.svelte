@@ -1,31 +1,89 @@
-<script>
-	// Props
-	export let currentSubject = null
-	export let currentAssessment = null
-	export let paragraphs = []
-	export let selectedParagraphs = new Set()
-	export let studentName = ''
-	export let studentImage = ''
-	export let newParagraph = ''
-	export let selectedCategory = ''
-	export let needsCategorySelection = false
-	export let getCurrentCategories = []
-	export let getOrderedParagraphs = []
+<script lang="ts">
+	// Types
+		type Category = {
+		id: string;
+		name: string;
+		description?: string;
+	}
 
-	// Events
-	export let onUpdateStudentName
-	export let onAddParagraph
-	export let onToggleParagraph
-	export let onDeleteParagraph
-	export let onHandleImageUpload
+	type Topic = {
+		id: string;
+		name: string;
+	}
+	
+	type Assessment = {
+		id: string;
+		name: string;
+		topics?: Topic[];
+		categories?: Category[];
+	}
+	
+	type Subject = {
+		id: string;
+		name: string;
+		assessments: Assessment[];
+	}
+
+	type OrderedParagraph = {
+		paragraph: string;
+		originalIndex: number;
+		topicId?: string;
+		categoryId?: string;
+	}
+
+	// Props
+	let { 
+		currentSubject = null,
+		currentAssessment = null,
+		selectedParagraphs = new Set(),
+		studentName = '',
+		studentImage = '',
+		newParagraph = '',
+		selectedCategory = '',
+		selectedTopic = '',
+		getOrderedParagraphs = [],
+		onUpdateStudentName,
+		onAddParagraph,
+		onToggleParagraph,
+		onDeleteParagraph,
+		onHandleImageUpload
+	}: {
+		currentSubject?: Subject | null;
+		currentAssessment?: Assessment | null;
+		selectedParagraphs?: Set<number>;
+		studentName?: string;
+		studentImage?: string;
+		newParagraph?: string;
+		selectedCategory?: string;
+		selectedTopic?: string;
+		getOrderedParagraphs?: OrderedParagraph[];
+		onUpdateStudentName: () => void;
+		onAddParagraph: () => void;
+		onToggleParagraph: (index: number) => void;
+		onDeleteParagraph: (index: number) => void;
+		onHandleImageUpload: (event: Event) => void;
+	} = $props()
+
+	// Local state
+	let selectedTopicFilter = $state('')
+	let selectedCategoryFilter = $state('')
+
+	// Computed
+	let availableTopics = $derived((currentAssessment?.topics || []) as Topic[])
+	let availableCategories = $derived((currentAssessment?.categories || []) as Category[])
+	let filteredParagraphs = $derived(getOrderedParagraphs.filter(p => {
+		const matchesTopic = !selectedTopicFilter || p.topicId === selectedTopicFilter
+		const matchesCategory = !selectedCategoryFilter || p.categoryId === selectedCategoryFilter
+		return matchesTopic && matchesCategory
+	}))
 </script>
 
-<div class="p-3 border bg-light content-area" style="border-radius: 8px; margin-top: 20px; margin-bottom: 20px;">
-	<h2>Feedback for {currentAssessment?.name}</h2>
-	<p class="text-muted">Subject: {currentSubject?.name}</p>
+<div class="feedback-editor-container">
+	<h2>Feedback for {currentAssessment?.name || 'No Assessment Selected'}</h2>
+	<p class="text-muted">Subject: {currentSubject?.name || 'No Subject Selected'}</p>
 
 	<!-- Student Info Section -->
-	<div class="row mb-2 g-3">
+	<div class="row mb-2 g-2">
 		<div class="col-lg-6 col-md-12">
 			<label for="studentNameInput" class="form-label">Student Name:</label>
 			<input 
@@ -59,34 +117,45 @@
 		</div>
 	</div>
 
-	<!-- Debug info -->
-	<div class="alert alert-warning mb-3">
-		<small>
-			<strong>Debug Info:</strong><br>
-			needsCategorySelection: {needsCategorySelection}<br>
-			getCurrentCategories length: {getCurrentCategories?.length || 0}<br>
-			getOrderedParagraphs length: {getOrderedParagraphs?.length || 0}<br>
-			onAddParagraph function: {typeof onAddParagraph}
-		</small>
-	</div>
 
 	<!-- Add Paragraph Form -->
-	<div class="mb-4" style="background-color: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; border-radius: 8px;">
-		{#if needsCategorySelection}
-			<!-- Category selector for Studio 6 and Studio 4 PDR -->
-			<div class="mb-3">
+	<div class="add-paragraph-form">
+		<h4>Add New Paragraph</h4>
+		<div class="row g-2 mb-2">
+			<!-- Category selector -->
+			<div class="col-md-6">
 				<label for="categorySelect" class="form-label">Select category:</label>
 				<select id="categorySelect" class="form-select form-control" bind:value={selectedCategory}>
 					<option value="">No category (optional)</option>
-					{#each getCurrentCategories as category}
-						<option value={category}>{category}</option>
+					{#each availableCategories as category}
+						<option value={category.id}>{category.name}</option>
 					{/each}
 				</select>
+				{#if availableCategories.length === 0}
+					<small class="text-warning">No categories available. Add categories in the assessment manager.</small>
+				{/if}
 				{#if selectedCategory}
-					<small class="text-muted">Paragraph will be prefixed with: <strong>{selectedCategory}</strong></small>
+					<small class="text-muted">Selected category: <strong>{availableCategories.find(c => c.id === selectedCategory)?.name}</strong></small>
 				{/if}
 			</div>
-		{/if}
+
+			<!-- Topic selector -->
+			<div class="col-md-6">
+				<label for="topicSelect" class="form-label">Select topic:</label>
+				<select id="topicSelect" class="form-select form-control" bind:value={selectedTopic}>
+					<option value="">No topic (optional)</option>
+					{#each availableTopics as topic}
+						<option value={topic.id}>{topic.name}</option>
+					{/each}
+				</select>
+				{#if availableTopics.length === 0}
+					<small class="text-warning">No topics available. Add topics in the assessment manager.</small>
+				{/if}
+				{#if selectedTopic}
+					<small class="text-muted">Selected topic: <strong>{availableTopics.find(t => t.id === selectedTopic)?.name}</strong></small>
+				{/if}
+			</div>
+		</div>
 		
 		<label for="paragraphInput" class="form-label">Add a new paragraph:</label>
 		<div class="input-group flex-column flex-sm-row">
@@ -96,35 +165,87 @@
 	</div>
 
 
+	<!-- Filters -->
+	<div class="mb-3">
+		<h6 class="mb-2">Filter paragraphs:</h6>
+		<div class="row g-2">
+			<div class="col-md-6">
+				<label for="categoryFilter" class="form-label">By category:</label>
+				<select id="categoryFilter" class="form-select" bind:value={selectedCategoryFilter}>
+					<option value="">All categories</option>
+					{#each availableCategories as category}
+						<option value={category.id}>{category.name}</option>
+					{/each}
+				</select>
+				{#if availableCategories.length === 0}
+					<small class="text-muted">No categories to filter by</small>
+				{/if}
+			</div>
+
+			<div class="col-md-6">
+				<label for="topicFilter" class="form-label">By topic:</label>
+				<select id="topicFilter" class="form-select" bind:value={selectedTopicFilter}>
+					<option value="">All topics</option>
+					{#each availableTopics as topic}
+						<option value={topic.id}>{topic.name}</option>
+					{/each}
+				</select>
+				{#if availableTopics.length === 0}
+					<small class="text-muted">No topics to filter by</small>
+				{/if}
+			</div>
+		</div>
+	</div>
+
 	<!-- Display Paragraphs -->
 	<div class="paragraphs">
-		{#each getOrderedParagraphs as { paragraph, originalIndex }}
-			<div class="mb-3 p-2 border-start border-primary border-3 bg-white d-flex flex-column flex-sm-row align-items-start">
-				<div class="form-check me-sm-3 mb-2 mb-sm-0 d-flex align-items-center">
-					<input 
-						class="form-check-input me-2" 
-						type="checkbox" 
-						id="paragraph-{originalIndex}"
-						checked={selectedParagraphs.has(originalIndex)}
-						onchange={() => onToggleParagraph(originalIndex)}
+		{#each filteredParagraphs as { paragraph, originalIndex, topicId, categoryId }}
+			<div class="paragraph-item mb-2 p-2 border-start border-primary border-3 bg-white">
+				<div class="d-flex flex-column flex-sm-row align-items-start">
+					<div class="form-check me-sm-3 mb-2 mb-sm-0 d-flex align-items-center">
+						<input 
+							class="form-check-input me-2" 
+							type="checkbox" 
+							id="paragraph-{originalIndex}"
+							checked={selectedParagraphs.has(originalIndex)}
+							onchange={() => onToggleParagraph(originalIndex)}
+						>
+						<label class="form-check-label" for="paragraph-{originalIndex}">
+							Select
+						</label>
+					</div>
+					<div class="flex-grow-1">
+						<div class="mb-2">
+							{#if categoryId}
+								<span class="badge bg-primary me-2">
+									{availableCategories.find(c => c.id === categoryId)?.name || 'Unknown Category'}
+								</span>
+							{/if}
+							{#if topicId}
+								<span class="badge bg-info">
+									{availableTopics.find(t => t.id === topicId)?.name || 'Unknown Topic'}
+								</span>
+							{/if}
+						</div>
+						<p class="mb-0">{paragraph}</p>
+					</div>
+					<button 
+						class="btn btn-outline-danger btn-sm ms-sm-2 mt-2 mt-sm-0 delete-btn align-self-start" 
+						onclick={() => onDeleteParagraph(originalIndex)}
+						title="Delete paragraph"
 					>
-					<label class="form-check-label" for="paragraph-{originalIndex}">
-						Select
-					</label>
+						×
+					</button>
 				</div>
-				<p class="mb-0 flex-grow-1">{paragraph}</p>
-				<button 
-					class="btn btn-outline-danger btn-sm ms-sm-2 mt-2 mt-sm-0 delete-btn align-self-start" 
-					onclick={() => onDeleteParagraph(originalIndex)}
-					title="Delete paragraph"
-				>
-					×
-				</button>
 			</div>
 		{/each}
 		
-		{#if paragraphs.length === 0}
-			<p class="text-muted">No paragraphs added yet. Use the textbox above to add your first paragraph.</p>
+		{#if filteredParagraphs.length === 0}
+			{#if selectedTopicFilter || selectedCategoryFilter}
+				<p class="text-muted">No paragraphs found for the selected filters.</p>
+			{:else}
+				<p class="text-muted">No paragraphs added yet. Use the textbox above to add your first paragraph.</p>
+			{/if}
 		{/if}
 	</div>
 

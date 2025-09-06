@@ -1,24 +1,24 @@
 <script>
 	// Props
-	export let subjects = []
-	export let currentSubject = null
-	export let currentAssessment = null
-	export let showAddSubject = false
-	export let showAddAssessment = false
-	export let newSubjectName = ''
-	export let newAssessmentName = ''
-	export let showMobileSidebar = false
-
-	// Events
-	export let onSelectSubject
-	export let onSelectAssessment
-	export let onAddSubject
-	export let onAddAssessment
-	export let onGoBackToSubjects
-	export let onGoBackToAssessments
-	export let onToggleMobileSidebar
-	export let onToggleShowAddSubject
-	export let onToggleShowAddAssessment
+	let { 
+		subjects = [],
+		currentSubject = null,
+		currentAssessment = null,
+		showAddSubject = false,
+		showAddAssessment = false,
+		newSubjectName = '',
+		newAssessmentName = '',
+		showMobileSidebar = false,
+		onSelectSubject,
+		onSelectAssessment,
+		onAddSubject,
+		onAddAssessment,
+		onGoBackToSubjects,
+		onGoBackToAssessments,
+		onToggleMobileSidebar,
+		onToggleShowAddSubject,
+		onToggleShowAddAssessment
+	} = $props()
 </script>
 
 <div class="p-3 border bg-light position-sticky d-lg-block" style="top: 20px; margin: 0; width: 100%; box-sizing: border-box; border-radius: 8px;">

@@ -5,8 +5,17 @@
 	import Sidebar from './lib/Sidebar.svelte'
 	import WelcomeScreen from './lib/WelcomeScreen.svelte'
 	import SubjectOverview from './lib/SubjectOverview.svelte'
-	import FeedbackEditor from './lib/FeedbackEditor.svelte'
 	import SelectedTextSection from './lib/SelectedTextSection.svelte'
+	import SubjectManager from './lib/SubjectManager.svelte'
+	import AssessmentManager from './lib/AssessmentManager.svelte'
+	import Breadcrumb from './lib/Breadcrumb.svelte'
+	
+	// Import CSS
+	import './styles/reset.css'
+	import './styles/design-system.css'
+	import './styles/fixed-components.css'
+	import './styles/subject-manager.css'
+	import './styles/assessment-manager.css'
 
 	// Data structure for hierarchical subjects/assessments
 	let subjects = $state([])
@@ -28,9 +37,34 @@
 	let newSubjectName = $state('')
 	let newAssessmentName = $state('')
 	let showMobileSidebar = $state(false)
+	let currentView = $state('subjects') // 'subjects', 'assessments', 'feedback'
+	
+	// Force reactivity for debugging
+	$effect(() => {
+		console.log('Current view changed to:', currentView)
+	})
+	
+	// Function to update view
+	function updateView(newView) {
+		currentView = newView
+	}
 
-	// Category selection for Studio 6 PDR assessments
+	// Breadcrumb navigation handler
+	function handleBreadcrumbNavigation(view, subject, assessment) {
+		currentView = view
+		if (subject) {
+			currentSubject = subject
+			currentSubjectId = subject.id
+		}
+		if (assessment) {
+			currentAssessment = assessment
+			currentAssessmentId = assessment.id
+		}
+	}
+
+	// Category and topic selection
 	let selectedCategory = $state('')
+	let selectedTopic = $state('')
 	let pdrCategories = [
 		'Sub Objective 1.1',
 		'Sub Objective 1.2', 
@@ -48,6 +82,18 @@
 		'Sub Learning Objective 1.2',
 		'Sub Learning Objective 2.1',
 		'Sub Learning Objective 2.2',
+		'Report',
+		'Decision'
+	]
+
+	// Category selection for Studio 5 PDR assessments
+	let studio5Categories = [
+		'Sub Objective 1.1',
+		'Sub Objective 1.2',
+		'Sub Objective 2.1',
+		'Sub Objective 3.1',
+		'Sub Objective 3.2',
+		'Sub Objective 3.3',
 		'Report',
 		'Decision'
 	]
@@ -312,9 +358,24 @@
 		return result
 	}
 
+	// Helper function to check if current assessment is Studio 5 PDR
+	function isStudio5PDR() {
+		const result = currentSubject?.name === "Studio 5" && 
+		       (currentAssessment?.name === "Mid-PDR" || currentAssessment?.name === "Final PDR")
+		
+		// Debug logging
+		console.log('isStudio5PDR check:', {
+			currentSubject: currentSubject?.name,
+			currentAssessment: currentAssessment?.name,
+			result: result
+		})
+		
+		return result
+	}
+
 	// Helper function to check if current assessment needs category selection
 	function needsCategorySelection() {
-		return isStudio6PDR() || isStudio4PDR()
+		return isStudio6PDR() || isStudio4PDR() || isStudio5PDR()
 	}
 
 	// Helper function to get the appropriate categories for current assessment
@@ -323,6 +384,8 @@
 			return pdrCategories
 		} else if (isStudio4PDR()) {
 			return studio4Categories
+		} else if (isStudio5PDR()) {
+			return studio5Categories
 		}
 		return []
 	}
@@ -359,12 +422,12 @@
 	}
 
 	function getSectionOrder(paragraph) {
-		// Check for Sub Objective patterns (Studio 6) and extract numbers
+		// Check for Sub Objective patterns (Studio 6 and Studio 5) and extract numbers
 		const subObjectiveMatch = paragraph.match(/^Sub Objective (\d)\.(\d):/i)
 		if (subObjectiveMatch) {
 			const major = parseInt(subObjectiveMatch[1])
 			const minor = parseInt(subObjectiveMatch[2])
-			// Create numeric order: 1.1=11, 1.2=12, 2.1=21, 2.2=22, 3.1=31, 3.2=32
+			// Create numeric order: 1.1=11, 1.2=12, 2.1=21, 2.2=22, 3.1=31, 3.2=32, 3.3=33
 			return major * 10 + minor
 		}
 
@@ -445,7 +508,7 @@
 		
 		// Format output with section headers in proper numerical order
 		const sectionOrder = [
-			'Sub Objective 1.1', 'Sub Objective 1.2', 'Sub Objective 2.1', 'Sub Objective 2.2', 'Sub Objective 3.1', 'Sub Objective 3.2',
+			'Sub Objective 1.1', 'Sub Objective 1.2', 'Sub Objective 2.1', 'Sub Objective 2.2', 'Sub Objective 3.1', 'Sub Objective 3.2', 'Sub Objective 3.3',
 			'Sub Learning Objective 1.1', 'Sub Learning Objective 1.2', 'Sub Learning Objective 2.1', 'Sub Learning Objective 2.2',
 			'Report', 'Decision', 'Other'
 		]
@@ -686,577 +749,312 @@
 
 			<!-- Main Content -->
 			<div class="col-lg-9 col-md-8 col-12">
-				{#if !currentSubject}
-					<WelcomeScreen 
+				<!-- Breadcrumb Navigation -->
+				<Breadcrumb 
+					{currentView}
+					{currentSubject}
+					{currentAssessment}
+					onNavigate={handleBreadcrumbNavigation}
+				/>
+
+				{#if currentView === 'subjects'}
+					<SubjectManager 
 						{subjects}
-						onSelectSubject={selectSubject}
-						onDeleteSubject={deleteSubject}
+						onSelectSubject={(subject) => {
+							currentSubject = subject
+							currentSubjectId = subject.id
+							currentView = 'assessments'
+						}}
+						onUpdateSubjects={(updatedSubjects) => {
+							subjects = updatedSubjects;
+							saveSubjects();
+						}}
 					/>
-				{:else if !currentAssessment}
-					<SubjectOverview 
-						{currentSubject}
-						onSelectAssessment={selectAssessment}
+				{:else if currentView === 'assessments'}
+					<div class="d-flex justify-content-between align-items-center mb-3">
+						<div>
+							<h2>{currentSubject?.name}</h2>
+							<p class="text-muted mb-0">Manage assessments and categories</p>
+						</div>
+						<button 
+							class="btn btn-outline-secondary"
+							onclick={() => updateView('subjects')}
+						>
+							← Back to Subjects
+						</button>
+					</div>
+					<AssessmentManager 
+						assessments={currentSubject?.assessments || []}
+						onSelectAssessment={(assessment) => {
+							currentAssessment = assessment
+							currentAssessmentId = assessment.id
+							updateView('feedback')
+							loadAssessmentData(currentSubjectId, currentAssessmentId)
+						}}
+						onUpdateAssessments={(updatedAssessments) => {
+							if (currentSubject) {
+								currentSubject.assessments = updatedAssessments;
+								saveSubjects();
+							}
+						}}
 					/>
-				{:else}
-					<FeedbackEditor 
-						{currentSubject}
-						{currentAssessment}
-						{paragraphs}
-						{selectedParagraphs}
-						{studentName}
-						{studentImage}
-						{newParagraph}
-						{selectedCategory}
-						needsCategorySelection={needsCategorySelection()}
-						getCurrentCategories={getCurrentCategories()}
-						getOrderedParagraphs={getOrderedParagraphs()}
-						onUpdateStudentName={saveAssessmentData}
-						onAddParagraph={addParagraph}
-						onToggleParagraph={toggleParagraph}
-						onDeleteParagraph={deleteParagraph}
-						onHandleImageUpload={handleImageUpload}
-					/>
+				{:else if currentView === 'feedback'}
+					<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+							<h2>Feedback for {currentAssessment?.name}</h2>
+							<p class="text-muted mb-0">Subject: {currentSubject?.name}</p>
+						</div>
+						<button 
+							class="btn btn-outline-secondary"
+							onclick={() => updateView('assessments')}
+						>
+							← Back to Assessments
+						</button>
+					</div>
+					
+					<!-- Category Selection (only for PDR assessments) -->
+					{#if needsCategorySelection()}
+						<div class="card mb-3">
+							<div class="card-body">
+								<h6 class="card-title">Category Selection</h6>
+								<div class="mb-3">
+									<label for="categorySelect" class="form-label">Select Category:</label>
+									<select 
+										id="categorySelect" 
+										class="form-select" 
+										bind:value={selectedCategory}
+										style="font-size: 12px;"
+									>
+										<option value="">Choose a category...</option>
+										{#each getCurrentCategories() as category}
+											<option value={category}>{category}</option>
+										{/each}
+									</select>
+								</div>
+								{#if selectedCategory}
+									<div class="alert alert-info" style="font-size: 11px; padding: 8px 12px;">
+										<strong>Selected:</strong> {selectedCategory}
+										<small class="d-block text-muted mt-1">
+											Paragraphs will be prefixed with this category when added.
+										</small>
+									</div>
+								{/if}
+							</div>
+						</div>
+					{/if}
+					
+					<!-- Student Info Section -->
+					<div class="card mb-3">
+						<div class="card-body">
+							<h6 class="card-title">Student Information</h6>
+							<div class="row">
+								<div class="col-md-6">
+									<label for="studentNameInput" class="form-label">Student Name:</label>
+									<input 
+										id="studentNameInput" 
+										type="text" 
+										class="form-control" 
+										bind:value={studentName} 
+										placeholder="Enter student name"
+										onchange={saveAssessmentData}
+										style="font-size: 12px;"
+									>
+								</div>
+								<div class="col-md-6">
+									<label for="studentImageInput" class="form-label">Student Photo:</label>
+									<div class="d-flex align-items-center gap-2">
+										<input 
+											id="studentImageInput" 
+											type="file" 
+											class="form-control" 
+											accept="image/*"
+											onchange={handleImageUpload}
+											style="font-size: 12px;"
+										>
+										{#if studentImage}
+											<img 
+												src={studentImage} 
+												alt="Student" 
+												class="rounded border"
+												style="width: 40px; height: 40px; object-fit: cover;"
+											>
+										{/if}
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					
+					<!-- Add Paragraph Form -->
+					<div class="card mb-3">
+						<div class="card-body">
+							<h6 class="card-title">Add Paragraph</h6>
+							<div class="mb-3">
+								<label for="paragraphInput" class="form-label">New paragraph:</label>
+								<div class="input-group">
+									<textarea 
+										id="paragraphInput" 
+										class="form-control" 
+										rows="3" 
+										bind:value={newParagraph} 
+										placeholder="Type your paragraph here..."
+										style="font-size: 12px;"
+									></textarea>
+									<button class="btn btn-primary" type="button" onclick={addParagraph} style="font-size: 12px;">
+										Add Paragraph
+									</button>
+								</div>
+								{#if needsCategorySelection() && !selectedCategory}
+									<small class="text-warning d-block mt-1">
+										⚠️ Please select a category first to properly organize this paragraph.
+									</small>
+								{/if}
+							</div>
+						</div>
+  </div>
+
+					<!-- Student Photo Display (if uploaded) -->
+					{#if studentImage}
+						<div class="card mb-3">
+							<div class="card-body p-0">
+								<h6 class="card-title p-3 mb-0">Student Photo</h6>
+								<div class="text-center">
+									<img 
+										src={studentImage} 
+										alt="Student" 
+										class="rounded-bottom"
+										style="width: 100%; max-height: 600px; object-fit: contain;"
+									>
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Display Paragraphs -->
+  <div class="card">
+						<div class="card-body">
+							<h6 class="card-title">Paragraphs</h6>
+							{#if paragraphs.length === 0}
+								<p class="text-muted text-center py-4" style="font-size: 12px;">
+									No paragraphs added yet. Use the form above to add your first paragraph.
+								</p>
+							{:else}
+								<div class="paragraphs">
+									{#each getOrderedParagraphs() as {paragraph, originalIndex}}
+										<div class="mb-3 p-2 border-start border-primary border-3 bg-light d-flex align-items-start">
+											<div class="form-check me-3">
+												<input 
+													class="form-check-input" 
+													type="checkbox" 
+													id="paragraph-{originalIndex}"
+													checked={selectedParagraphs.has(originalIndex)}
+													onchange={() => toggleParagraph(originalIndex)}
+													style="font-size: 12px;"
+												>
+												<label class="form-check-label" for="paragraph-{originalIndex}" style="font-size: 11px;">
+													Select
+												</label>
+											</div>
+											<div class="flex-grow-1 me-2">
+												<p class="mb-0" style="font-size: 12px; line-height: 1.4;">{paragraph}</p>
+											</div>
+											<button 
+												class="btn btn-outline-danger btn-sm" 
+												onclick={() => deleteParagraph(originalIndex)}
+												style="font-size: 10px; padding: 2px 6px;"
+											>
+												×
+											</button>
+										</div>
+									{/each}
+  </div>
+
+								<!-- Selection Info -->
+								{#if selectedParagraphs.size > 0}
+									<div class="alert alert-info mt-3" style="font-size: 11px; padding: 8px 12px;">
+										<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
+									</div>
+								{/if}
+							{/if}
+						</div>
+					</div>
+					
 				{/if}
 			</div>
 		</div>
 	</div>
 </main>
 
-<SelectedTextSection 
-	{currentAssessment}
-	{selectedParagraphs}
-	onCopyToClipboard={copyToClipboard}
-	onGeneratePDF={generatePDF}
-	onGetSelectedText={getSelectedText}
-/>
+{#if currentView === 'feedback'}
+	<SelectedTextSection 
+		{currentAssessment}
+		{selectedParagraphs}
+		onCopyToClipboard={copyToClipboard}
+		onGeneratePDF={generatePDF}
+		onGetSelectedText={getSelectedText}
+	/>
+{/if}
 
 
 <style>
-	/* Google Fonts Import */
-	@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700;1,900&display=swap');
-
-	/* Global reset and font setup */
-	:global(html, body) {
-		width: 100% !important;
-		height: 100vh !important;
-		margin: 0 !important;
-		padding: 0 !important;
-		overflow-x: hidden !important;
-		font-family: 'Roboto', system-ui, Helvetica, Arial, sans-serif !important;
+	/* App-specific styles - most styles moved to design-system.css and components.css */
+	
+	/* Layout */
+	:global(main) {
+		width: 100%;
+		margin: 0;
+		padding: 0;
+		box-sizing: border-box;
 	}
 	
-	/* Base font sizing - larger approach */
-	:global(body) {
-		font-size: 14px !important;
-		line-height: 1.5 !important;
-		background-color: #f8f9fa !important;
-		color: #333 !important;
-	}
-	
-	/* Headers */
-	:global(h1) { font-size: 28px !important; }
-	:global(h2) { font-size: 24px !important; }
-	:global(h3) { font-size: 20px !important; }
-	:global(h4) { font-size: 18px !important; }
-	:global(h5) { font-size: 16px !important; }
-	:global(h6) { font-size: 14px !important; }
-	
-	/* Navigation */
-	:global(.navbar) {
-		padding: 10px 20px !important;
-		font-size: 14px !important;
-		width: 100% !important;
-		position: relative !important;
-		z-index: 1000 !important;
-	}
-	
-	:global(.navbar .container-fluid) {
-		max-width: 1800px !important;
-		margin: 0 auto !important;
-		padding-left: 24px !important;
-		padding-right: 24px !important;
-	}
-	
-	:global(.navbar-brand) {
-		font-size: 20px !important;
-		font-weight: 600 !important;
-	}
-	
-	:global(.nav-link) {
-		font-size: 13px !important;
-		padding: 6px 10px !important;
-	}
-	
-	/* Form elements */
-	:global(.form-control) {
-		font-family: 'Roboto', system-ui, sans-serif !important;
-		font-size: 13px !important;
-		padding: 8px 12px !important;
-		line-height: 1.4 !important;
-	}
-	
-	:global(.form-label) {
-		font-size: 13px !important;
-		font-weight: 500 !important;
-		margin-bottom: 6px !important;
-	}
-	
-	/* Buttons */
-	:global(.btn) {
-		font-size: 13px !important;
-		padding: 8px 16px !important;
-		line-height: 1.3 !important;
-	}
-	
-	:global(.btn-sm) {
-		font-size: 14px !important;
-		padding: 6px 10px !important;
-	}
-	
-	/* Cards */
-	:global(.card) {
-		font-size: 13px !important;
-	}
-	
-	:global(.card-header) {
-		padding: 12px 18px !important;
-		font-size: 14px !important;
-	}
-	
-	:global(.card-body) {
-		padding: 20px !important;
-	}
-	
-	/* Specific spacing for subject cards */
-	:global(.subject-card .card-body) {
-		padding: 20px !important;
-		display: flex !important;
-		flex-direction: column !important;
-		justify-content: space-between !important;
-		height: 100% !important;
-		overflow: hidden !important;
-		box-sizing: border-box !important;
-	}
-	
-	/* Make sidebar and content areas with small margins */
-	:global(.col-lg-3 .p-3.border.bg-light) {
-		min-height: calc(100vh - 160px) !important;
-		flex: 1 !important;
-		display: flex !important;
-		flex-direction: column !important;
-		margin-top: 20px !important;
-		margin-bottom: 20px !important;
-	}
-	
-	:global(.content-area) {
-		min-height: calc(100vh - 200px) !important;
-		flex: 1 !important;
-		display: flex !important;
-		flex-direction: column !important;
-	}
-	
-	/* Button group spacing in cards */
-	:global(.subject-card .btn) {
-		margin-bottom: 8px !important;
-		flex-shrink: 0 !important;
-	}
-	
-	:global(.subject-card .btn:last-child) {
-		margin-bottom: 0 !important;
-	}
-	
-	/* Ensure button fits within card */
-	:global(.subject-card .subject-btn) {
-		height: 40px !important;
-		flex-shrink: 0 !important;
-	}
-	
-	:global(.card-title) {
-		font-size: 16px !important;
-		margin-bottom: 12px !important;
-		font-weight: 600 !important;
-	}
-	
-	/* Text and paragraphs */
-	:global(p) {
-		font-size: 14px !important;
-		line-height: 1.5 !important;
-		margin-bottom: 10px !important;
-	}
-	
-	/* Layout fixes */
-	:global(.container-fluid) {
-		width: 100% !important;
-		max-width: 1800px !important;
-		margin: 0 auto !important;
-		padding-left: 24px !important;
-		padding-right: 24px !important;
-	}
-	
-	:global(.row) {
-		margin: 0 -12px !important;
-		width: 100% !important;
-		min-height: calc(100vh - 160px) !important;
-	}
-	
-	:global([class*="col-"]) {
-		padding-left: 12px !important;
-		padding-right: 12px !important;
-	}
-	
-	/* Make columns stretch to full height */
 	:global(.col-lg-3, .col-lg-9, .col-md-4, .col-md-8) {
-		display: flex !important;
-		flex-direction: column !important;
-		min-height: calc(100vh - 160px) !important;
+		display: flex;
+		flex-direction: column;
+		min-height: calc(100vh - 160px);
 	}
 	
-	/* Prevent column stretching for card containers */
 	:global(.col-xl-3, .col-lg-4, .col-md-6, .col-sm-12) {
-		display: flex !important;
-		align-items: flex-start !important;
-		margin-bottom: 16px !important;
+		display: flex;
+		align-items: flex-start;
+		margin-bottom: var(--spacing-lg);
 	}
 	
-	/* Main layout spacing */
-	:global(.w-100) {
-		max-width: 100% !important;
+	/* Content area adjustments */
+	:global(.col-lg-3 .p-3.border.bg-light) {
+		min-height: calc(100vh - 160px);
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		margin-top: var(--spacing-xl);
+		margin-bottom: var(--spacing-xl);
 	}
 	
-	/* Content area full width */
-	:global(.content-area) {
-		width: 100% !important;
-		max-width: 100% !important;
-		box-sizing: border-box !important;
-		margin: 0 !important;
-		display: block !important;
-	}
-	
-	/* Ensure all page content areas use full width */
+	/* Ensure full width for content areas */
 	:global(.col-lg-9 .content-area),
 	:global(.col-md-8 .content-area) {
-		width: 100% !important;
-		max-width: none !important;
+		width: 100%;
+		max-width: none;
 	}
 	
-	/* Ensure card grids within content areas use full width */
 	:global(.content-area .row) {
-		width: 100% !important;
-		margin: 0 -12px !important;
-		align-items: flex-start !important;
-		display: flex !important;
-		flex-wrap: wrap !important;
-	}
-	
-	/* Debug: ensure no unexpected width constraints */
-	:global(.container-fluid *) {
-		box-sizing: border-box !important;
-	}
-	
-	/* Ensure main element uses available space with proper spacing */
-	:global(main) {
-		width: 100% !important;
-		margin: 0 !important;
-		padding: 0 !important;
-		box-sizing: border-box !important;
+		width: 100%;
+		margin: 0 calc(-1 * var(--spacing-md));
+		align-items: flex-start;
+		display: flex;
+		flex-wrap: wrap;
 	}
 	
 	/* Override any app.css constraints */
 	:global(#app) {
-		width: 100% !important;
-		max-width: none !important;
-		margin: 0 !important;
-		padding: 0 !important;
-		text-align: left !important;
-	}
-	
-	/* Flexbox gap fallback for older browsers */
-	:global(.flex-gap-16 > *:not(:last-child)) {
-		margin-right: 16px;
-	}
-	
-	/* Alerts */
-	:global(.alert) {
-		font-size: 14px !important;
-		padding: 8px 12px !important;
-	}
-	
-	/* Input groups */
-	:global(.input-group) {
-		font-size: 14px !important;
-	}
-	
-	/* Form checks */
-	:global(.form-check) {
-		font-size: 14px !important;
-	}
-	
-	:global(.form-check-label) {
-		font-size: 14px !important;
-	}
-	
-	/* Utility */
-	:global(.text-muted) {
-		font-size: 14px !important;
-	}
-	
-	:global(.small) {
-		font-size: 13px !important;
-	}
-	
-	/* Dark Blue Color Scheme */
-	:global(.bg-primary) {
-		background-color: #1e3a8a !important; /* Dark blue background */
-	}
-	
-	:global(.btn-primary) {
-		background-color: #1e3a8a !important; /* Dark blue button */
-		border-color: #1e3a8a !important;
-		color: white !important;
-	}
-	
-	:global(.btn-primary:hover) {
-		background-color: #1e40af !important; /* Slightly lighter on hover */
-		border-color: #1e40af !important;
-		color: white !important;
-	}
-	
-	:global(.btn-primary:focus, .btn-primary:active) {
-		background-color: #1d4ed8 !important; /* Even lighter for active/focus */
-		border-color: #1d4ed8 !important;
-		color: white !important;
-		box-shadow: 0 0 0 0.2rem rgba(30, 58, 138, 0.25) !important;
-	}
-	
-	:global(.text-primary) {
-		color: #1e3a8a !important; /* Dark blue text */
-	}
-	
-	:global(.border-primary) {
-		border-color: #1e3a8a !important; /* Dark blue borders */
-	}
-	
-	:global(.btn-outline-primary) {
-		color: #1e3a8a !important; /* Dark blue text */
-		border-color: #1e3a8a !important; /* Dark blue border */
-		background-color: transparent !important;
-	}
-	
-	:global(.btn-outline-primary:hover) {
-		background-color: #1e3a8a !important; /* Dark blue background on hover */
-		border-color: #1e3a8a !important;
-		color: white !important;
-	}
-	
-	:global(.btn-outline-primary:focus, .btn-outline-primary:active) {
-		background-color: #1e3a8a !important;
-		border-color: #1e3a8a !important;
-		color: white !important;
-		box-shadow: 0 0 0 0.2rem rgba(30, 58, 138, 0.25) !important;
+		width: 100%;
+		max-width: none;
+		margin: 0;
+		padding: 0;
+		text-align: left;
 	}
 	
 	/* Box sizing for all elements */
 	:global(*) {
-		box-sizing: border-box !important;
-	}
-
-	/* Responsive improvements */
-	@media (max-width: 768px) {
-		:global(.navbar-brand) {
-			font-size: 18px !important;
-		}
-		
-		:global(.btn) {
-			font-size: 14px !important;
-			padding: 6px 12px !important;
-		}
-		
-		:global(.card-body) {
-			padding: 12px !important;
-		}
-		
-		:global(.subject-card .card-title, .assessment-card .card-title) {
-			font-size: 18px !important;
-			min-height: 25px !important;
-		}
-		
-		:global(.subject-icon, .assessment-icon) {
-			font-size: 36px !important;
-		}
-		
-		:global(h2) {
-			font-size: 20px !important;
-		}
-		
-		:global(h5, h6) {
-			font-size: 13px !important;
-		}
-		
-		/* Adjusted margins for tablet */
-		:global(.container-fluid) {
-			padding-left: 16px !important;
-			padding-right: 16px !important;
-		}
-	}
-
-	@media (max-width: 576px) {
-		:global(.container-fluid) {
-			padding-left: 8px !important;
-			padding-right: 8px !important;
-		}
-		
-		:global(.card) {
-			margin-bottom: 16px !important;
-		}
-		
-		:global(.btn-sm) {
-			font-size: 12px !important;
-			padding: 4px 8px !important;
-		}
-		
-		:global(.form-control) {
-			font-size: 14px !important;
-		}
-		
-		:global(.alert) {
-			padding: 6px 10px !important;
-			font-size: 13px !important;
-		}
-		
-		/* Smaller margins for mobile - removed conflicting main padding */
-	}
-
-	/* Mobile sidebar improvements */
-	@media (max-width: 991px) {
-		:global(.position-sticky) {
-			position: relative !important;
-		}
-	}
-
-	/* Small delete button styling */
-	:global(.delete-btn) {
-		font-size: 16px !important;
-		padding: 2px 8px !important;
-		line-height: 1 !important;
-		min-width: 28px !important;
-		height: 28px !important;
-		border-radius: 4px !important;
-		opacity: 0.6 !important;
-		transition: all 0.2s ease !important;
-		display: flex !important;
-		align-items: center !important;
-		justify-content: center !important;
-	}
-
-	:global(.delete-btn:hover) {
-		opacity: 1 !important;
-		transform: scale(1.1) !important;
-	}
-
-	/* Subject Delete Button Styling */
-	:global(.delete-subject-btn) {
-		width: 28px !important;
-		height: 28px !important;
-		border-radius: 50% !important;
-		font-size: 16px !important;
-		font-weight: bold !important;
-		line-height: 1 !important;
-		padding: 0 !important;
-		display: flex !important;
-		align-items: center !important;
-		justify-content: center !important;
-		opacity: 0.7 !important;
-		transition: all 0.2s ease !important;
-		z-index: 1000 !important;
-		position: relative !important;
-		pointer-events: auto !important;
-		cursor: pointer !important;
-	}
-
-	:global(.delete-subject-btn:hover) {
-		opacity: 1 !important;
-		background-color: #dc3545 !important;
-		border-color: #dc3545 !important;
-		color: white !important;
-		transform: scale(1.1) !important;
-	}
-
-	/* Enhanced Card Styling */
-	:global(.subject-card, .assessment-card) {
-		transition: all 0.3s ease !important;
-		border-radius: 18px !important;
-		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
-		height: 220px !important;
-		max-height: 220px !important;
-		overflow: hidden !important;
-	}
-	
-	/* Override Bootstrap h-100 class for cards */
-	:global(.subject-card.h-100, .assessment-card.h-100) {
-		height: 220px !important;
-		max-height: 220px !important;
-		overflow: hidden !important;
-	}
-
-	:global(.subject-card:hover, .assessment-card:hover) {
-		transform: translateY(-6px) !important;
-		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15) !important;
-	}
-
-	:global(.subject-icon, .assessment-icon) {
-		font-size: 48px !important;
-		opacity: 0.9;
-		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-	}
-
-	:global(.subject-card .card-title) {
-		font-size: 22px !important;
-		font-weight: 700 !important;
-		line-height: 1.2 !important;
-		min-height: 30px !important;
-		display: flex !important;
-		align-items: center !important;
-		justify-content: center !important;
-	}
-
-	:global(.assessment-card .card-title) {
-		font-size: 20px !important;
-		font-weight: 700 !important;
-		line-height: 1.2 !important;
-		min-height: 30px !important;
-		display: flex !important;
-		align-items: center !important;
-		justify-content: center !important;
-	}
-
-	:global(.subject-btn, .assessment-btn) {
-		font-weight: 600 !important;
-		font-size: 15px !important;
-		padding: 14px 28px !important;
-		border-radius: 10px !important;
-		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15) !important;
-		transition: all 0.2s ease !important;
-		border: none !important;
-		text-transform: uppercase !important;
-		letter-spacing: 0.5px !important;
-	}
-
-	:global(.subject-btn:hover, .assessment-btn:hover) {
-		transform: translateY(-2px) !important;
-		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25) !important;
-	}
-
-	:global(.subject-btn) {
-		background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
-	}
-
-	:global(.assessment-btn) {
-		background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
-	}
-
-	/* Welcome and Subject Overview improvements */
-	:global(.bg-light) {
-		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-		border: 1px solid #dee2e6 !important;
-	}
+		box-sizing: border-box;
+  }
 </style>

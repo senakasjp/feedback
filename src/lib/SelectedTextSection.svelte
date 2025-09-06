@@ -1,10 +1,12 @@
 <script>
 	// Props
-	export let currentAssessment = null
-	export let selectedParagraphs = new Set()
-	export let onCopyToClipboard
-	export let onGeneratePDF
-	export let onGetSelectedText
+	let { 
+		currentAssessment = null,
+		selectedParagraphs = new Set(),
+		onCopyToClipboard,
+		onGeneratePDF,
+		onGetSelectedText
+	} = $props()
 </script>
 
 <!-- Selected Text Section - Only show when in feedback mode with selections -->

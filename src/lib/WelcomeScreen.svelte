@@ -1,8 +1,10 @@
 <script>
 	// Props
-	export let subjects = []
-	export let onSelectSubject
-	export let onDeleteSubject
+	let { 
+		subjects = [],
+		onSelectSubject,
+		onDeleteSubject
+	} = $props()
 </script>
 
 <div class="p-3 border bg-light content-area" style="border-radius: 8px; margin-top: 20px; margin-bottom: 20px;">

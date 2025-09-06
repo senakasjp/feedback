@@ -1,11 +1,45 @@
 # Feedback Manager
 
-A portable desktop application built with Tauri and Svelte for managing student feedback with PDF generation capabilities.
+A portable desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization and PDF generation capabilities.
+
+## Application Structure
+
+The application follows a hierarchical structure:
+
+```
+Subject (1 or more)
+├── Assessment (0 or more)
+    ├── Category (0 or more)
+        └── Paragraph (0 or more)
+```
+
+### 🏗️ Hierarchical Organization
+- **Subjects**: Top-level containers (e.g., "Studio 6", "Mathematics")
+- **Assessments**: Specific evaluations within subjects (e.g., "Mid-PDR", "Final Exam")
+- **Categories**: Feedback classification within assessments (e.g., "Strengths", "Areas for Improvement")
+- **Paragraphs**: Individual feedback statements under categories
 
 ## Features
 
+### 📚 Subject Management
+- **Add/Remove Subjects**: Create and delete subjects with confirmation
+- **Subject Overview**: View all subjects in a clean card layout
+- **Assessment Count**: See number of assessments per subject
+
+### 📝 Assessment Management
+- **Add/Remove Assessments**: Create and delete assessments within subjects
+- **Category Management**: Add, edit, and remove categories for each assessment
+- **Topic Management**: Organize feedback with topics and categories
+- **Reusable Categories**: Categories created for an assessment can be used for all students
+
+### 🏷️ Category System
+- **Custom Categories**: Create categories specific to each assessment
+- **Category Descriptions**: Add optional descriptions for better organization
+- **Visual Indicators**: Categories displayed as blue badges in feedback
+- **Category Filtering**: Filter paragraphs by category
+
 ### 📝 Feedback Management
-- **Add Paragraphs**: Create feedback paragraphs using a simple textarea
+- **Add Paragraphs**: Create feedback paragraphs with category and topic selection
 - **Checkbox Selection**: Select specific paragraphs for inclusion in reports
 - **Live Preview**: See selected paragraphs in a dedicated section
 - **Auto-save**: All data is automatically saved as you work
@@ -70,9 +104,24 @@ npm run tauri build
 
 ### Getting Started
 1. **Launch the app** - Open the executable or run `npm run dev`
+2. **Create Subjects** - Add subjects to organize your feedback (e.g., "Studio 6", "Mathematics")
+3. **Create Assessments** - Add assessments within subjects (e.g., "Mid-PDR", "Final Exam")
+4. **Set up Categories** - Create categories for each assessment to organize feedback
+
+### Workflow
+1. **Subject Management** - Start by creating subjects
+2. **Assessment Management** - Add assessments to subjects
+3. **Category Setup** - Create categories for each assessment
+4. **Feedback Creation** - Add paragraphs with category and topic selection
+5. **Report Generation** - Select paragraphs and generate PDFs
+
+### Creating Feedback
+1. **Select Assessment** - Choose an assessment to work with
 2. **Enter student name** - Fill in the student name field
 3. **Upload photo** - Click "Choose File" to select a student photo
-4. **Add feedback** - Type feedback paragraphs and click "Add"
+4. **Choose category** - Select from assessment's predefined categories
+5. **Choose topic** - Select from assessment's topics (optional)
+6. **Add feedback** - Type feedback paragraphs and click "Add"
 
 ### Creating Reports
 1. **Select paragraphs** - Check the boxes next to desired feedback
@@ -107,7 +156,45 @@ feedback-app/
 
 ## Data Format
 
-The application stores data in JSON format:
+The application stores data in JSON format with hierarchical structure:
+
+```json
+{
+  "subjects": [
+    {
+      "id": "subject-1",
+      "name": "Studio 6",
+      "assessments": [
+        {
+          "id": "assessment-1",
+          "name": "Mid-PDR",
+          "topics": [
+            {
+              "id": "topic-1",
+              "name": "Design Process"
+            }
+          ],
+          "categories": [
+            {
+              "id": "category-1",
+              "name": "Strengths",
+              "description": "Positive aspects of student work"
+            },
+            {
+              "id": "category-2",
+              "name": "Areas for Improvement",
+              "description": "Areas where student can improve"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Assessment Data Format
+Each assessment stores student-specific data:
 
 ```json
 {
@@ -240,3 +327,11 @@ This approach optimizes PDF output for print density while maintaining comfortab
 - **v1.2.0** - Implemented student photo support
 - **v1.3.0** - Full-width PDF headers and improved UI
 - **v1.4.0** - PDF font standardization to 10px (interface fonts unchanged)
+- **v2.0.0** - **MAJOR UPDATE**: Hierarchical organization with subjects, assessments, and categories
+  - Added Subject Management (add/remove subjects)
+  - Added Assessment Management (add/remove assessments)
+  - Added Category Management (add/remove categories per assessment)
+  - Added Topic Management (organize feedback with topics)
+  - Redesigned UI with dedicated management screens
+  - Categories are reusable across all students for each assessment
+  - Improved data structure with hierarchical organization

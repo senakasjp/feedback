@@ -6,18 +6,27 @@
       "assessments": [
         {
           "id": "mf1xupfy3pq0nfp39dc",
-          "name": "Mid-PDR"
+          "name": "Mid-PDR",
+          "categories": []
         },
         {
           "id": "mf1xuzhf3evuktc72rw",
-          "name": "Final PDR"
+          "name": "Final PDR",
+          "categories": []
         }
       ]
     },
     {
       "id": "mf1xsq0h2i6xoaah3r5",
       "name": "Studio 5",
-      "assessments": []
+      "assessments": [
+        {
+          "id": "1757148243144",
+          "name": "Mid-PDR",
+          "topics": [],
+          "categories": []
+        }
+      ]
     },
     {
       "id": "mf3abktff8honwjjqm9",
