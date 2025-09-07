@@ -7,7 +7,12 @@
         {
           "id": "mf1xupfy3pq0nfp39dc",
           "name": "Mid-PDR",
-          "categories": []
+          "categories": [
+            {
+              "id": "1757267084150",
+              "name": "Decision"
+            }
+          ]
         },
         {
           "id": "mf1xuzhf3evuktc72rw",
@@ -37,8 +42,8 @@
           "name": "Mid-PDR",
           "categories": [
             {
-              "id": "1757233890005",
-              "name": "Decision"
+              "id": "1757266890579",
+              "name": "Test"
             }
           ]
         },
@@ -49,5 +54,8 @@
         }
       ]
     }
+  ],
+  "knowledgeAreas": [
+    "CI/CD"
   ]
 }

@@ -21,6 +21,7 @@ export interface Category {
 	id: string;
 	name: string;
 	description?: string;
+	knowledgeArea?: string;
 }
 
 export interface Paragraph {

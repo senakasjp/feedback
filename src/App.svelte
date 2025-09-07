@@ -31,6 +31,9 @@
 	let studentImage = $state('')
 	let selectedColor = $state('red')
 	let newCategoryName = $state('')
+	let newCategoryKnowledgeArea = $state('')
+	let newKnowledgeAreaName = $state('')
+	let availableKnowledgeAreas = $state([])
 
 	// UI state
 	let showAddSubject = $state(false)
@@ -66,6 +69,12 @@
 	// Category and topic selection
 	let selectedCategory = $state('')
 	let selectedTopic = $state('')
+	let selectedKnowledgeArea = $state('')
+	let editingParagraph = $state(null)
+	let editParagraphText = $state('')
+	let editParagraphCategory = $state('')
+	let editParagraphKnowledgeArea = $state('')
+	let editParagraphColor = $state('red')
 	let pdrCategories = [
 		'Sub Objective 1.1',
 		'Sub Objective 1.2', 
@@ -112,6 +121,7 @@
 			if (data) {
 				const parsed = JSON.parse(data)
 				subjects = parsed.subjects || []
+				availableKnowledgeAreas = parsed.knowledgeAreas || []
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -121,6 +131,7 @@
 				if (data) {
 					const parsed = JSON.parse(data)
 					subjects = parsed.subjects || []
+					availableKnowledgeAreas = parsed.knowledgeAreas || []
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
@@ -129,7 +140,7 @@
 	}
 
 	async function saveSubjects() {
-		const data = { subjects }
+		const data = { subjects, knowledgeAreas: availableKnowledgeAreas }
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -327,11 +338,17 @@
 				paragraphText = `${selectedCategory}: ${paragraphText}`
 			}
 			
+			// Add knowledge area prefix if selected
+			if (selectedKnowledgeArea) {
+				paragraphText = `${selectedKnowledgeArea} - ${paragraphText}`
+			}
+			
 			paragraphs.push({
 				text: paragraphText,
 				color: selectedColor
 			})
 			newParagraph = ''
+			selectedKnowledgeArea = '' // Reset knowledge area selection
 			saveAssessmentData()
 		}
 	}
@@ -345,11 +362,13 @@
 			
 			const newCategory = {
 				id: Date.now().toString(),
-				name: newCategoryName.trim()
+				name: newCategoryName.trim(),
+				knowledgeArea: newCategoryKnowledgeArea.trim() || undefined
 			}
 			
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
 			newCategoryName = ''
+			newCategoryKnowledgeArea = ''
 			
 			// Update the current subject's assessments
 			if (currentSubject) {
@@ -384,6 +403,96 @@
 				}
 			}
 		}
+	}
+
+	function addKnowledgeArea() {
+		if (newKnowledgeAreaName.trim() && !availableKnowledgeAreas.includes(newKnowledgeAreaName.trim())) {
+			availableKnowledgeAreas = [...availableKnowledgeAreas, newKnowledgeAreaName.trim()]
+			newKnowledgeAreaName = ''
+			saveSubjects()
+		}
+	}
+
+	function removeKnowledgeArea(knowledgeArea) {
+		availableKnowledgeAreas = availableKnowledgeAreas.filter(area => area !== knowledgeArea)
+		saveSubjects()
+	}
+
+	function startEditParagraph(paragraphText, index) {
+		editingParagraph = index
+		editParagraphText = paragraphText
+		editParagraphColor = paragraphs[index].color || 'red'
+		
+		// Extract category and knowledge area from paragraph text
+		editParagraphCategory = ''
+		editParagraphKnowledgeArea = ''
+		
+		// Check if paragraph has category prefix (format: "Category: text")
+		if (paragraphText.includes(': ')) {
+			const parts = paragraphText.split(': ')
+			if (parts.length >= 2) {
+				editParagraphCategory = parts[0]
+				const remainingText = parts.slice(1).join(': ')
+				
+				// Check if remaining text has knowledge area prefix (format: "Knowledge Area - text")
+				if (remainingText.includes(' - ')) {
+					const knowledgeParts = remainingText.split(' - ')
+					if (knowledgeParts.length >= 2) {
+						editParagraphKnowledgeArea = knowledgeParts[0]
+						editParagraphText = knowledgeParts.slice(1).join(' - ')
+					} else {
+						editParagraphText = remainingText
+					}
+				} else {
+					editParagraphText = remainingText
+				}
+			}
+		} else if (paragraphText.includes(' - ')) {
+			// Check if paragraph has only knowledge area prefix (format: "Knowledge Area - text")
+			const knowledgeParts = paragraphText.split(' - ')
+			if (knowledgeParts.length >= 2) {
+				editParagraphKnowledgeArea = knowledgeParts[0]
+				editParagraphText = knowledgeParts.slice(1).join(' - ')
+			}
+		}
+	}
+
+	function saveEditParagraph() {
+		if (editingParagraph !== null && editParagraphText.trim()) {
+			let newText = editParagraphText.trim()
+			
+			// Add category prefix if selected
+			if (editParagraphCategory) {
+				newText = `${editParagraphCategory}: ${newText}`
+			}
+			
+			// Add knowledge area prefix if selected
+			if (editParagraphKnowledgeArea) {
+				newText = `${editParagraphKnowledgeArea} - ${newText}`
+			}
+			
+			paragraphs[editingParagraph] = {
+				text: newText,
+				color: editParagraphColor
+			}
+			
+			// Reset edit state
+			editingParagraph = null
+			editParagraphText = ''
+			editParagraphCategory = ''
+			editParagraphKnowledgeArea = ''
+			editParagraphColor = 'red'
+			
+			saveAssessmentData()
+		}
+	}
+
+	function cancelEditParagraph() {
+		editingParagraph = null
+		editParagraphText = ''
+		editParagraphCategory = ''
+		editParagraphKnowledgeArea = ''
+		editParagraphColor = 'red'
 	}
 
 	// Helper function to check if current assessment is Studio 6 PDR
@@ -1033,50 +1142,52 @@
 										<small class="text-muted">Selected: {selectedColor} ({getColorHex(selectedColor)})</small>
 									</div>
 									
-									<!-- Category Management -->
+									<!-- Knowledge Area Management -->
 									<div class="mb-3">
 										<div class="d-flex justify-content-between align-items-center mb-2">
-											<label class="form-label fw-bold mb-0">Categories:</label>
-											<small class="text-muted">{currentAssessment?.categories?.length || 0} categories</small>
+											<label class="form-label fw-bold mb-0">Knowledge Areas:</label>
+											<small class="text-muted">{availableKnowledgeAreas.length} areas</small>
 										</div>
 										
-										<!-- Add Category Form -->
+										<!-- Add Knowledge Area Form -->
 										<div class="mb-3">
+											<label for="knowledgeAreaName" class="form-label">Knowledge Area Name:</label>
 											<div class="input-group">
 												<input
+													id="knowledgeAreaName"
 													type="text"
 													class="form-control"
-													placeholder="Enter category name..."
-													bind:value={newCategoryName}
+													placeholder="Enter knowledge area name..."
+													bind:value={newKnowledgeAreaName}
 													onkeydown={(e) => {
 														if (e.key === 'Enter') {
 															e.preventDefault();
-															addCategory();
+															addKnowledgeArea();
 														}
 													}}
 												>
 												<button 
-													class="btn btn-outline-primary"
-													onclick={addCategory}
-													disabled={!newCategoryName.trim()}
+													class="btn btn-outline-success"
+													onclick={addKnowledgeArea}
+													disabled={!newKnowledgeAreaName.trim()}
 												>
 													<i class="bi bi-plus-circle me-1"></i>Add
 												</button>
 											</div>
 										</div>
 										
-										<!-- Categories List -->
-										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
+										<!-- Knowledge Areas List -->
+										{#if availableKnowledgeAreas.length > 0}
 											<div class="mb-3">
 												<div class="row g-2">
-													{#each currentAssessment.categories as category}
+													{#each availableKnowledgeAreas as area}
 														<div class="col-md-6">
 															<div class="d-flex align-items-center justify-content-between p-2 border rounded">
-																<span class="fw-medium">{category.name}</span>
+																<span class="fw-medium">{area}</span>
 																<button 
 																	class="btn btn-sm btn-outline-danger"
-																	onclick={() => removeCategory(category.id)}
-																	title="Delete category"
+																	onclick={() => removeKnowledgeArea(area)}
+																	title="Delete knowledge area"
 																>
 																	<i class="bi bi-x"></i>
 																</button>
@@ -1086,21 +1197,111 @@
 												</div>
 											</div>
 										{/if}
+									</div>
+
+									<!-- Category Management -->
+									<div class="mb-3">
+										<div class="d-flex justify-content-between align-items-center mb-2">
+											<label class="form-label fw-bold mb-0">Categories:</label>
+											<small class="text-muted">{currentAssessment?.categories?.length || 0} categories</small>
+										</div>
 										
-										<!-- Category Selection -->
+									<!-- Add Category Form -->
+									<div class="mb-3">
+										<label for="categoryName" class="form-label">Category Name:</label>
+										<div class="input-group">
+											<input
+												id="categoryName"
+												type="text"
+												class="form-control"
+												placeholder="Enter category name..."
+												bind:value={newCategoryName}
+												onkeydown={(e) => {
+													if (e.key === 'Enter') {
+														e.preventDefault();
+														addCategory();
+													}
+												}}
+											>
+											<button 
+												class="btn btn-outline-primary"
+												onclick={addCategory}
+												disabled={!newCategoryName.trim()}
+											>
+												<i class="bi bi-plus-circle me-1"></i>Add
+											</button>
+										</div>
+									</div>
+										
+										<!-- Categories List -->
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
 											<div class="mb-3">
-												<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
-												<select 
-													id="categorySelect" 
-													class="form-select" 
-													bind:value={selectedCategory}
-												>
-													<option value="">Choose a category...</option>
+												<div class="row g-2">
 													{#each currentAssessment.categories as category}
-														<option value={category.name}>{category.name}</option>
+														<div class="col-md-6">
+															<div class="p-3 border rounded">
+																<div class="d-flex justify-content-between align-items-start mb-2">
+																	<div class="flex-grow-1">
+																		<h6 class="fw-bold mb-1">{category.name}</h6>
+																		{#if category.knowledgeArea}
+																			<small class="text-muted">
+																				<i class="bi bi-info-circle me-1"></i>
+																				{category.knowledgeArea}
+																			</small>
+																		{/if}
+																	</div>
+																	<button 
+																		class="btn btn-sm btn-outline-danger"
+																		onclick={() => removeCategory(category.id)}
+																		title="Delete category"
+																	>
+																		<i class="bi bi-x"></i>
+																	</button>
+																</div>
+															</div>
+														</div>
 													{/each}
-												</select>
+												</div>
+											</div>
+										{/if}
+										
+										<!-- Category and Knowledge Area Selection -->
+										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
+											<div class="mb-3">
+												<div class="row g-2">
+													<div class="col-12">
+														<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
+														<select 
+															id="categorySelect" 
+															class="form-select" 
+															bind:value={selectedCategory}
+														>
+															<option value="">Choose a category...</option>
+															{#each currentAssessment.categories as category}
+																<option value={category.name}>{category.name}</option>
+															{/each}
+														</select>
+													</div>
+													<div class="col-12">
+														<label for="knowledgeAreaSelect" class="form-label fw-bold">Select Knowledge Area:</label>
+														<select 
+															id="knowledgeAreaSelect" 
+															class="form-select" 
+															bind:value={selectedKnowledgeArea}
+														>
+															<option value="">Choose a knowledge area...</option>
+															{#each availableKnowledgeAreas as area}
+																<option value={area}>{area}</option>
+															{/each}
+														</select>
+														{#if selectedKnowledgeArea}
+															<small class="text-muted">
+																<i class="bi bi-info-circle me-1"></i>
+																Selected: {selectedKnowledgeArea}
+															</small>
+														{/if}
+													</div>
+												</div>
 											</div>
 										{/if}
 									</div>
@@ -1160,40 +1361,119 @@
 									{:else}
 										<div class="p-3">
 											{#each getOrderedParagraphs() as {paragraph, color, originalIndex}}
-												<div class="card mb-2 border-start border-primary border-4">
-													<div class="card-body py-2">
-														<div class="d-flex align-items-start">
-															<div class="form-check me-3">
-																<input 
-																	class="form-check-input form-check-input-lg" 
-																	type="checkbox" 
-																	id="paragraph-{originalIndex}"
-																	checked={selectedParagraphs.has(originalIndex)}
-																	onchange={() => toggleParagraph(originalIndex)}
-																>
-																<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
-																</label>
-															</div>
-															<!-- Color indicator between checkbox and text -->
-															{#if color}
-																<div class="me-3 d-flex align-items-center">
-																	<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+												{#if editingParagraph === originalIndex}
+													<!-- Edit Mode -->
+													<div class="card mb-2 border-start border-warning border-4">
+														<div class="card-body py-2">
+															<div class="row g-2">
+																<div class="col-12">
+																	<label class="form-label fw-bold mb-1">Edit Paragraph:</label>
+																	<textarea 
+																		class="form-control form-control-sm" 
+																		rows="2" 
+																		bind:value={editParagraphText}
+																		placeholder="Enter paragraph text..."
+																	></textarea>
 																</div>
-															{/if}
-															<div class="flex-grow-1 me-3">
-																<p class="mb-0 fs-5 lh-base">{paragraph}</p>
+																
+																<div class="col-md-4">
+																	<label class="form-label small mb-1">Category:</label>
+																	<select class="form-select form-select-sm" bind:value={editParagraphCategory}>
+																		<option value="">No category</option>
+																		{#each currentAssessment?.categories || [] as category}
+																			<option value={category.name}>{category.name}</option>
+																		{/each}
+																	</select>
+																</div>
+																
+																<div class="col-md-4">
+																	<label class="form-label small mb-1">Knowledge Area:</label>
+																	<select class="form-select form-select-sm" bind:value={editParagraphKnowledgeArea}>
+																		<option value="">No knowledge area</option>
+																		{#each availableKnowledgeAreas as area}
+																			<option value={area}>{area}</option>
+																		{/each}
+																	</select>
+																</div>
+																
+																<div class="col-md-4">
+																	<label class="form-label small mb-1">Color:</label>
+																	<select class="form-select form-select-sm" bind:value={editParagraphColor}>
+																		<option value="red">🔴 Red</option>
+																		<option value="orange">🟠 Orange</option>
+																		<option value="yellow">🟡 Yellow</option>
+																		<option value="lightgreen">🟢 Light Green</option>
+																		<option value="green">🟢 Green</option>
+																	</select>
+																</div>
+																
+																<div class="col-12">
+																	<div class="d-flex gap-2 mt-2">
+																		<button 
+																			class="btn btn-success btn-sm" 
+																			onclick={saveEditParagraph}
+																			disabled={!editParagraphText.trim()}
+																		>
+																			<i class="bi bi-check me-1"></i>Save
+																		</button>
+																		<button 
+																			class="btn btn-secondary btn-sm" 
+																			onclick={cancelEditParagraph}
+																		>
+																			<i class="bi bi-x me-1"></i>Cancel
+																		</button>
+																	</div>
+																</div>
 															</div>
-															<button 
-																class="btn btn-outline-danger btn-sm" 
-																onclick={() => deleteParagraph(originalIndex)}
-																title="Delete paragraph"
-																aria-label="Delete paragraph"
-															>
-																<i class="bi bi-trash"></i>
-															</button>
 														</div>
 													</div>
-												</div>
+												{:else}
+													<!-- Display Mode -->
+													<div class="card mb-2 border-start border-primary border-4">
+														<div class="card-body py-2">
+															<div class="d-flex align-items-start">
+																<div class="form-check me-3">
+																	<input 
+																		class="form-check-input form-check-input-lg" 
+																		type="checkbox" 
+																		id="paragraph-{originalIndex}"
+																		checked={selectedParagraphs.has(originalIndex)}
+																		onchange={() => toggleParagraph(originalIndex)}
+																	>
+																	<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
+																	</label>
+																</div>
+																<!-- Color indicator between checkbox and text -->
+																{#if color}
+																	<div class="me-3 d-flex align-items-center">
+																		<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+																	</div>
+																{/if}
+																<div class="flex-grow-1 me-3">
+																	<p class="mb-0 fs-5 lh-base">{paragraph}</p>
+																</div>
+																<div class="d-flex gap-1">
+																	<button 
+																		class="btn btn-outline-primary btn-sm" 
+																		onclick={() => startEditParagraph(paragraph, originalIndex)}
+																		title="Edit paragraph"
+																		aria-label="Edit paragraph"
+																	>
+																		<i class="bi bi-pencil"></i>
+																	</button>
+																	<button 
+																		class="btn btn-outline-danger btn-sm" 
+																		onclick={() => deleteParagraph(originalIndex)}
+																		title="Delete paragraph"
+																		aria-label="Delete paragraph"
+																	>
+																		<i class="bi bi-trash"></i>
+																	</button>
+																</div>
+															</div>
+														</div>
+													</div>
+												{/if}
 											{/each}
 											
 											<!-- Selection Info -->
