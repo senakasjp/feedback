@@ -594,6 +594,90 @@
 		}
 	}
 
+	function cleanParagraphTextForDisplay(text) {
+		// Remove knowledge area prefix (format: "Knowledge Area - text")
+		if (text.includes(' - ')) {
+			const parts = text.split(' - ')
+			if (parts.length >= 2) {
+				// Check if the first part looks like a knowledge area (not a category)
+				// Categories have format "Category: text", knowledge areas are just "Knowledge Area"
+				if (!parts[0].includes(':')) {
+					return parts.slice(1).join(' - ')
+				}
+			}
+		}
+		return text
+	}
+
+	function extractKnowledgeArea(text) {
+		// Extract knowledge area from paragraph text (format: "Knowledge Area - text")
+		if (text.includes(' - ')) {
+			const parts = text.split(' - ')
+			if (parts.length >= 2) {
+				// Check if the first part looks like a knowledge area (not a category)
+				if (!parts[0].includes(':')) {
+					return parts[0]
+				}
+			}
+		}
+		return null
+	}
+
+	function getGroupedParagraphs() {
+		const ordered = getOrderedParagraphs()
+		const grouped = {}
+		
+		ordered.forEach(({paragraph, color, originalIndex}) => {
+			// Extract category and knowledge area
+			let category = ''
+			let knowledgeArea = ''
+			let cleanText = paragraph
+			
+			// Check if paragraph has category prefix (format: "Category: text")
+			if (paragraph.includes(': ')) {
+				const parts = paragraph.split(': ')
+				if (parts.length >= 2) {
+					category = parts[0]
+					const remainingText = parts.slice(1).join(': ')
+					
+					// Check if remaining text has knowledge area prefix
+					knowledgeArea = extractKnowledgeArea(remainingText)
+					if (knowledgeArea) {
+						cleanText = cleanParagraphTextForDisplay(remainingText)
+					} else {
+						cleanText = remainingText
+					}
+				}
+			} else {
+				// Check if paragraph has only knowledge area prefix
+				knowledgeArea = extractKnowledgeArea(paragraph)
+				if (knowledgeArea) {
+					cleanText = cleanParagraphTextForDisplay(paragraph)
+				}
+			}
+			
+			// Create group key
+			const groupKey = `${category}|||${knowledgeArea || 'No Knowledge Area'}`
+			
+			if (!grouped[groupKey]) {
+				grouped[groupKey] = {
+					category,
+					knowledgeArea: knowledgeArea || 'No Knowledge Area',
+					paragraphs: []
+				}
+			}
+			
+			grouped[groupKey].paragraphs.push({
+				text: cleanText,
+				color,
+				originalIndex,
+				fullText: paragraph // Keep original for PDF
+			})
+		})
+		
+		return Object.values(grouped)
+	}
+
 	function getSelectedText() {
 		const orderedParagraphs = getOrderedParagraphs()
 		const selectedOrderedParagraphs = Array.from(selectedParagraphs)
@@ -606,35 +690,47 @@
 			.map(index => {
 				const paragraph = paragraphs[index]
 				// Handle both string and object formats
-				return typeof paragraph === 'string' ? paragraph : paragraph.text
+				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
+				// Clean the text for PDF (remove knowledge area prefix)
+				return cleanParagraphTextForDisplay(paragraphText)
 			})
 		
-		// Group paragraphs by section and format for display
+		// Group paragraphs by category only (not by knowledge area)
 		const groupedSections = {}
 		selectedOrderedParagraphs.forEach(paragraph => {
-			const match = paragraph.match(/^(Sub (?:Objective|Learning Objective) \d\.\d|Report|Decision):\s*(.*)$/i)
-			if (match) {
-				const section = match[1]
-				const content = match[2]
-				if (!groupedSections[section]) {
-					groupedSections[section] = []
+			// Extract category from paragraph text
+			let category = 'Other'
+			let content = paragraph
+			
+			// Check if paragraph has category prefix (format: "Category: text")
+			if (paragraph.includes(': ')) {
+				const parts = paragraph.split(': ')
+				if (parts.length >= 2) {
+					category = parts[0]
+					content = parts.slice(1).join(': ')
 				}
-				groupedSections[section].push(content)
-			} else {
-				// Paragraph without section
-				if (!groupedSections['Other']) {
-					groupedSections['Other'] = []
-				}
-				groupedSections['Other'].push(paragraph)
 			}
+			
+			if (!groupedSections[category]) {
+				groupedSections[category] = []
+			}
+			groupedSections[category].push(content)
 		})
 		
-		// Format output with section headers in proper numerical order
+		// Format output with category headers
 		const sectionOrder = [
 			'Sub Objective 1.1', 'Sub Objective 1.2', 'Sub Objective 2.1', 'Sub Objective 2.2', 'Sub Objective 3.1', 'Sub Objective 3.2', 'Sub Objective 3.3',
 			'Sub Learning Objective 1.1', 'Sub Learning Objective 1.2', 'Sub Learning Objective 2.1', 'Sub Learning Objective 2.2',
-			'Report', 'Decision', 'Other'
+			'Report', 'Decision'
 		]
+		
+		// Add any other categories that exist but aren't in the predefined order
+		const allCategories = Object.keys(groupedSections)
+		allCategories.forEach(category => {
+			if (!sectionOrder.includes(category)) {
+				sectionOrder.push(category)
+			}
+		})
 		const result = []
 		
 		sectionOrder.forEach(section => {
@@ -1287,44 +1383,58 @@
 										</div>
 									{:else}
 										<div class="p-3">
-											{#each getOrderedParagraphs() as {paragraph, color, originalIndex}}
-												<!-- Display Mode -->
-													<div class="card mb-2 border-start border-primary border-4">
-														<div class="card-body py-2">
-															<div class="d-flex align-items-start">
-																<div class="form-check me-3">
-																	<input 
-																		class="form-check-input form-check-input-lg" 
-																		type="checkbox" 
-																		id="paragraph-{originalIndex}"
-																		checked={selectedParagraphs.has(originalIndex)}
-																		onchange={() => toggleParagraph(originalIndex)}
-																	>
-																	<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
-																	</label>
-																</div>
-																<!-- Color indicator between checkbox and text -->
-																{#if color}
-																	<div class="me-3 d-flex align-items-center">
-																		<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+											{#each getGroupedParagraphs() as group}
+												<div class="card mb-3 border-start border-info border-4">
+													<div class="card-header bg-info text-white py-2">
+														<h6 class="mb-0 fw-bold">
+															{#if group.category}
+																{group.category}
+															{/if}
+															{#if group.knowledgeArea && group.knowledgeArea !== 'No Knowledge Area'}
+																{#if group.category} - {/if}
+																<i class="bi bi-bookmark me-1"></i>{group.knowledgeArea}
+															{/if}
+														</h6>
+													</div>
+													<div class="card-body p-0">
+														{#each group.paragraphs as {text, color, originalIndex, fullText}}
+															<div class="border-bottom p-3 {originalIndex === group.paragraphs[group.paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
+																<div class="d-flex align-items-start">
+																	<div class="form-check me-3">
+																		<input 
+																			class="form-check-input form-check-input-lg" 
+																			type="checkbox" 
+																			id="paragraph-{originalIndex}"
+																			checked={selectedParagraphs.has(originalIndex)}
+																			onchange={() => toggleParagraph(originalIndex)}
+																		>
+																		<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
+																		</label>
 																	</div>
-																{/if}
-																<div class="flex-grow-1 me-3">
-																	<p class="mb-0 fs-5 lh-base">{paragraph}</p>
-																</div>
-																<div class="d-flex gap-1">
-																	<button 
-																		class="btn btn-outline-danger btn-sm" 
-																		onclick={() => deleteParagraph(originalIndex)}
-																		title="Delete paragraph"
-																		aria-label="Delete paragraph"
-																	>
-																		<i class="bi bi-trash"></i>
-																	</button>
+																	<!-- Color indicator between checkbox and text -->
+																	{#if color}
+																		<div class="me-3 d-flex align-items-center">
+																			<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+																		</div>
+																	{/if}
+																	<div class="flex-grow-1 me-3">
+																		<p class="mb-0 fs-5 lh-base">{text}</p>
+																	</div>
+																	<div class="d-flex gap-1">
+																		<button 
+																			class="btn btn-outline-danger btn-sm" 
+																			onclick={() => deleteParagraph(originalIndex)}
+																			title="Delete paragraph"
+																			aria-label="Delete paragraph"
+																		>
+																			<i class="bi bi-trash"></i>
+																		</button>
+																	</div>
 																</div>
 															</div>
-														</div>
+														{/each}
 													</div>
+												</div>
 											{/each}
 											
 											<!-- Selection Info -->
