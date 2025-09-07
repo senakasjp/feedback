@@ -4,6 +4,7 @@
 		subjects = [],
 		currentSubject = null,
 		currentAssessment = null,
+		currentView = 'subjects',
 		showAddSubject = false,
 		showAddAssessment = false,
 		newSubjectName = '',
@@ -17,7 +18,9 @@
 		onGoBackToAssessments,
 		onToggleMobileSidebar,
 		onToggleShowAddSubject,
-		onToggleShowAddAssessment
+		onToggleShowAddAssessment,
+		onCopyToClipboard,
+		onGeneratePDF
 	} = $props()
 </script>
 
@@ -199,8 +202,74 @@
 						</small>
 					</div>
 				</div>
+				
+				<!-- Action Buttons - Only show in feedback page (3rd level) -->
+				{#if currentView === 'feedback' && currentAssessment}
+					<div class="mt-3">
+						<div class="d-grid gap-3">
+							<button class="action-btn copy-btn" onclick={onCopyToClipboard}>
+								<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
+							</button>
+							<button class="action-btn download-btn" onclick={onGeneratePDF}>
+								<i class="bi bi-download me-2"></i>Print to Download
+							</button>
+						</div>
+					</div>
+				{/if}
 			</div>
 		{/if}
 		</div>
 	</div>
 </div>
+
+<style>
+	.action-btn {
+		border: none;
+		border-radius: 12px;
+		padding: 12px 16px;
+		font-weight: 600;
+		font-size: 14px;
+		color: white;
+		cursor: pointer;
+		transition: all 0.3s ease;
+		position: relative;
+		overflow: hidden;
+		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+		text-align: left;
+		display: flex;
+		align-items: center;
+		width: 100%;
+	}
+	
+	.action-btn:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+	}
+	
+	.action-btn:active {
+		transform: translateY(0);
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+	}
+	
+	.copy-btn {
+		background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+	}
+	
+	.copy-btn:hover {
+		background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+		box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+	}
+	
+	.download-btn {
+		background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);
+	}
+	
+	.download-btn:hover {
+		background: linear-gradient(135deg, #c82333 0%, #d63384 100%);
+		box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+	}
+	
+	.action-btn i {
+		font-size: 16px;
+	}
+</style>

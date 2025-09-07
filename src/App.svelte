@@ -5,7 +5,6 @@
 	import Sidebar from './lib/Sidebar.svelte'
 	import WelcomeScreen from './lib/WelcomeScreen.svelte'
 	import SubjectOverview from './lib/SubjectOverview.svelte'
-	import SelectedTextSection from './lib/SelectedTextSection.svelte'
 	import SubjectManager from './lib/SubjectManager.svelte'
 	import AssessmentManager from './lib/AssessmentManager.svelte'
 	import Breadcrumb from './lib/Breadcrumb.svelte'
@@ -248,6 +247,7 @@
 		currentSubject = subject
 		currentAssessmentId = null
 		currentAssessment = null
+		currentView = 'assessments'
 		// Clear current assessment data
 		paragraphs = []
 		selectedParagraphs = new Set()
@@ -292,6 +292,7 @@
 	function selectAssessment(assessment) {
 		currentAssessmentId = assessment.id
 		currentAssessment = assessment
+		currentView = 'feedback'
 		loadAssessmentData(currentSubjectId, currentAssessmentId)
 	}
 
@@ -300,6 +301,7 @@
 		currentSubject = null
 		currentAssessmentId = null
 		currentAssessment = null
+		currentView = 'subjects'
 		paragraphs = []
 		selectedParagraphs = new Set()
 		studentName = ''
@@ -309,6 +311,7 @@
 	function goBackToAssessments() {
 		currentAssessmentId = null
 		currentAssessment = null
+		currentView = 'assessments'
 		paragraphs = []
 		selectedParagraphs = new Set()
 		studentName = ''
@@ -821,6 +824,7 @@
 					{subjects}
 					{currentSubject}
 					{currentAssessment}
+					{currentView}
 					{showAddSubject}
 					{showAddAssessment}
 					{newSubjectName}
@@ -835,6 +839,8 @@
 					onToggleMobileSidebar={() => showMobileSidebar = !showMobileSidebar}
 					onToggleShowAddSubject={() => showAddSubject = !showAddSubject}
 					onToggleShowAddAssessment={() => showAddAssessment = !showAddAssessment}
+					onCopyToClipboard={copyToClipboard}
+					onGeneratePDF={generatePDF}
 				/>
 			</div>
 
@@ -1213,14 +1219,29 @@
 	</div>
 </main>
 
-{#if currentView === 'feedback'}
-	<SelectedTextSection 
-		{currentAssessment}
-		{selectedParagraphs}
-		onCopyToClipboard={copyToClipboard}
-		onGeneratePDF={generatePDF}
-		onGetSelectedText={getSelectedText}
-	/>
+{#if currentView === 'feedback' && selectedParagraphs.size > 0}
+	<div class="container-fluid mt-4 mb-4">
+		<div class="row">
+			<div class="col-12">
+				<div class="card">
+					<div class="card-header bg-primary text-white">
+						<h5 class="mb-0">
+							<i class="bi bi-check-square me-2"></i>Selected Paragraphs for {currentAssessment?.name}
+						</h5>
+					</div>
+					<div class="card-body">
+						<textarea 
+							class="form-control" 
+							rows="10" 
+							readonly 
+							value={getSelectedText()}
+							style="font-family: 'Roboto', system-ui, sans-serif; font-size: 13px; line-height: 1.3;"
+						></textarea>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
 {/if}
 
 
