@@ -28,16 +28,25 @@
 	let { 
 		subjects = [], 
 		onSelectSubject, 
-		onUpdateSubjects 
+		onUpdateSubjects,
+		showAddSubject = false,
+		newSubjectName = '',
+		onAddSubject
 	}: {
 		subjects?: Subject[];
 		onSelectSubject: (subject: Subject) => void;
 		onUpdateSubjects: (subjects: Subject[]) => void;
+		showAddSubject?: boolean;
+		newSubjectName?: string;
+		onAddSubject?: (name: string) => void;
 	} = $props()
 
 	// Local state
 	let showDeleteConfirm = $state(false);
 	let subjectToDelete = $state(null);
+	let localNewSubjectName = $state('');
+	let clickCount = $state(0);
+	let lastClickedSubject = $state('');
 
 	// Functions
 
@@ -102,10 +111,66 @@
 		console.log('Subject clicked:', subject.name);
 		onSelectSubject(subject);
 	}
+
+	function addSubject() {
+		if (localNewSubjectName.trim()) {
+			const newSubject = {
+				id: Date.now().toString(),
+				name: localNewSubjectName.trim(),
+				assessments: []
+			};
+			
+			const updatedSubjects = [...subjects, newSubject];
+			subjects = updatedSubjects;
+			onUpdateSubjects(updatedSubjects);
+			
+			// Reset form
+			localNewSubjectName = '';
+			
+			// Call parent add function if provided
+			if (onAddSubject) {
+				onAddSubject(newSubject.name);
+			}
+		}
+	}
 </script>
 
 <div class="container-fluid">
 
+	<!-- Add Subject Form -->
+	{#if showAddSubject}
+		<div class="row mb-4">
+			<div class="col-12">
+				<div class="card border-success">
+					<div class="card-header bg-success text-white py-2">
+						<h5 class="card-title mb-0">
+							<i class="bi bi-plus-circle me-2"></i>Add New Subject
+						</h5>
+					</div>
+					<div class="card-body">
+						<label for="subjectName" class="form-label">Subject Name:</label>
+						<div class="input-group">
+							<input
+								id="subjectName"
+								type="text"
+								class="form-control"
+								placeholder="Enter subject name..."
+								bind:value={localNewSubjectName}
+								onkeydown={handleKeydown}
+							>
+							<button 
+								class="btn btn-outline-success"
+								onclick={addSubject}
+								disabled={!localNewSubjectName.trim()}
+							>
+								<i class="bi bi-plus-circle me-1"></i>Add
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if subjects.length > 0}
 		<div class="d-flex flex-wrap gap-3">

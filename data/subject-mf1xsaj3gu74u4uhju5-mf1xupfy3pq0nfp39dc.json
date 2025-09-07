@@ -14,7 +14,10 @@
     "Sub Objective 3.1: The student uses Notion to manage the project and relies on official channels, including Teams and in-person meetings, for communication.",
     "Report: The report has not been submitted yet.",
     "Decision: You are at risk. Please expedite your work, submit the report, and complete the implementation.",
-    "Sub Objective 1.1: The student’s project focuses on game development. He has sufficiently analysed the processes and methodologies to select the most appropriate approach for the chosen development.",
+    {
+      "text": "Sub Objective 1.1: The student’s project focuses on game development. He has sufficiently analysed the processes and methodologies to select the most appropriate approach for the chosen development.",
+      "color": "green"
+    },
     "Sub Objective 1.2: The student is working on a real-world problem. To evaluate the effectiveness of the chosen processes and technologies, a reasonable comparative analysis with alternative approaches can be conducted.",
     "Sub Objective 2.1: The student’s project is a software project, but it can still be based on solid scientific evidence from research literature. Therefore, it is advised to rely on research literature rather than websites.",
     "Sub Objective 2.2: According to the facilitator’s observations, the student's project is still in the development stage. The evaluators expect to see depth of understanding demonstrated through the application of knowledge at the final PDR.",

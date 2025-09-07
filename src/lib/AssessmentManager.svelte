@@ -23,16 +23,23 @@
 	let { 
 		assessments = [], 
 		onSelectAssessment, 
-		onUpdateAssessments 
+		onUpdateAssessments,
+		showAddAssessment = false,
+		newAssessmentName = '',
+		onAddAssessment
 	}: {
 		assessments?: Assessment[];
 		onSelectAssessment: (assessment: Assessment) => void;
 		onUpdateAssessments: (assessments: Assessment[]) => void;
+		showAddAssessment?: boolean;
+		newAssessmentName?: string;
+		onAddAssessment?: (name: string) => void;
 	} = $props()
 
 	// Local state
 	let showDeleteConfirm = $state(false);
 	let assessmentToDelete = $state(null);
+	let localNewAssessmentName = $state('');
 
 	// Functions
 	// Ensure all assessments have categories array initialized
@@ -66,10 +73,74 @@
 		showDeleteConfirm = false;
 		assessmentToDelete = null;
 	}
+
+	function addAssessment() {
+		if (localNewAssessmentName.trim()) {
+			const newAssessment = {
+				id: Date.now().toString(),
+				name: localNewAssessmentName.trim(),
+				topics: [],
+				categories: []
+			};
+			
+			const updatedAssessments = [...assessments, newAssessment];
+			assessments = updatedAssessments;
+			onUpdateAssessments(updatedAssessments);
+			
+			// Reset form
+			localNewAssessmentName = '';
+			
+			// Call parent add function if provided
+			if (onAddAssessment) {
+				onAddAssessment(newAssessment.name);
+			}
+		}
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
+			addAssessment();
+		}
+	}
 </script>
 
 <div class="container-fluid">
 
+	<!-- Add Assessment Form -->
+	{#if showAddAssessment}
+		<div class="row mb-4">
+			<div class="col-12">
+				<div class="card border-success">
+					<div class="card-header bg-success text-white py-2">
+						<h5 class="card-title mb-0">
+							<i class="bi bi-plus-circle me-2"></i>Add New Assessment
+						</h5>
+					</div>
+					<div class="card-body">
+						<label for="assessmentName" class="form-label">Assessment Name:</label>
+						<div class="input-group">
+							<input
+								id="assessmentName"
+								type="text"
+								class="form-control"
+								placeholder="Enter assessment name..."
+								bind:value={localNewAssessmentName}
+								onkeydown={handleKeydown}
+							>
+							<button 
+								class="btn btn-outline-success"
+								onclick={addAssessment}
+								disabled={!localNewAssessmentName.trim()}
+							>
+								<i class="bi bi-plus-circle me-1"></i>Add
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if assessments.length > 0}
 		<div class="d-flex flex-wrap gap-3">

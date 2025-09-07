@@ -70,11 +70,7 @@
 	let selectedCategory = $state('')
 	let selectedTopic = $state('')
 	let selectedKnowledgeArea = $state('')
-	let editingParagraph = $state(null)
-	let editParagraphText = $state('')
-	let editParagraphCategory = $state('')
-	let editParagraphKnowledgeArea = $state('')
-	let editParagraphColor = $state('red')
+	
 	let pdrCategories = [
 		'Sub Objective 1.1',
 		'Sub Objective 1.2', 
@@ -418,82 +414,7 @@
 		saveSubjects()
 	}
 
-	function startEditParagraph(paragraphText, index) {
-		editingParagraph = index
-		editParagraphText = paragraphText
-		editParagraphColor = paragraphs[index].color || 'red'
-		
-		// Extract category and knowledge area from paragraph text
-		editParagraphCategory = ''
-		editParagraphKnowledgeArea = ''
-		
-		// Check if paragraph has category prefix (format: "Category: text")
-		if (paragraphText.includes(': ')) {
-			const parts = paragraphText.split(': ')
-			if (parts.length >= 2) {
-				editParagraphCategory = parts[0]
-				const remainingText = parts.slice(1).join(': ')
-				
-				// Check if remaining text has knowledge area prefix (format: "Knowledge Area - text")
-				if (remainingText.includes(' - ')) {
-					const knowledgeParts = remainingText.split(' - ')
-					if (knowledgeParts.length >= 2) {
-						editParagraphKnowledgeArea = knowledgeParts[0]
-						editParagraphText = knowledgeParts.slice(1).join(' - ')
-					} else {
-						editParagraphText = remainingText
-					}
-				} else {
-					editParagraphText = remainingText
-				}
-			}
-		} else if (paragraphText.includes(' - ')) {
-			// Check if paragraph has only knowledge area prefix (format: "Knowledge Area - text")
-			const knowledgeParts = paragraphText.split(' - ')
-			if (knowledgeParts.length >= 2) {
-				editParagraphKnowledgeArea = knowledgeParts[0]
-				editParagraphText = knowledgeParts.slice(1).join(' - ')
-			}
-		}
-	}
 
-	function saveEditParagraph() {
-		if (editingParagraph !== null && editParagraphText.trim()) {
-			let newText = editParagraphText.trim()
-			
-			// Add category prefix if selected
-			if (editParagraphCategory) {
-				newText = `${editParagraphCategory}: ${newText}`
-			}
-			
-			// Add knowledge area prefix if selected
-			if (editParagraphKnowledgeArea) {
-				newText = `${editParagraphKnowledgeArea} - ${newText}`
-			}
-			
-			paragraphs[editingParagraph] = {
-				text: newText,
-				color: editParagraphColor
-			}
-			
-			// Reset edit state
-			editingParagraph = null
-			editParagraphText = ''
-			editParagraphCategory = ''
-			editParagraphKnowledgeArea = ''
-			editParagraphColor = 'red'
-			
-			saveAssessmentData()
-		}
-	}
-
-	function cancelEditParagraph() {
-		editingParagraph = null
-		editParagraphText = ''
-		editParagraphCategory = ''
-		editParagraphKnowledgeArea = ''
-		editParagraphColor = 'red'
-	}
 
 	// Helper function to check if current assessment is Studio 6 PDR
 	function isStudio6PDR() {
@@ -989,6 +910,9 @@
 									subjects = updatedSubjects;
 									saveSubjects();
 								}}
+								showAddSubject={showAddSubject}
+								newSubjectName={newSubjectName}
+								onAddSubject={addSubject}
 							/>
 	</div>
 					</div>
@@ -1030,6 +954,9 @@
 										saveSubjects();
 									}
 								}}
+								showAddAssessment={showAddAssessment}
+								newAssessmentName={newAssessmentName}
+								onAddAssessment={addAssessment}
 							/>
 						</div>
 					</div>
@@ -1361,74 +1288,7 @@
 									{:else}
 										<div class="p-3">
 											{#each getOrderedParagraphs() as {paragraph, color, originalIndex}}
-												{#if editingParagraph === originalIndex}
-													<!-- Edit Mode -->
-													<div class="card mb-2 border-start border-warning border-4">
-														<div class="card-body py-2">
-															<div class="row g-2">
-																<div class="col-12">
-																	<label class="form-label fw-bold mb-1">Edit Paragraph:</label>
-																	<textarea 
-																		class="form-control form-control-sm" 
-																		rows="2" 
-																		bind:value={editParagraphText}
-																		placeholder="Enter paragraph text..."
-																	></textarea>
-																</div>
-																
-																<div class="col-md-4">
-																	<label class="form-label small mb-1">Category:</label>
-																	<select class="form-select form-select-sm" bind:value={editParagraphCategory}>
-																		<option value="">No category</option>
-																		{#each currentAssessment?.categories || [] as category}
-																			<option value={category.name}>{category.name}</option>
-																		{/each}
-																	</select>
-																</div>
-																
-																<div class="col-md-4">
-																	<label class="form-label small mb-1">Knowledge Area:</label>
-																	<select class="form-select form-select-sm" bind:value={editParagraphKnowledgeArea}>
-																		<option value="">No knowledge area</option>
-																		{#each availableKnowledgeAreas as area}
-																			<option value={area}>{area}</option>
-																		{/each}
-																	</select>
-																</div>
-																
-																<div class="col-md-4">
-																	<label class="form-label small mb-1">Color:</label>
-																	<select class="form-select form-select-sm" bind:value={editParagraphColor}>
-																		<option value="red">🔴 Red</option>
-																		<option value="orange">🟠 Orange</option>
-																		<option value="yellow">🟡 Yellow</option>
-																		<option value="lightgreen">🟢 Light Green</option>
-																		<option value="green">🟢 Green</option>
-																	</select>
-																</div>
-																
-																<div class="col-12">
-																	<div class="d-flex gap-2 mt-2">
-																		<button 
-																			class="btn btn-success btn-sm" 
-																			onclick={saveEditParagraph}
-																			disabled={!editParagraphText.trim()}
-																		>
-																			<i class="bi bi-check me-1"></i>Save
-																		</button>
-																		<button 
-																			class="btn btn-secondary btn-sm" 
-																			onclick={cancelEditParagraph}
-																		>
-																			<i class="bi bi-x me-1"></i>Cancel
-																		</button>
-																	</div>
-																</div>
-															</div>
-														</div>
-													</div>
-												{:else}
-													<!-- Display Mode -->
+												<!-- Display Mode -->
 													<div class="card mb-2 border-start border-primary border-4">
 														<div class="card-body py-2">
 															<div class="d-flex align-items-start">
@@ -1454,14 +1314,6 @@
 																</div>
 																<div class="d-flex gap-1">
 																	<button 
-																		class="btn btn-outline-primary btn-sm" 
-																		onclick={() => startEditParagraph(paragraph, originalIndex)}
-																		title="Edit paragraph"
-																		aria-label="Edit paragraph"
-																	>
-																		<i class="bi bi-pencil"></i>
-																	</button>
-																	<button 
 																		class="btn btn-outline-danger btn-sm" 
 																		onclick={() => deleteParagraph(originalIndex)}
 																		title="Delete paragraph"
@@ -1473,7 +1325,6 @@
 															</div>
 														</div>
 													</div>
-												{/if}
 											{/each}
 											
 											<!-- Selection Info -->
