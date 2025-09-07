@@ -749,7 +749,7 @@
 			</div>
 
 			<!-- Main Content -->
-			<div class="col-lg-9 col-md-8 col-12">
+			<div class="col-lg-9 col-md-8 col-12 d-flex flex-column">
 				<!-- Breadcrumb Navigation -->
 				<Breadcrumb 
 					{currentView}
@@ -761,7 +761,7 @@
 				{#if currentView === 'subjects'}
 					<div class="row">
 						<div class="col-12">
-							<div class="d-flex justify-content-between align-items-center mb-4">
+							<div class="d-flex justify-content-between align-items-center mb-3">
 								<div>
 									<h1 class="display-6 mb-2">Subjects</h1>
 									<p class="lead text-muted">Manage your subjects and assessments</p>
@@ -790,7 +790,7 @@
 				{:else if currentView === 'assessments'}
 					<div class="row">
 						<div class="col-12">
-							<div class="d-flex justify-content-between align-items-center mb-4">
+							<div class="d-flex justify-content-between align-items-center mb-3">
 								<div>
 									<h1 class="display-6 mb-2">{currentSubject?.name}</h1>
 									<p class="lead text-muted">Manage assessments and categories</p>
@@ -828,35 +828,36 @@
 						</div>
 					</div>
 				{:else if currentView === 'feedback'}
-					<div class="row">
-						<div class="col-12">
-							<div class="d-flex justify-content-between align-items-center mb-4">
-								<div>
-									<h1 class="display-6 mb-2">Feedback for {currentAssessment?.name}</h1>
-									<p class="lead text-muted">Subject: {currentSubject?.name}</p>
+					<div class="d-flex flex-column">
+						<div class="row">
+							<div class="col-12">
+								<div class="d-flex justify-content-between align-items-center mb-3">
+									<div>
+										<h1 class="display-6 mb-2">Feedback for {currentAssessment?.name}</h1>
+										<p class="lead text-muted">Subject: {currentSubject?.name}</p>
+									</div>
+									<button 
+										class="btn btn-outline-secondary btn-lg"
+										onclick={() => updateView('assessments')}
+									>
+										<i class="bi bi-arrow-left me-2"></i>Back to Assessments
+									</button>
 								</div>
-								<button 
-									class="btn btn-outline-secondary btn-lg"
-									onclick={() => updateView('assessments')}
-								>
-									<i class="bi bi-arrow-left me-2"></i>Back to Assessments
-								</button>
 							</div>
 						</div>
-					</div>
 					
 					<!-- Category Selection (only for PDR assessments) -->
 					{#if needsCategorySelection()}
-						<div class="row mb-4">
+						<div class="row mb-2">
 							<div class="col-12">
 								<div class="card border-primary">
-									<div class="card-header bg-primary text-white">
+									<div class="card-header bg-primary text-white py-2">
 										<h5 class="card-title mb-0">
 											<i class="bi bi-tags me-2"></i>Category Selection
 										</h5>
 									</div>
-									<div class="card-body">
-										<div class="mb-3">
+									<div class="card-body py-2">
+										<div class="mb-2">
 											<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
 											<select 
 												id="categorySelect" 
@@ -870,9 +871,9 @@
 											</select>
 										</div>
 										{#if selectedCategory}
-											<div class="alert alert-success d-flex align-items-center" role="alert">
+											<div class="alert alert-success d-flex align-items-center py-2" role="alert">
 												<i class="bi bi-check-circle-fill me-2"></i>
-  <div>
+												<div>
 													<strong>Selected:</strong> {selectedCategory}
 													<small class="d-block text-muted mt-1">
 														Paragraphs will be prefixed with this category when added.
@@ -887,16 +888,16 @@
 					{/if}
 					
 					<!-- Student Info Section -->
-					<div class="row mb-4">
+					<div class="row mb-2">
 						<div class="col-12">
 							<div class="card border-info">
-								<div class="card-header bg-info text-white">
+								<div class="card-header bg-info text-white py-2">
 									<h5 class="card-title mb-0">
 										<i class="bi bi-person-circle me-2"></i>Student Information
 									</h5>
 								</div>
-								<div class="card-body">
-									<div class="row g-3">
+								<div class="card-body py-2">
+									<div class="row g-2">
 										<div class="col-md-6">
 											<label for="studentNameInput" class="form-label fw-bold">Student Name:</label>
 											<input 
@@ -934,13 +935,13 @@
 								</div>
 							</div>
 						</div>
-  </div>
+					</div>
 					
 					<!-- Add Paragraph Form -->
-					<div class="row mb-4">
+					<div class="row mb-3">
 						<div class="col-12">
 							<div class="card border-success">
-								<div class="card-header bg-success text-white">
+								<div class="card-header bg-success text-white py-2">
 									<h5 class="card-title mb-0">
 										<i class="bi bi-plus-circle me-2"></i>Add Paragraph
 									</h5>
@@ -974,10 +975,10 @@
 
 					<!-- Student Photo Display (if uploaded) -->
 					{#if studentImage}
-						<div class="row mb-4">
+						<div class="row mb-3">
 							<div class="col-12">
 								<div class="card border-warning">
-									<div class="card-header bg-warning text-dark">
+									<div class="card-header bg-warning text-dark py-2">
 										<h5 class="card-title mb-0">
 											<i class="bi bi-image me-2"></i>Student Photo
 										</h5>
@@ -1001,23 +1002,23 @@
 					<div class="row">
 						<div class="col-12">
 							<div class="card border-secondary">
-								<div class="card-header bg-secondary text-white">
+								<div class="card-header bg-secondary text-white py-2">
 									<h5 class="card-title mb-0">
 										<i class="bi bi-list-ul me-2"></i>Paragraphs
 									</h5>
 								</div>
-								<div class="card-body">
+								<div class="card-body p-0">
 									{#if paragraphs.length === 0}
-										<div class="text-center py-5">
+										<div class="text-center py-4 px-3">
 											<i class="bi bi-journal-text display-1 text-muted mb-3"></i>
 											<h5 class="text-muted">No paragraphs added yet</h5>
 											<p class="text-muted">Use the form above to add your first paragraph.</p>
 										</div>
 									{:else}
-										<div class="paragraphs">
+										<div class="p-3">
 											{#each getOrderedParagraphs() as {paragraph, originalIndex}}
-												<div class="card mb-3 border-start border-primary border-4">
-													<div class="card-body">
+												<div class="card mb-2 border-start border-primary border-4">
+													<div class="card-body py-2">
 														<div class="d-flex align-items-start">
 															<div class="form-check me-3">
 																<input 
@@ -1028,11 +1029,10 @@
 																	onchange={() => toggleParagraph(originalIndex)}
 																>
 																<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
-																	Select
 																</label>
 															</div>
 															<div class="flex-grow-1 me-3">
-																<p class="mb-0 fs-6 lh-base">{paragraph}</p>
+																<p class="mb-0 fs-5 lh-base">{paragraph}</p>
 															</div>
 															<button 
 																class="btn btn-outline-danger btn-sm" 
@@ -1046,21 +1046,22 @@
 													</div>
 												</div>
 											{/each}
-  </div>
-
-										<!-- Selection Info -->
-										{#if selectedParagraphs.size > 0}
-											<div class="alert alert-info d-flex align-items-center mt-4" role="alert">
-												<i class="bi bi-info-circle-fill me-2"></i>
-												<div>
-													<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
+											
+											<!-- Selection Info -->
+											{#if selectedParagraphs.size > 0}
+												<div class="alert alert-info d-flex align-items-center mt-3 mb-0" role="alert">
+													<i class="bi bi-info-circle-fill me-2"></i>
+													<div>
+														<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
+													</div>
 												</div>
-											</div>
-										{/if}
+											{/if}
+										</div>
 									{/if}
 								</div>
 							</div>
 						</div>
+					</div>
 					</div>
 					
 				{/if}
@@ -1094,13 +1095,23 @@
 	:global(.col-lg-3, .col-lg-9, .col-md-4, .col-md-8) {
 		display: flex;
 		flex-direction: column;
-		min-height: calc(100vh - 160px);
+		min-height: calc(100vh - 200px);
+	}
+	
+	:global(.col-lg-9 .row) {
+		display: flex;
+		flex-direction: column;
+	}
+	
+	:global(.col-lg-9 .col-12) {
+		display: flex;
+		flex-direction: column;
 	}
 	
 	:global(.col-xl-3, .col-lg-4, .col-md-6, .col-sm-12) {
 		display: flex;
 		align-items: flex-start;
-		margin-bottom: var(--spacing-lg);
+		margin-bottom: 1rem;
 	}
 	
 	/* Content area adjustments */
@@ -1109,8 +1120,8 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		margin-top: var(--spacing-xl);
-		margin-bottom: var(--spacing-xl);
+		margin-top: 1rem;
+		margin-bottom: 1rem;
 	}
 	
 	/* Ensure full width for content areas */
@@ -1122,7 +1133,7 @@
 	
 	:global(.content-area .row) {
 		width: 100%;
-		margin: 0 calc(-1 * var(--spacing-md));
+		margin: 0 calc(-1 * 0.5rem);
 		align-items: flex-start;
 		display: flex;
 		flex-wrap: wrap;
