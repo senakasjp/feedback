@@ -58,27 +58,6 @@
 					</button>
 				</div>
 				
-				{#if showAddSubject}
-					<div class="card border-primary mb-3">
-						<div class="card-body p-2">
-							<input 
-								type="text" 
-								class="form-control form-control-sm mb-2" 
-								placeholder="Enter subject name"
-								bind:value={newSubjectName}
-								onkeydown={(e) => e.key === 'Enter' && onAddSubject()}
-							>
-							<div class="btn-group w-100">
-								<button class="btn btn-success btn-sm" onclick={onAddSubject}>
-									<i class="bi bi-check me-1"></i>Add
-								</button>
-								<button class="btn btn-secondary btn-sm" onclick={() => onToggleShowAddSubject()}>
-									<i class="bi bi-x me-1"></i>Cancel
-								</button>
-							</div>
-						</div>
-					</div>
-				{/if}
 				
 				{#each subjects as subject}
 					<button 
@@ -130,27 +109,6 @@
 					</small>
 				</div>
 				
-				{#if showAddAssessment}
-					<div class="card border-success mb-3">
-						<div class="card-body p-2">
-							<input 
-								type="text" 
-								class="form-control form-control-sm mb-2" 
-								placeholder="Enter assessment name"
-								bind:value={newAssessmentName}
-								onkeydown={(e) => e.key === 'Enter' && onAddAssessment()}
-							>
-							<div class="btn-group w-100">
-								<button class="btn btn-success btn-sm" onclick={onAddAssessment}>
-									<i class="bi bi-check me-1"></i>Add
-								</button>
-								<button class="btn btn-secondary btn-sm" onclick={() => onToggleShowAddAssessment()}>
-									<i class="bi bi-x me-1"></i>Cancel
-								</button>
-							</div>
-						</div>
-					</div>
-				{/if}
 				
 				{#each currentSubject?.assessments || [] as assessment}
 					<button 

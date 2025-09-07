@@ -36,50 +36,51 @@
 	} = $props()
 
 	// Local state
-	let newSubjectName = $state('');
-	let showAddForm = $state(false);
-	let clickCount = $state(0);
-	let lastClickedSubject = $state('');
-	let buttonClicked = $state(false);
+	let showDeleteConfirm = $state(false);
+	let subjectToDelete = $state(null);
 
 	// Functions
-	function addSubject() {
-		if (newSubjectName.trim()) {
-			const newSubject: Subject = {
-				id: Date.now().toString(),
-				name: newSubjectName.trim(),
-				assessments: []
-			};
-			const updatedSubjects = [...subjects, newSubject];
-			subjects = updatedSubjects;
-			onUpdateSubjects(updatedSubjects);
-			newSubjectName = '';
-			showAddForm = false;
-		}
-	}
 
 	function removeSubject(subjectId: string) {
 		console.log('=== DELETE FUNCTION CALLED ===');
 		console.log('Subject ID to delete:', subjectId);
 		console.log('Current subjects:', subjects);
 		
-		const subjectToDelete = subjects.find(s => s.id === subjectId);
-		console.log('Found subject to delete:', subjectToDelete);
+		const subject = subjects.find(s => s.id === subjectId);
+		console.log('Found subject to delete:', subject);
 		
-		if (!subjectToDelete) {
+		if (!subject) {
 			console.log('ERROR: Subject not found!');
 			return;
 		}
 		
-		// Direct deletion without confirmation for now
-		const updatedSubjects = subjects.filter(s => s.id !== subjectId);
-		console.log('Updated subjects after deletion:', updatedSubjects);
+		// Show custom confirmation dialog
+		subjectToDelete = subject;
+		showDeleteConfirm = true;
 		
-		subjects = updatedSubjects;
-		onUpdateSubjects(updatedSubjects);
-		
-		console.log('Subject deleted successfully!');
 		console.log('=== DELETE FUNCTION COMPLETED ===');
+	}
+
+	function confirmDelete() {
+		if (subjectToDelete) {
+			const updatedSubjects = subjects.filter(s => s.id !== subjectToDelete.id);
+			console.log('Updated subjects after deletion:', updatedSubjects);
+			
+			subjects = updatedSubjects;
+			onUpdateSubjects(updatedSubjects);
+			
+			console.log('Subject deleted successfully!');
+		}
+		
+		// Close dialog
+		showDeleteConfirm = false;
+		subjectToDelete = null;
+	}
+
+	function cancelDelete() {
+		console.log('Deletion cancelled by user');
+		showDeleteConfirm = false;
+		subjectToDelete = null;
 	}
 
 	function handleDeleteClick(subjectId: string) {
@@ -103,52 +104,14 @@
 	}
 </script>
 
-<div class="content-area">
-	<div class="page-header">
-		<div class="header-content">
-			<h1 class="page-title">Subjects</h1>
-			<p class="page-subtitle">Create and manage your subjects</p>
-		</div>
-		<button 
-			class="btn btn-primary add-btn"
-			onclick={() => showAddForm = !showAddForm}
-		>
-			<span class="btn-icon">+</span>
-			{showAddForm ? 'Cancel' : 'Add Subject'}
-		</button>
-	</div>
+<div class="container-fluid">
 
-	{#if showAddForm}
-		<div class="add-form-card">
-			<div class="form-header">
-				<h3>Add New Subject</h3>
-			</div>
-			<div class="form-body">
-				<div class="input-group">
-					<input
-						type="text"
-						class="form-control"
-						placeholder="Enter subject name (e.g., Mathematics, Science, English)"
-						bind:value={newSubjectName}
-						onkeydown={handleKeydown}
-					>
-					<button 
-						class="btn btn-success"
-						onclick={addSubject}
-						disabled={!newSubjectName.trim()}
-					>
-						Add Subject
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
 
 	{#if subjects.length > 0}
 		<div class="d-flex flex-wrap gap-3">
 			{#each subjects as subject}
-				<div class="card border-0 shadow-sm" style="min-width: 300px; max-width: 350px;">
-					<div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+				<div class="card border-0 shadow-sm d-flex flex-column" style="min-width: 300px; max-width: 350px; aspect-ratio: 1; height: 300px;">
+					<div class="card-header bg-white border-0 d-flex justify-content-between align-items-center flex-shrink-0">
 						<div class="d-flex align-items-center">
 							<i class="bi bi-book text-primary me-2" style="font-size: 1.5rem;"></i>
 							<span class="fw-bold text-dark">{subject.name}</span>
@@ -165,9 +128,9 @@
 							<i class="bi bi-x"></i>
 						</button>
 					</div>
-					<div class="card-body d-flex flex-column">
-						<div class="mt-auto">
-							<div class="d-flex justify-content-between align-items-center mb-3">
+					<div class="card-body d-flex flex-column justify-content-center align-items-center flex-grow-1">
+						<div class="text-center">
+							<div class="d-flex justify-content-between align-items-center mb-4">
 								<span class="text-muted small">Assessments:</span>
 								<span class="badge bg-primary">{subject.assessments.length}</span>
 							</div>
@@ -183,22 +146,57 @@
 			{/each}
 		</div>
 	{:else}
-		<div class="text-center py-5">
-			<div class="card border-0 shadow-sm">
-				<div class="card-body py-5">
-					<i class="bi bi-book text-muted mb-3" style="font-size: 3rem;"></i>
-					<h5 class="text-muted mb-3">No subjects created yet</h5>
-					<p class="text-muted mb-4">Create your first subject to get started with managing assessments and feedback.</p>
-					<button 
-						class="btn btn-primary btn-lg"
-						onclick={() => showAddForm = true}
-					>
-						<i class="bi bi-plus-circle me-2"></i>Create Your First Subject
-					</button>
+		<div class="row">
+			<div class="col-12">
+				<div class="text-center py-5">
+					<div class="card border-0 shadow-sm">
+						<div class="card-body py-5">
+							<i class="bi bi-book text-muted mb-3" style="font-size: 4rem;"></i>
+							<h4 class="text-muted mb-3">No subjects created yet</h4>
+							<p class="text-muted mb-4 fs-5">Create your first subject to get started with managing assessments and feedback.</p>
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
 	{/if}
 </div>
+
+<!-- Custom Delete Confirmation Dialog -->
+{#if showDeleteConfirm && subjectToDelete}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header bg-danger text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
+					</h5>
+				</div>
+				<div class="modal-body">
+					<div class="d-flex align-items-center mb-3">
+						<i class="bi bi-book text-danger me-3" style="font-size: 2rem;"></i>
+						<div>
+							<h6 class="mb-1">Subject: <strong>{subjectToDelete.name}</strong></h6>
+							<p class="text-muted mb-0">{subjectToDelete.assessments.length} assessment{subjectToDelete.assessments.length !== 1 ? 's' : ''}</p>
+						</div>
+					</div>
+					<div class="alert alert-warning">
+						<i class="bi bi-warning me-2"></i>
+						<strong>Warning:</strong> This will permanently delete the subject and all its assessments. This action cannot be undone.
+					</div>
+					<p class="mb-0">Are you sure you want to delete this subject?</p>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={cancelDelete}>
+						<i class="bi bi-x-circle me-2"></i>Cancel
+					</button>
+					<button type="button" class="btn btn-danger" onclick={confirmDelete}>
+						<i class="bi bi-trash me-2"></i>Delete Subject
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- Styles are now in components.css -->

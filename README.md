@@ -269,6 +269,71 @@ npm run tauri dev  # Desktop development with hot reload
 - Check if `data` folder has write permissions
 - Verify Tauri file system plugin is properly configured
 
+**Confirmation dialogs not appearing (Tauri on Mac/Windows)**
+- Browser `alert()` and `confirm()` dialogs often don't work in Tauri apps
+- Solution: Use custom Bootstrap 5 modals instead of native browser dialogs
+- Example implementation:
+
+```svelte
+<!-- Custom confirmation dialog -->
+{#if showDeleteConfirm && subjectToDelete}
+  <div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title">
+            <i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
+          </h5>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning">
+            <i class="bi bi-warning me-2"></i>
+            <strong>Warning:</strong> This action cannot be undone.
+          </div>
+          <p class="mb-0">Are you sure you want to delete this item?</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick={cancelAction}>
+            <i class="bi bi-x-circle me-2"></i>Cancel
+          </button>
+          <button type="button" class="btn btn-danger" onclick={confirmAction}>
+            <i class="bi bi-trash me-2"></i>Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+```
+
+**State management for custom dialogs:**
+```javascript
+// Add to component state
+let showDeleteConfirm = $state(false);
+let itemToDelete = $state(null);
+
+// Show dialog function
+function showConfirmDialog(item) {
+  itemToDelete = item;
+  showDeleteConfirm = true;
+}
+
+// Confirm action
+function confirmAction() {
+  // Perform deletion
+  deleteItem(itemToDelete);
+  // Close dialog
+  showDeleteConfirm = false;
+  itemToDelete = null;
+}
+
+// Cancel action
+function cancelAction() {
+  showDeleteConfirm = false;
+  itemToDelete = null;
+}
+```
+
 ### Development Issues
 
 **Sveltestrap warnings**
