@@ -39,11 +39,18 @@
       "assessments": [
         {
           "id": "mf3bvw1cpo7msgxqls",
-          "name": "Mid-PDR"
+          "name": "Mid-PDR",
+          "categories": [
+            {
+              "id": "1757233890005",
+              "name": "Decision"
+            }
+          ]
         },
         {
           "id": "mf3bwg5g9o5unrif9yi",
-          "name": "Final-PDR"
+          "name": "Final-PDR",
+          "categories": []
         }
       ]
     }

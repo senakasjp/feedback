@@ -7,7 +7,13 @@
     }
 
     // Props
-    let { categories = $bindable() }: { categories?: Category[] } = $props()
+    let { 
+        categories = $bindable(),
+        onUpdateCategories
+    }: { 
+        categories?: Category[];
+        onUpdateCategories?: () => void;
+    } = $props()
 
     // Local state
     let newCategoryName = $state('');
@@ -24,11 +30,21 @@
             
             newCategoryName = '';
             newCategoryDescription = '';
+            
+            // Notify parent that categories have changed
+            if (onUpdateCategories) {
+                onUpdateCategories();
+            }
         }
     }
 
     function deleteCategory(categoryId: string) {
         categories = categories.filter(cat => cat.id !== categoryId);
+        
+        // Notify parent that categories have changed
+        if (onUpdateCategories) {
+            onUpdateCategories();
+        }
     }
 
     function handleKeydown(event: KeyboardEvent) {

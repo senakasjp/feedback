@@ -30,6 +30,8 @@
 	let selectedParagraphs = $state(new Set())
 	let studentName = $state('')
 	let studentImage = $state('')
+	let selectedColor = $state('red')
+	let newCategoryName = $state('')
 
 	// UI state
 	let showAddSubject = $state(false)
@@ -322,9 +324,62 @@
 				paragraphText = `${selectedCategory}: ${paragraphText}`
 			}
 			
-			paragraphs.push(paragraphText)
+			paragraphs.push({
+				text: paragraphText,
+				color: selectedColor
+			})
 			newParagraph = ''
 			saveAssessmentData()
+		}
+	}
+
+	function addCategory() {
+		if (newCategoryName.trim() && currentAssessment) {
+			// Ensure categories array exists
+			if (!currentAssessment.categories) {
+				currentAssessment.categories = []
+			}
+			
+			const newCategory = {
+				id: Date.now().toString(),
+				name: newCategoryName.trim()
+			}
+			
+			currentAssessment.categories = [...currentAssessment.categories, newCategory]
+			newCategoryName = ''
+			
+			// Update the current subject's assessments
+			if (currentSubject) {
+				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+				if (subjectIndex !== -1) {
+					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+					if (assessmentIndex !== -1) {
+						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+						console.log('Saving category to assessment:', newCategory.name, 'Total categories:', currentAssessment.categories.length)
+						saveSubjects()
+					}
+				}
+			}
+		}
+	}
+
+	function removeCategory(categoryId) {
+		if (currentAssessment && currentAssessment.categories) {
+			const categoryToRemove = currentAssessment.categories.find(cat => cat.id === categoryId)
+			currentAssessment.categories = currentAssessment.categories.filter(cat => cat.id !== categoryId)
+			
+			// Update the current subject's assessments
+			if (currentSubject) {
+				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+				if (subjectIndex !== -1) {
+					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+					if (assessmentIndex !== -1) {
+						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+						console.log('Removing category from assessment:', categoryToRemove?.name, 'Remaining categories:', currentAssessment.categories.length)
+						saveSubjects()
+					}
+				}
+			}
 		}
 	}
 
@@ -453,7 +508,16 @@
 
 	function getOrderedParagraphs() {
 		const ordered = paragraphs
-			.map((paragraph, originalIndex) => ({ paragraph, originalIndex }))
+			.map((paragraph, originalIndex) => {
+				// Handle both string and object formats
+				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
+				const paragraphColor = typeof paragraph === 'object' ? paragraph.color : undefined
+				return { 
+					paragraph: paragraphText, 
+					color: paragraphColor,
+					originalIndex 
+				}
+			})
 			.sort((a, b) => {
 				const orderA = getSectionOrder(a.paragraph)
 				const orderB = getSectionOrder(b.paragraph)
@@ -475,6 +539,28 @@
 		return ordered
 	}
 
+	function getColorBadgeClass(color) {
+		switch(color) {
+			case 'red': return 'bg-danger'
+			case 'orange': return 'bg-warning'
+			case 'yellow': return 'bg-warning text-dark'
+			case 'lightgreen': return 'bg-light text-success border border-success'
+			case 'green': return 'bg-success'
+			default: return 'bg-secondary'
+		}
+	}
+
+	function getColorHex(color) {
+		switch(color) {
+			case 'red': return '#dc3545'
+			case 'orange': return '#fd7e14'
+			case 'yellow': return '#ffc107'
+			case 'lightgreen': return '#ADF527'
+			case 'green': return '#198754'
+			default: return '#6c757d'
+		}
+	}
+
 	function getSelectedText() {
 		const orderedParagraphs = getOrderedParagraphs()
 		const selectedOrderedParagraphs = Array.from(selectedParagraphs)
@@ -484,7 +570,11 @@
 				const posB = orderedParagraphs.findIndex(item => item.originalIndex === b)
 				return posA - posB
 			})
-			.map(index => paragraphs[index])
+			.map(index => {
+				const paragraph = paragraphs[index]
+				// Handle both string and object formats
+				return typeof paragraph === 'string' ? paragraph : paragraph.text
+			})
 		
 		// Group paragraphs by section and format for display
 		const groupedSections = {}
@@ -722,8 +812,8 @@
 	</div>
 </nav>
 
-<main>
-	<div class="container-fluid mt-4">
+<main class="mt-4">
+	<div class="container-fluid mb-4">
 		<div class="row">
 			<!-- Sidebar -->
 			<div class="col-lg-3 col-md-4 col-12 mb-4">
@@ -753,26 +843,26 @@
 				<!-- Breadcrumb Navigation -->
 				<Breadcrumb 
 					{currentView}
-					{currentSubject}
-					{currentAssessment}
+						{currentSubject}
+						{currentAssessment}
 					onNavigate={handleBreadcrumbNavigation}
 				/>
 
 				{#if currentView === 'subjects'}
 					<div class="row">
 						<div class="col-12">
-							<div class="d-flex justify-content-between align-items-center mb-3">
+							<div class="d-flex justify-content-between align-items-center mb-4">
 								<div>
 									<h1 class="display-6 mb-2">Subjects</h1>
 									<p class="lead text-muted">Manage your subjects and assessments</p>
-								</div>
+			</div>
 								<button 
 									class="btn btn-primary btn-lg"
 									onclick={() => showAddSubject = true}
 								>
 									<i class="bi bi-plus-circle me-2"></i>Add Subject
 								</button>
-							</div>
+		</div>
 							<SubjectManager 
 								{subjects}
 								onSelectSubject={(subject) => {
@@ -785,12 +875,12 @@
 									saveSubjects();
 								}}
 							/>
-						</div>
+	</div>
 					</div>
 				{:else if currentView === 'assessments'}
 					<div class="row">
 						<div class="col-12">
-							<div class="d-flex justify-content-between align-items-center mb-3">
+							<div class="d-flex justify-content-between align-items-center mb-4">
 								<div>
 									<h1 class="display-6 mb-2">{currentSubject?.name}</h1>
 									<p class="lead text-muted">Manage assessments and categories</p>
@@ -815,6 +905,7 @@
 								onSelectAssessment={(assessment) => {
 									currentAssessment = assessment
 									currentAssessmentId = assessment.id
+									console.log('Selected assessment:', assessment.name, 'Categories:', assessment.categories?.length || 0, assessment.categories)
 									updateView('feedback')
 									loadAssessmentData(currentSubjectId, currentAssessmentId)
 								}}
@@ -831,7 +922,7 @@
 					<div class="d-flex flex-column">
 						<div class="row">
 							<div class="col-12">
-								<div class="d-flex justify-content-between align-items-center mb-3">
+								<div class="d-flex justify-content-between align-items-center mb-4">
 									<div>
 										<h1 class="display-6 mb-2">Feedback for {currentAssessment?.name}</h1>
 										<p class="lead text-muted">Subject: {currentSubject?.name}</p>
@@ -846,46 +937,6 @@
 							</div>
 						</div>
 					
-					<!-- Category Selection -->
-					{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
-						<div class="row mb-2">
-							<div class="col-12">
-								<div class="card border-primary">
-									<div class="card-header bg-primary text-white py-2">
-										<h5 class="card-title mb-0">
-											<i class="bi bi-tags me-2"></i>Category Selection
-										</h5>
-									</div>
-									<div class="card-body py-2">
-										<div class="mb-2">
-											<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
-											<select 
-												id="categorySelect" 
-												class="form-select form-select-lg" 
-												bind:value={selectedCategory}
-											>
-												<option value="">Choose a category...</option>
-												{#each currentAssessment.categories as category}
-													<option value={category.name}>{category.name}</option>
-												{/each}
-											</select>
-										</div>
-										{#if selectedCategory}
-											<div class="alert alert-success d-flex align-items-center py-2" role="alert">
-												<i class="bi bi-check-circle-fill me-2"></i>
-												<div>
-													<strong>Selected:</strong> {selectedCategory}
-													<small class="d-block text-muted mt-1">
-														Paragraphs will be prefixed with this category when added.
-													</small>
-												</div>
-											</div>
-										{/if}
-									</div>
-								</div>
-							</div>
-						</div>
-					{/if}
 					
 					<!-- Student Info Section -->
 					<div class="row mb-2">
@@ -961,13 +1012,99 @@
 												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
 											</button>
 										</div>
-										{#if needsCategorySelection() && !selectedCategory}
-											<div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
-												<i class="bi bi-exclamation-triangle-fill me-2"></i>
-												<strong>Warning:</strong> Please select a category first to properly organize this paragraph.
+									</div>
+									
+									<!-- Color Selection -->
+									<div class="mb-3">
+										<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
+										<select id="colorSelect" class="form-select" bind:value={selectedColor}>
+											<option value="red">🔴 Red</option>
+											<option value="orange">🟠 Orange</option>
+											<option value="yellow">🟡 Yellow</option>
+											<option value="lightgreen">🟢 Light Green</option>
+											<option value="green">🟢 Green</option>
+										</select>
+										<small class="text-muted">Selected: {selectedColor} ({getColorHex(selectedColor)})</small>
+									</div>
+									
+									<!-- Category Management -->
+									<div class="mb-3">
+										<div class="d-flex justify-content-between align-items-center mb-2">
+											<label class="form-label fw-bold mb-0">Categories:</label>
+											<small class="text-muted">{currentAssessment?.categories?.length || 0} categories</small>
+										</div>
+										
+										<!-- Add Category Form -->
+										<div class="mb-3">
+											<div class="input-group">
+												<input
+													type="text"
+													class="form-control"
+													placeholder="Enter category name..."
+													bind:value={newCategoryName}
+													onkeydown={(e) => {
+														if (e.key === 'Enter') {
+															e.preventDefault();
+															addCategory();
+														}
+													}}
+												>
+												<button 
+													class="btn btn-outline-primary"
+													onclick={addCategory}
+													disabled={!newCategoryName.trim()}
+												>
+													<i class="bi bi-plus-circle me-1"></i>Add
+												</button>
+											</div>
+										</div>
+										
+										<!-- Categories List -->
+										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
+											<div class="mb-3">
+												<div class="row g-2">
+													{#each currentAssessment.categories as category}
+														<div class="col-md-6">
+															<div class="d-flex align-items-center justify-content-between p-2 border rounded">
+																<span class="fw-medium">{category.name}</span>
+																<button 
+																	class="btn btn-sm btn-outline-danger"
+																	onclick={() => removeCategory(category.id)}
+																	title="Delete category"
+																>
+																	<i class="bi bi-x"></i>
+																</button>
+															</div>
+														</div>
+													{/each}
+												</div>
+											</div>
+										{/if}
+										
+										<!-- Category Selection -->
+										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
+											<div class="mb-3">
+												<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
+												<select 
+													id="categorySelect" 
+													class="form-select" 
+													bind:value={selectedCategory}
+												>
+													<option value="">Choose a category...</option>
+													{#each currentAssessment.categories as category}
+														<option value={category.name}>{category.name}</option>
+													{/each}
+												</select>
 											</div>
 										{/if}
 									</div>
+									
+									{#if needsCategorySelection() && !selectedCategory}
+										<div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
+											<i class="bi bi-exclamation-triangle-fill me-2"></i>
+											<strong>Warning:</strong> Please select a category first to properly organize this paragraph.
+										</div>
+									{/if}
 								</div>
 							</div>
 						</div>
@@ -1016,7 +1153,7 @@
 										</div>
 									{:else}
 										<div class="p-3">
-											{#each getOrderedParagraphs() as {paragraph, originalIndex}}
+											{#each getOrderedParagraphs() as {paragraph, color, originalIndex}}
 												<div class="card mb-2 border-start border-primary border-4">
 													<div class="card-body py-2">
 														<div class="d-flex align-items-start">
@@ -1031,6 +1168,12 @@
 																<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
 																</label>
 															</div>
+															<!-- Color indicator between checkbox and text -->
+															{#if color}
+																<div class="me-3 d-flex align-items-center">
+																	<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+																</div>
+															{/if}
 															<div class="flex-grow-1 me-3">
 																<p class="mb-0 fs-5 lh-base">{paragraph}</p>
 															</div>
@@ -1151,5 +1294,5 @@
 	/* Box sizing for all elements */
 	:global(*) {
 		box-sizing: border-box;
-  }
+	}
 </style>

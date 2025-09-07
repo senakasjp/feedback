@@ -29,6 +29,7 @@
 		originalIndex: number;
 		topicId?: string;
 		categoryId?: string;
+		color?: string;
 	}
 
 	// Props
@@ -63,6 +64,18 @@
 		onDeleteParagraph: (index: number) => void;
 		onHandleImageUpload: (event: Event) => void;
 	} = $props()
+
+	// Color badge function
+	function getColorBadgeClass(color) {
+		switch(color) {
+			case 'red': return 'bg-danger'
+			case 'orange': return 'bg-warning'
+			case 'yellow': return 'bg-warning text-dark'
+			case 'lightgreen': return 'bg-success'
+			case 'green': return 'bg-success'
+			default: return 'bg-secondary'
+		}
+	}
 
 	// Local state
 	let selectedTopicFilter = $state('')
@@ -202,17 +215,27 @@
 		{#each filteredParagraphs as { paragraph, originalIndex, topicId, categoryId }}
 			<div class="paragraph-item mb-2 p-2 border-start border-primary border-3 bg-white">
 				<div class="d-flex flex-column flex-sm-row align-items-start">
-					<div class="form-check me-sm-3 mb-2 mb-sm-0 d-flex align-items-center">
-						<input 
-							class="form-check-input me-2" 
-							type="checkbox" 
-							id="paragraph-{originalIndex}"
-							checked={selectedParagraphs.has(originalIndex)}
-							onchange={() => onToggleParagraph(originalIndex)}
-						>
-						<label class="form-check-label" for="paragraph-{originalIndex}">
-							Select
-						</label>
+					<div class="form-check me-sm-3 mb-2 mb-sm-0 d-flex flex-column align-items-start">
+						<div class="d-flex align-items-center">
+							<input 
+								class="form-check-input me-2" 
+								type="checkbox" 
+								id="paragraph-{originalIndex}"
+								checked={selectedParagraphs.has(originalIndex)}
+								onchange={() => onToggleParagraph(originalIndex)}
+							>
+							<label class="form-check-label" for="paragraph-{originalIndex}">
+								Select
+							</label>
+						</div>
+						<!-- Color indicator -->
+						{#if paragraph.color}
+							<div class="mt-1">
+								<span class="badge {getColorBadgeClass(paragraph.color)}">
+									{paragraph.color}
+								</span>
+							</div>
+						{/if}
 					</div>
 					<div class="flex-grow-1">
 						<div class="mb-2">

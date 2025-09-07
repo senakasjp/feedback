@@ -15,18 +15,20 @@
 		<div class="row">
 			<div class="col-12">
 				<div class="card">
-					<div class="card-header d-flex justify-content-between align-items-center">
-						<h5 class="mb-0">Selected Paragraphs for {currentAssessment?.name}</h5>
-						<div class="btn-group">
-							<button class="btn btn-success btn-sm" onclick={onCopyToClipboard}>
-								📋 Copy to Clipboard
-							</button>
-							<button class="btn btn-danger btn-sm" onclick={onGeneratePDF}>
-								📄 Print to Download
-							</button>
-						</div>
+					<div class="card-header bg-primary text-white">
+						<h5 class="mb-0">
+							<i class="bi bi-check-square me-2"></i>Selected Paragraphs for {currentAssessment?.name}
+						</h5>
 					</div>
 					<div class="card-body">
+						<div class="d-flex justify-content-end gap-2 mb-3">
+							<button class="btn btn-success btn-sm" onclick={onCopyToClipboard}>
+								<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
+							</button>
+							<button class="btn btn-danger btn-sm" onclick={onGeneratePDF}>
+								<i class="bi bi-download me-2"></i>Download PDF
+							</button>
+						</div>
 						<textarea 
 							class="form-control" 
 							rows="10" 

@@ -150,7 +150,10 @@
 								{@const categories = []}
 								{assessment.categories = categories}
 							{/if}
-							<CategoryEditor bind:categories={assessment.categories} />
+							<CategoryEditor 
+								bind:categories={assessment.categories}
+								onUpdateCategories={() => onUpdateAssessments(assessments)}
+							/>
 						</div>
 						<button 
 							class="btn btn-success w-100"
