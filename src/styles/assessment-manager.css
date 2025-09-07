@@ -7,7 +7,7 @@
   margin: 1rem 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(0, 0, 0, 0.05);
-  min-height: 70vh;
+  min-height: auto;
 }
 
 /* Page Header */

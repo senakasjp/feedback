@@ -246,7 +246,6 @@ p {
 .row {
   margin: 0 calc(-1 * var(--spacing-md)) !important;
   width: 100% !important;
-  min-height: calc(100vh - 160px) !important;
 }
 
 [class*="col-"] {

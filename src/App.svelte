@@ -846,8 +846,8 @@
 							</div>
 						</div>
 					
-					<!-- Category Selection (only for PDR assessments) -->
-					{#if needsCategorySelection()}
+					<!-- Category Selection -->
+					{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
 						<div class="row mb-2">
 							<div class="col-12">
 								<div class="card border-primary">
@@ -865,8 +865,8 @@
 												bind:value={selectedCategory}
 											>
 												<option value="">Choose a category...</option>
-												{#each getCurrentCategories() as category}
-													<option value={category}>{category}</option>
+												{#each currentAssessment.categories as category}
+													<option value={category.name}>{category.name}</option>
 												{/each}
 											</select>
 										</div>

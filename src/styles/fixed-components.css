@@ -5,7 +5,7 @@
 .assessment-manager,
 .feedback-editor {
   width: 100%;
-  min-height: 40vh;
+  min-height: auto;
   padding: var(--spacing-sm);
 }
 
