@@ -372,7 +372,7 @@
 			
 			paragraphs.push({
 				text: paragraphText,
-				color: selectedColor
+				color: selectedColor || undefined
 			})
 			newParagraph = ''
 			selectedKnowledgeArea = '' // Reset knowledge area selection
@@ -734,7 +734,7 @@
 				const paragraphColor = typeof paragraph === 'object' ? paragraph.color : undefined
 				return { 
 					paragraph: paragraphText, 
-					color: paragraphColor,
+					color: paragraphColor || undefined,
 					originalIndex 
 				}
 			})
@@ -766,6 +766,7 @@
 			case 'yellow': return 'bg-warning text-dark'
 			case 'lightgreen': return 'bg-light text-success border border-success'
 			case 'green': return 'bg-success'
+			case '': return 'bg-light text-muted border'
 			default: return 'bg-secondary'
 		}
 	}
@@ -775,7 +776,7 @@
 			case 'red': return '#dc3545'
 			case 'orange': return '#fd7e14'
 			case 'yellow': return '#ffc107'
-			case 'lightgreen': return '#ADF527'
+			case 'lightgreen': return '#90EE90'
 			case 'green': return '#198754'
 			default: return '#6c757d'
 		}
@@ -1434,13 +1435,14 @@
 									<div class="mb-3">
 										<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
 										<select id="colorSelect" class="form-select" bind:value={selectedColor}>
+											<option value="">⚪ No Color</option>
 											<option value="red">🔴 Red</option>
 											<option value="orange">🟠 Orange</option>
 											<option value="yellow">🟡 Yellow</option>
 											<option value="lightgreen">🟢 Light Green</option>
 											<option value="green">🟢 Green</option>
 										</select>
-										<small class="text-muted">Selected: {selectedColor} ({getColorHex(selectedColor)})</small>
+										<small class="text-muted">Selected: {selectedColor || 'No Color'} ({selectedColor ? getColorHex(selectedColor) : 'None'})</small>
 									</div>
 									
 									<!-- Knowledge Area Management -->
@@ -1725,12 +1727,16 @@
 																		<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
 																		</label>
 																	</div>
-																	<!-- Color indicator between checkbox and text -->
-																	{#if color}
-																		<div class="me-3 d-flex align-items-center">
-																			<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
-																		</div>
-																	{/if}
+													<!-- Color indicator between checkbox and text -->
+													{#if color}
+														<div class="me-3 d-flex align-items-center">
+															<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+														</div>
+													{:else}
+														<div class="me-3 d-flex align-items-center">
+															<div class="color-indicator" style="width: 16px; height: 16px; background-color: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6;" title="No Color"></div>
+														</div>
+													{/if}
 																	<div class="flex-grow-1 me-3">
 																		<p class="mb-0 fs-5 lh-base">{text}</p>
 																	</div>

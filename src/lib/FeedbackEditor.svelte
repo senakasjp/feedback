@@ -73,6 +73,7 @@
 			case 'yellow': return 'bg-warning text-dark'
 			case 'lightgreen': return 'bg-success'
 			case 'green': return 'bg-success'
+			case '': return 'bg-light text-muted border'
 			default: return 'bg-secondary'
 		}
 	}
@@ -226,13 +227,11 @@
 							</label>
 						</div>
 						<!-- Color indicator -->
-						{#if paragraph.color}
-							<div class="mt-1">
-								<span class="badge {getColorBadgeClass(paragraph.color)}">
-									{paragraph.color}
-								</span>
-							</div>
-						{/if}
+						<div class="mt-1">
+							<span class="badge {getColorBadgeClass(paragraph.color)}">
+								{paragraph.color || 'No Color'}
+							</span>
+						</div>
 					</div>
 					<div class="flex-grow-1">
 						<p class="mb-0">{paragraph}</p>
