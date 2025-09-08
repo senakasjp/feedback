@@ -34,6 +34,8 @@
 	let newCategoryKnowledgeArea = $state('')
 	let newKnowledgeAreaName = $state('')
 	let availableKnowledgeAreas = $state([])
+	let categoryMarks = $state({}) // Store marks for each category
+	let categoriesWithMarks = $state(new Set()) // Track which categories already have marks input
 
 	// UI state
 	let showAddSubject = $state(false)
@@ -300,6 +302,7 @@
 		currentAssessmentId = assessment.id
 		currentAssessment = assessment
 		currentView = 'feedback'
+		categoriesWithMarks = new Set() // Reset categories with marks tracking
 		loadAssessmentData(currentSubjectId, currentAssessmentId)
 	}
 
@@ -336,7 +339,7 @@
 			
 			// Add knowledge area prefix if selected
 			if (selectedKnowledgeArea) {
-				paragraphText = `${selectedKnowledgeArea} - ${paragraphText}`
+				paragraphText = `${paragraphText} - ${selectedKnowledgeArea}`
 			}
 			
 			paragraphs.push({
@@ -359,7 +362,7 @@
 			const newCategory = {
 				id: Date.now().toString(),
 				name: newCategoryName.trim(),
-				knowledgeArea: newCategoryKnowledgeArea.trim() || undefined
+				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined
 			}
 			
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
@@ -412,6 +415,12 @@
 	function removeKnowledgeArea(knowledgeArea) {
 		availableKnowledgeAreas = availableKnowledgeAreas.filter(area => area !== knowledgeArea)
 		saveSubjects()
+	}
+
+	function updateCategoryMarks(category, marks) {
+		categoryMarks[category] = marks
+		categoryMarks = {...categoryMarks} // trigger reactivity
+		saveAssessmentData()
 	}
 
 
@@ -628,7 +637,7 @@
 		const grouped = {}
 		
 		ordered.forEach(({paragraph, color, originalIndex}) => {
-			// Extract category and knowledge area
+			// Extract category and knowledge area from paragraph text
 			let category = ''
 			let knowledgeArea = ''
 			let cleanText = paragraph
@@ -637,15 +646,27 @@
 			if (paragraph.includes(': ')) {
 				const parts = paragraph.split(': ')
 				if (parts.length >= 2) {
-					category = parts[0]
+					const firstPart = parts[0]
 					const remainingText = parts.slice(1).join(': ')
 					
-					// Check if remaining text has knowledge area prefix
-					knowledgeArea = extractKnowledgeArea(remainingText)
-					if (knowledgeArea) {
-						cleanText = cleanParagraphTextForDisplay(remainingText)
+					// Check if first part has "KnowledgeArea - Category" format (old format)
+					if (firstPart.includes(' - ')) {
+						const oldParts = firstPart.split(' - ')
+						if (oldParts.length >= 2) {
+							knowledgeArea = oldParts[0].trim()
+							category = oldParts[1].trim()
+							cleanText = remainingText
+						}
 					} else {
-						cleanText = remainingText
+						// New format: "Category: text"
+						category = firstPart
+						// Check if remaining text has knowledge area prefix
+						knowledgeArea = extractKnowledgeArea(remainingText)
+						if (knowledgeArea) {
+							cleanText = cleanParagraphTextForDisplay(remainingText)
+						} else {
+							cleanText = remainingText
+						}
 					}
 				}
 			} else {
@@ -1281,19 +1302,6 @@
 											<div class="mb-3">
 												<div class="row g-2">
 													<div class="col-12">
-														<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
-														<select 
-															id="categorySelect" 
-															class="form-select" 
-															bind:value={selectedCategory}
-														>
-															<option value="">Choose a category...</option>
-															{#each currentAssessment.categories as category}
-																<option value={category.name}>{category.name}</option>
-															{/each}
-														</select>
-													</div>
-													<div class="col-12">
 														<label for="knowledgeAreaSelect" class="form-label fw-bold">Select Knowledge Area:</label>
 														<select 
 															id="knowledgeAreaSelect" 
@@ -1303,6 +1311,19 @@
 															<option value="">Choose a knowledge area...</option>
 															{#each availableKnowledgeAreas as area}
 																<option value={area}>{area}</option>
+															{/each}
+														</select>
+													</div>
+													<div class="col-12">
+														<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
+														<select 
+															id="categorySelect" 
+															class="form-select" 
+															bind:value={selectedCategory}
+														>
+															<option value="">Choose a category...</option>
+															{#each currentAssessment.categories as category}
+																<option value={category.name}>{category.name}</option>
 															{/each}
 														</select>
 														{#if selectedKnowledgeArea}
@@ -1374,15 +1395,34 @@
 											{#each getGroupedParagraphs() as group}
 												<div class="card mb-3 border-start border-info border-4">
 													<div class="card-header bg-info text-white py-2">
-														<h6 class="mb-0 fw-bold">
-															{#if group.category}
-																{group.category}
+														<div class="d-flex align-items-center w-100">
+															<div class="flex-grow-1">
+																<h6 class="mb-0 fw-bold">
+																	{#if group.category && group.category !== 'No Knowledge Area'}
+																		{group.category}
+																	{/if}
+																</h6>
+																{#if group.knowledgeArea && group.knowledgeArea !== 'No Knowledge Area'}
+																	<small class="text-light opacity-75">{group.knowledgeArea}</small>
+																{/if}
+															</div>
+															{#if group.category && !categoriesWithMarks.has(group.category)}
+																{@const _ = categoriesWithMarks.add(group.category)}
+																<div class="d-flex align-items-center gap-2">
+																	<input 
+																		type="number" 
+																		class="form-control form-control-sm" 
+																		id="marks-{group.category}"
+																		style="width: 80px;"
+																		placeholder="0"
+																		value={categoryMarks[group.category] || ''}
+																		oninput={(e) => updateCategoryMarks(group.category, e.target.value)}
+																		min="0"
+																		step="0.5"
+																	>
+																</div>
 															{/if}
-															{#if group.knowledgeArea && group.knowledgeArea !== 'No Knowledge Area'}
-																{#if group.category} - {/if}
-																<i class="bi bi-bookmark me-1"></i>{group.knowledgeArea}
-															{/if}
-														</h6>
+														</div>
 													</div>
 													<div class="card-body p-0">
 														{#each group.paragraphs as {text, color, originalIndex, fullText}}

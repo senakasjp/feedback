@@ -11,10 +11,6 @@
             {
               "id": "1757267084150",
               "name": "Decision"
-            },
-            {
-              "id": "1757295457637",
-              "name": "Test"
             }
           ]
         },
@@ -46,8 +42,12 @@
           "name": "Mid-PDR",
           "categories": [
             {
-              "id": "1757266890579",
-              "name": "Test"
+              "id": "1757298682745",
+              "name": "Decision"
+            },
+            {
+              "id": "1757298768255",
+              "name": "Sub Learning Objective 1.1"
             }
           ]
         },
@@ -60,6 +60,8 @@
     }
   ],
   "knowledgeAreas": [
-    "Performance"
+    "Performance",
+    "Coding",
+    "CI/CD"
   ]
 }
