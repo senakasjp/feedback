@@ -183,9 +183,19 @@
   font-weight: bold;
   opacity: 0.6;
   transition: all 0.3s ease;
-  border: 1px solid #dc3545;
-  background: transparent;
+  border: none !important;
+  background: transparent !important;
   color: #dc3545;
+}
+
+/* Override any Bootstrap button borders */
+.btn-outline-danger.delete-btn,
+.btn-outline-danger,
+.btn-danger.delete-btn,
+.btn-danger {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .delete-btn:hover {

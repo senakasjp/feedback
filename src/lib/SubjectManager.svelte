@@ -182,8 +182,8 @@
 							<span class="fw-bold text-dark">{subject.name}</span>
 						</div>
 						<button 
-							class="btn btn-sm btn-danger rounded-circle"
-							style="width: 32px; height: 32px; padding: 0;"
+							class="btn btn-sm btn-danger rounded-circle border-0"
+							style="width: 32px; height: 32px; padding: 0; border: none !important; outline: none !important; box-shadow: none !important;"
 							onclick={() => {
 								console.log('DELETE CLICKED FOR:', subject.name, subject.id);
 								handleDeleteClick(subject.id);

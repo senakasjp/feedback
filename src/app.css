@@ -66,3 +66,15 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Override all button borders for delete buttons */
+.btn-danger,
+.btn-outline-danger,
+.btn-danger.border-0,
+.btn-outline-danger.border-0,
+button.btn-danger,
+button.btn-outline-danger {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}

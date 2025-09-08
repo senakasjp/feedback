@@ -153,7 +153,7 @@
 							<h6 class="mb-0 fw-bold">Assessment</h6>
 						</div>
 						<button 
-							class="btn btn-sm btn-outline-danger"
+							class="btn btn-sm btn-outline-danger border-0"
 							onclick={() => removeAssessment(assessment.id)}
 							title="Delete assessment"
 							aria-label="Delete assessment"

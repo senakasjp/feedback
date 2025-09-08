@@ -19,7 +19,8 @@
 						<div class="card-body d-flex flex-column text-center p-4 position-relative">
 							<!-- Delete button in top-right corner -->
 							<button 
-								class="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2 delete-subject-btn" 
+								class="btn btn-outline-danger btn-sm position-absolute top-0 end-0 m-2 delete-subject-btn border-0" 
+								style="border: none !important; outline: none !important; box-shadow: none !important;"
 								onclick={(e) => {
 									console.log('Delete button clicked!', subject.name);
 									e.stopPropagation(); 

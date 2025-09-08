@@ -102,7 +102,7 @@
 												<div class="topic-item">
 													<span class="badge bg-info me-2">{topic.name}</span>
 													<button 
-														class="btn btn-sm btn-outline-danger delete-btn" 
+														class="btn btn-sm btn-outline-danger delete-btn border-0" 
 														onclick={() => removeTopic(assessment, topic.id)}
 														title="Remove topic"
 													>×</button>
