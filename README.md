@@ -70,8 +70,11 @@ Subject (1 or more)
 ### 💾 Data Persistence
 - **Portable Storage**: Data stored in local `FeedbackData` folder next to executable
 - **Cross-Platform**: Copy entire app folder between computers with data intact
-- **JSON Format**: Human-readable data storage
-- **Auto-backup**: No manual save required
+- **JSON Format**: Human-readable data storage with hierarchical structure
+- **Auto-backup**: No manual save required - all changes saved automatically
+- **Tauri File System API**: Uses Rust-based file operations for reliability
+- **Base64 Image Storage**: Student photos stored as base64-encoded strings in JSON
+- **Individual Assessment Files**: Each assessment gets its own JSON file for better organization
 
 ## Technology Stack
 
@@ -81,6 +84,47 @@ Subject (1 or more)
 - **PDF Generation**: jsPDF library
 - **Build Tool**: Vite
 - **File System**: Tauri filesystem plugins
+
+## Data Storage Technology
+
+### 🗄️ Storage Architecture
+The application uses a **file-based storage system** built on Tauri's Rust file system API:
+
+#### **Core Storage Components:**
+- **Main Data File**: `FeedbackData/feedback-data.json` - Contains subjects, assessments, categories, and knowledge areas
+- **Individual Assessment Files**: `FeedbackData/subject-{id}-{timestamp}.json` - Student-specific data for each assessment
+- **Portable Structure**: All data stored relative to executable location for easy distribution
+
+#### **Technical Implementation:**
+- **Rust Backend**: File operations handled by Tauri's Rust backend for performance and reliability
+- **JSON Serialization**: Data serialized to/from JSON format for human readability
+- **Base64 Encoding**: Images converted to base64 strings for embedded storage
+- **Atomic Writes**: File operations use proper locking to prevent data corruption
+- **Cross-Platform Paths**: Tauri handles Windows (`\`), macOS/Linux (`/`) path differences automatically
+
+#### **Data Flow:**
+1. **Frontend Changes** → Svelte state updates
+2. **State Change Detection** → Automatic save triggers
+3. **Tauri Invoke** → Frontend calls Rust backend functions
+4. **Rust File Operations** → Write to JSON files
+5. **Error Handling** → Graceful failure with user feedback
+
+#### **File Structure:**
+```
+FeedbackData/
+├── feedback-data.json              # Main configuration data
+├── subject-abc123-1234567890.json  # Assessment 1 data
+├── subject-def456-1234567891.json  # Assessment 2 data
+└── subject-ghi789-1234567892.json  # Assessment 3 data
+```
+
+#### **Data Persistence Features:**
+- **Auto-Save**: Every state change automatically triggers save
+- **No Manual Save**: Users never need to manually save data
+- **Crash Recovery**: Data persists even if application crashes
+- **Version Control Friendly**: JSON format works well with Git
+- **Backup Simple**: Copy entire folder to backup all data
+- **Migration Easy**: JSON files can be edited or migrated programmatically
 
 ## Installation & Setup
 
@@ -221,10 +265,16 @@ Each assessment stores student-specific data:
 ## Key Features Detail
 
 ### Portable Data Storage
-- Uses Tauri's file system API for cross-platform compatibility
-- Data stored relative to executable location
-- No external database required
-- Easy backup and transfer
+- **Tauri File System API**: Uses Rust-based file operations for cross-platform compatibility
+- **Relative Path Storage**: Data stored relative to executable location (`./FeedbackData/`)
+- **No External Dependencies**: No database server or external files required
+- **JSON-Based Architecture**: Human-readable data format for easy debugging and migration
+- **Individual File Strategy**: Each assessment stored in separate JSON file for better organization
+- **Base64 Image Encoding**: Student photos embedded directly in JSON files
+- **Automatic File Creation**: Creates necessary directories and files on first run
+- **Cross-Platform Path Handling**: Tauri handles Windows/macOS/Linux path differences
+- **Atomic Write Operations**: Data integrity ensured through proper file locking
+- **Easy Backup**: Simply copy the entire app folder to preserve all data
 
 ### Image Handling
 - Accepts all common image formats (JPEG, PNG, GIF, WebP)
@@ -436,6 +486,187 @@ The application now supports **universal category management** for any assessmen
 - **State Management**: Marks stored per category and total marks separately
 - **PDF Generation**: Universal category detection with bold formatting
 
+## Student Management System
+
+### 👥 Comprehensive Student Management (v2.2.0)
+
+The application now includes a **complete student management system** that allows you to save and load student evaluation data, replacing manual student name entry with a structured database approach.
+
+#### **Core Student Management Features:**
+- **Student Database**: Centralized storage of all students with unique IDs
+- **Student Selection**: Dropdown-based student selection instead of manual name entry
+- **Data Persistence**: Individual student evaluation data saved per assessment
+- **Auto-Save Integration**: Automatic saving when generating PDFs
+- **Student Information Display**: Visual confirmation of selected student
+
+#### **Student Data Structure:**
+```javascript
+{
+  id: "unique-student-id",
+  name: "Student Name",
+  studentId: "STU12345",
+  displayName: "Student Name (STU12345)",
+  createdAt: "2024-01-01T00:00:00.000Z"
+}
+```
+
+#### **Student Management UI Components:**
+
+##### **1. Student Selection Interface:**
+- **Dropdown Selection**: Choose from registered students
+- **Add Student Button**: Quick access to add new students (+ icon)
+- **Student Manager Button**: Full management interface (⚙️ icon)
+- **Selected Student Display**: Blue info box showing current selection
+
+##### **2. Student Management Modal:**
+- **Student List**: View all registered students with names and IDs
+- **Select Student**: Click to choose a student for current session
+- **Delete Student**: Remove students and their evaluation data
+- **Add New Student**: Direct access to student creation
+
+##### **3. Add Student Modal:**
+- **Student Name Field**: Enter the student's full name
+- **Student ID Field**: Enter unique identifier (e.g., student number)
+- **Auto-Generated Display Name**: Combines name and ID for uniqueness
+- **Validation**: Both fields required before adding
+
+#### **Student Evaluation Data Management:**
+
+##### **Data Storage Structure:**
+```javascript
+{
+  studentId: "student-unique-id",
+  assessmentId: "assessment-unique-id", 
+  paragraphs: [...], // All feedback paragraphs
+  selectedParagraphs: [...], // Indices of selected paragraphs
+  studentName: "Student Name (ID)",
+  studentImage: "data:image/jpeg;base64...", // Base64 encoded image
+  categoryMarks: { // Individual category marks
+    "Category 1": "10",
+    "Category 2": "15"
+  },
+  manualTotalMarks: "25", // Manually entered total
+  savedAt: "2024-01-01T00:00:00.000Z"
+}
+```
+
+##### **Save/Load Functionality:**
+- **Save Student Data**: Manual save button in sidebar
+- **Load Student Data**: Restore previous evaluation work
+- **Auto-Save on PDF**: Automatically saves when generating PDF
+- **Individual Files**: Each student-assessment combination gets separate file
+- **Data Recovery**: Load any previous work for any student
+
+#### **File Storage System:**
+
+##### **Main Data Files:**
+- **`feedback-data.json`**: Contains subjects, assessments, and students list
+- **`student-evaluation-{studentId}-{assessmentId}.json`**: Individual evaluation data
+
+##### **Storage Locations:**
+- **Tauri Desktop**: `./FeedbackData/` folder next to executable
+- **Web Development**: Browser localStorage with prefixed keys
+- **Cross-Platform**: Automatic path handling for Windows/macOS/Linux
+
+#### **User Workflow:**
+
+##### **1. Student Registration:**
+1. Click "+" button next to student dropdown
+2. Enter student name and ID in modal
+3. Click "Add Student" to register
+4. Student appears in dropdown list
+
+##### **2. Student Selection:**
+1. Choose student from dropdown
+2. See confirmation in blue info box below
+3. Student name updates throughout interface
+4. All evaluation data tied to selected student
+
+##### **3. Evaluation Work:**
+1. Add paragraphs with categories and topics
+2. Enter marks for individual categories
+3. Select paragraphs for inclusion
+4. Use "Save Student Data" to store progress
+5. Use "Load Student Data" to restore work
+
+##### **4. Report Generation:**
+1. Generate PDF with selected content
+2. Data automatically saved during PDF creation
+3. Success notification confirms save operation
+4. Student name included in PDF filename
+
+#### **Technical Implementation Details:**
+
+##### **State Management:**
+```javascript
+// Student data
+let students = $state([]) // Array of student objects
+let currentStudentId = $state(null) // Currently selected student
+let studentName = $state('') // Display name for current student
+
+// Student management UI
+let showAddStudent = $state(false) // Add student modal
+let showStudentManager = $state(false) // Student manager modal
+let newStudentName = $state('') // New student name input
+let newStudentId = $state('') // New student ID input
+```
+
+##### **Key Functions:**
+```javascript
+// Student management
+addStudent() // Add new student to database
+deleteStudent(studentId) // Remove student and data
+selectStudent(studentId) // Set current student
+getCurrentStudent() // Get current student object
+
+// Data persistence
+saveStudentEvaluation() // Save current evaluation data
+loadStudentEvaluation() // Load saved evaluation data
+saveStudents() // Save students list to main data file
+```
+
+##### **Tauri Backend Functions:**
+```rust
+// New Tauri commands for student data
+write_student_evaluation(student_id, assessment_id, data)
+read_student_evaluation(student_id, assessment_id)
+```
+
+#### **UI/UX Enhancements:**
+
+##### **Student Selection Area:**
+- **Full-Width Layout**: Student dropdown and photo upload span full card width
+- **Action Buttons**: Add (+) and manage (⚙️) buttons integrated
+- **Visual Feedback**: Selected student clearly displayed below dropdown
+- **Responsive Design**: Works on all screen sizes
+
+##### **Notification System:**
+- **Success Toasts**: Professional notifications for all actions
+- **Auto-Hide**: Notifications disappear after 3 seconds
+- **Action Feedback**: Save, load, copy, and PDF operations confirmed
+- **Error Handling**: Clear messages for failed operations
+
+##### **Action Buttons:**
+- **Save Student Data**: Blue button with save icon
+- **Load Student Data**: Purple button with upload icon
+- **Copy to Clipboard**: Green button with clipboard icon
+- **Print to PDF**: Red button with download icon
+
+#### **Data Migration & Compatibility:**
+- **Backward Compatible**: Existing data continues to work
+- **Automatic Migration**: Students list added to main data file
+- **No Data Loss**: All existing evaluations preserved
+- **Seamless Upgrade**: New features work with existing assessments
+
+#### **Benefits of Student Management System:**
+- **Organized Data**: Each student's work saved separately
+- **Easy Recovery**: Load any previous evaluation work
+- **Unique Identification**: Student ID prevents name conflicts
+- **Professional Workflow**: Structured approach to student evaluation
+- **Data Integrity**: Automatic saving prevents work loss
+- **Scalable**: Handles unlimited students and assessments
+- **Portable**: Copy app folder to preserve all student data
+
 ## Version History
 
 - **v1.0.0** - Initial release with basic feedback management
@@ -460,3 +691,16 @@ The application now supports **universal category management** for any assessmen
   - Backward compatibility with legacy paragraphs
   - Professional PDF formatting with bold category headers
   - Right-aligned marks input in "Paragraphs" header
+- **v2.2.0** - **COMPREHENSIVE STUDENT MANAGEMENT SYSTEM**
+  - Complete student database with unique ID system
+  - Dropdown-based student selection replacing manual entry
+  - Individual student evaluation data storage per assessment
+  - Save/Load functionality for student evaluation work
+  - Auto-save integration with PDF generation
+  - Student management modals (add, view, select, delete)
+  - Visual student selection confirmation display
+  - Success notification system for all actions
+  - Full-width student information card layout
+  - Cross-platform data persistence with Tauri backend
+  - Backward compatibility with existing data
+  - Professional workflow for student evaluation management

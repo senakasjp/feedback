@@ -20,7 +20,10 @@
 		onToggleShowAddSubject,
 		onToggleShowAddAssessment,
 		onCopyToClipboard,
-		onGeneratePDF
+		onGeneratePDF,
+		onSaveStudentEvaluation,
+		onLoadStudentEvaluation,
+		currentStudentId
 	} = $props()
 </script>
 
@@ -165,6 +168,14 @@
 				{#if currentView === 'feedback' && currentAssessment}
 					<div class="mt-3">
 						<div class="d-grid gap-3">
+							{#if currentStudentId}
+								<button class="action-btn save-btn" onclick={onSaveStudentEvaluation}>
+									<i class="bi bi-save me-2"></i>Save Student Data
+								</button>
+								<button class="action-btn load-btn" onclick={onLoadStudentEvaluation}>
+									<i class="bi bi-upload me-2"></i>Load Student Data
+								</button>
+							{/if}
 							<button class="action-btn copy-btn" onclick={onCopyToClipboard}>
 								<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
 							</button>
@@ -225,6 +236,24 @@
 	.download-btn:hover {
 		background: linear-gradient(135deg, #c82333 0%, #d63384 100%);
 		box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+	}
+	
+	.save-btn {
+		background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+	}
+	
+	.save-btn:hover {
+		background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+		box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+	}
+	
+	.load-btn {
+		background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);
+	}
+	
+	.load-btn:hover {
+		background: linear-gradient(135deg, #5a32a3 0%, #4c2a8a 100%);
+		box-shadow: 0 6px 20px rgba(111, 66, 193, 0.4);
 	}
 	
 	.action-btn i {

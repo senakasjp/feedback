@@ -18,10 +18,12 @@
 
 	// Data structure for hierarchical subjects/assessments
 	let subjects = $state([])
+	let students = $state([]) // Student management
 	let currentSubjectId = $state(null)
 	let currentAssessmentId = $state(null)
 	let currentSubject = $state(null)
 	let currentAssessment = $state(null)
+	let currentStudentId = $state(null) // Currently selected student
 
 	// Current assessment data
 	let newParagraph = $state('')
@@ -35,21 +37,38 @@
 	let newKnowledgeAreaName = $state('')
 	let availableKnowledgeAreas = $state([])
 	let categoryMarks = $state({}) // Store marks for each category
-	let categoriesWithMarks = $state(new Set()) // Track which categories already have marks input
 	let manualTotalMarks = $state('') // Store manually entered total marks
 	let showTotalMarksWarning = $state(false) // Show warning modal
+	let showNotification = $state(false) // Show success notification
+	let notificationMessage = $state('') // Notification message
 
 	// UI state
 	let showAddSubject = $state(false)
 	let showAddAssessment = $state(false)
+	let showAddStudent = $state(false)
+	let showStudentManager = $state(false)
 	let newSubjectName = $state('')
 	let newAssessmentName = $state('')
+	let newStudentName = $state('')
+	let newStudentId = $state('')
 	let showMobileSidebar = $state(false)
 	let currentView = $state('subjects') // 'subjects', 'assessments', 'feedback'
 	
 	// Force reactivity for debugging
 	$effect(() => {
 		console.log('Current view changed to:', currentView)
+	})
+
+	// Update student name when currentStudentId changes
+	$effect(() => {
+		if (currentStudentId) {
+			const student = students.find(s => s.id === currentStudentId)
+			if (student) {
+				studentName = student.displayName
+			}
+		} else {
+			studentName = ''
+		}
 	})
 	
 	// Function to update view
@@ -122,6 +141,7 @@
 				const parsed = JSON.parse(data)
 				subjects = parsed.subjects || []
 				availableKnowledgeAreas = parsed.knowledgeAreas || []
+				students = parsed.students || []
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -132,6 +152,7 @@
 					const parsed = JSON.parse(data)
 					subjects = parsed.subjects || []
 					availableKnowledgeAreas = parsed.knowledgeAreas || []
+					students = parsed.students || []
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
@@ -140,7 +161,7 @@
 	}
 
 	async function saveSubjects() {
-		const data = { subjects, knowledgeAreas: availableKnowledgeAreas }
+		const data = { subjects, knowledgeAreas: availableKnowledgeAreas, students }
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -157,8 +178,6 @@
 	}
 
 	async function loadAssessmentData(subjectId, assessmentId) {
-		// Reset categories with marks tracking for new assessment
-		categoriesWithMarks = new Set()
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -443,7 +462,138 @@
 		saveAssessmentData()
 	}
 
+	// Notification Functions
+	function showSuccessNotification(message) {
+		notificationMessage = message
+		showNotification = true
+		setTimeout(() => {
+			showNotification = false
+		}, 3000) // Auto-hide after 3 seconds
+	}
 
+	// Student Management Functions
+
+	async function saveStudents() {
+		// Save students to main data file
+		const mainData = { subjects, knowledgeAreas: availableKnowledgeAreas, students }
+		try {
+			await invoke('write_portable', { data: JSON.stringify(mainData) })
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			localStorage.setItem('feedback-subjects', JSON.stringify(mainData))
+		}
+	}
+
+	function addStudent() {
+		if (newStudentName.trim() && newStudentId.trim()) {
+			const student = {
+				id: generateId(),
+				name: newStudentName.trim(),
+				studentId: newStudentId.trim(),
+				displayName: `${newStudentName.trim()} (${newStudentId.trim()})`,
+				createdAt: new Date().toISOString()
+			}
+			students.push(student)
+			saveStudents()
+			newStudentName = ''
+			newStudentId = ''
+			showAddStudent = false
+		}
+	}
+
+	function deleteStudent(studentId) {
+		if (confirm('Are you sure you want to delete this student? This will also delete all their evaluation data.')) {
+			students = students.filter(s => s.id !== studentId)
+			saveStudents()
+			if (currentStudentId === studentId) {
+				currentStudentId = null
+				studentName = ''
+			}
+		}
+	}
+
+	function selectStudent(studentId) {
+		currentStudentId = studentId
+		const student = students.find(s => s.id === studentId)
+		if (student) {
+			studentName = student.displayName
+		}
+	}
+
+	function getCurrentStudent() {
+		return students.find(s => s.id === currentStudentId)
+	}
+
+	// Save student evaluation data
+	async function saveStudentEvaluation() {
+		if (!currentStudentId || !currentAssessmentId) return
+
+		const evaluationData = {
+			studentId: currentStudentId,
+			assessmentId: currentAssessmentId,
+			paragraphs: [...paragraphs],
+			selectedParagraphs: [...selectedParagraphs],
+			studentName: studentName,
+			studentImage: studentImage,
+			categoryMarks: { ...categoryMarks },
+			manualTotalMarks: manualTotalMarks,
+			savedAt: new Date().toISOString()
+		}
+
+		try {
+			await invoke('write_student_evaluation', { 
+				data: JSON.stringify(evaluationData),
+				studentId: currentStudentId,
+				assessmentId: currentAssessmentId
+			})
+			showSuccessNotification('Student evaluation data saved successfully!')
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
+			localStorage.setItem(key, JSON.stringify(evaluationData))
+			showSuccessNotification('Student evaluation data saved successfully!')
+		}
+	}
+
+	// Load student evaluation data
+	async function loadStudentEvaluation() {
+		if (!currentStudentId || !currentAssessmentId) return
+
+		try {
+			const data = await invoke('read_student_evaluation', { 
+				studentId: currentStudentId,
+				assessmentId: currentAssessmentId
+			})
+			if (data) {
+				const evaluationData = JSON.parse(data)
+				paragraphs = evaluationData.paragraphs || []
+				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
+				studentName = evaluationData.studentName || ''
+				studentImage = evaluationData.studentImage || ''
+				categoryMarks = evaluationData.categoryMarks || {}
+				manualTotalMarks = evaluationData.manualTotalMarks || ''
+				showSuccessNotification('Student evaluation data loaded successfully!')
+			} else {
+				showSuccessNotification('No saved data found for this student and assessment.')
+			}
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
+			const data = localStorage.getItem(key)
+			if (data) {
+				const evaluationData = JSON.parse(data)
+				paragraphs = evaluationData.paragraphs || []
+				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
+				studentName = evaluationData.studentName || ''
+				studentImage = evaluationData.studentImage || ''
+				categoryMarks = evaluationData.categoryMarks || {}
+				manualTotalMarks = evaluationData.manualTotalMarks || ''
+				showSuccessNotification('Student evaluation data loaded successfully!')
+			} else {
+				showSuccessNotification('No saved data found for this student and assessment.')
+			}
+		}
+	}
 
 	// Helper function to check if current assessment is Studio 6 PDR
 	function isStudio6PDR() {
@@ -687,12 +837,12 @@
 					} else {
 						// New format: "Category: text"
 						category = firstPart
-						// Check if remaining text has knowledge area prefix
-						knowledgeArea = extractKnowledgeArea(remainingText)
-						if (knowledgeArea) {
-							cleanText = cleanParagraphTextForDisplay(remainingText)
-						} else {
-							cleanText = remainingText
+					// Check if remaining text has knowledge area prefix
+					knowledgeArea = extractKnowledgeArea(remainingText)
+					if (knowledgeArea) {
+						cleanText = cleanParagraphTextForDisplay(remainingText)
+					} else {
+						cleanText = remainingText
 						}
 					}
 				}
@@ -827,14 +977,14 @@
 
 	function copyToClipboard() {
 		navigator.clipboard.writeText(getSelectedText())
-			.then(() => alert('Copied to clipboard!'))
-			.catch(() => alert('Failed to copy to clipboard'))
+			.then(() => showSuccessNotification('Copied to clipboard!'))
+			.catch(() => showSuccessNotification('Failed to copy to clipboard'))
 	}
 
 	function generatePDF() {
 		const selectedText = getSelectedText()
 		if (!selectedText) {
-			alert('No paragraphs selected!')
+			showSuccessNotification('No paragraphs selected!')
 			return
 		}
 
@@ -998,6 +1148,12 @@
 		
 		// Save the PDF
 		doc.save(filename)
+		showSuccessNotification('PDF generated and downloaded successfully!')
+		
+		// Auto-save student evaluation data when generating PDF
+		if (currentStudentId) {
+			saveStudentEvaluation()
+		}
 	}
 
 	onMount(() => {
@@ -1056,6 +1212,9 @@
 					onToggleShowAddAssessment={() => showAddAssessment = !showAddAssessment}
 					onCopyToClipboard={copyToClipboard}
 					onGeneratePDF={generatePDF}
+					onSaveStudentEvaluation={saveStudentEvaluation}
+					onLoadStudentEvaluation={loadStudentEvaluation}
+					currentStudentId={currentStudentId}
 				/>
 			</div>
 
@@ -1175,19 +1334,48 @@
 									</h5>
 								</div>
 								<div class="card-body py-2">
-									<div class="row g-2">
-										<div class="col-md-6">
-											<label for="studentNameInput" class="form-label fw-bold">Student Name:</label>
-											<input 
-												id="studentNameInput" 
-												type="text" 
-												class="form-control form-control-lg" 
-												bind:value={studentName} 
-												placeholder="Enter student name"
-												onchange={saveAssessmentData}
-											>
+									<div class="row g-3">
+										<div class="col-12">
+											<label for="studentSelect" class="form-label fw-bold">Student:</label>
+											<div class="input-group input-group-lg">
+												<select 
+													id="studentSelect" 
+													class="form-select" 
+													bind:value={currentStudentId}
+													onchange={(e) => selectStudent(e.target.value)}
+												>
+													<option value="">Select a student...</option>
+													{#each students as student}
+														<option value={student.id}>{student.displayName}</option>
+													{/each}
+												</select>
+												<button 
+													class="btn btn-outline-primary" 
+													type="button"
+													onclick={() => showAddStudent = true}
+													title="Add new student"
+												>
+													<i class="bi bi-person-plus"></i>
+												</button>
+												<button 
+													class="btn btn-outline-secondary" 
+													type="button"
+													onclick={() => showStudentManager = true}
+													title="Manage students"
+												>
+													<i class="bi bi-gear"></i>
+												</button>
+											</div>
+											{#if currentStudentId}
+												<div class="mt-2">
+													<div class="alert alert-info py-2 mb-0">
+														<i class="bi bi-person-check me-2"></i>
+														<strong>Selected Student:</strong> {studentName || 'Loading...'}
+													</div>
+												</div>
+											{/if}
 										</div>
-										<div class="col-md-6">
+										<div class="col-12">
 											<label for="studentImageInput" class="form-label fw-bold">Student Photo:</label>
 											<div class="input-group input-group-lg">
 												<input 
@@ -1295,14 +1483,14 @@
 													{#each availableKnowledgeAreas as area}
 														<div class="d-flex align-items-center bg-light border rounded px-1 py-0" style="font-size: 0.6rem;">
 															<span class="text-muted me-1">{area}</span>
-															<button 
+																<button 
 																class="btn btn-sm p-0 border-0 text-danger" 
 																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
-																onclick={() => removeKnowledgeArea(area)}
-																title="Delete knowledge area"
-															>
+																	onclick={() => removeKnowledgeArea(area)}
+																	title="Delete knowledge area"
+																>
 																×
-															</button>
+																</button>
 														</div>
 													{/each}
 												</div>
@@ -1351,14 +1539,14 @@
 													{#each currentAssessment.categories as category}
 														<div class="d-flex align-items-center bg-light border rounded px-1 py-0" style="font-size: 0.6rem;">
 															<span class="text-muted me-1">{category.name}</span>
-															<button 
+																	<button 
 																class="btn btn-sm p-0 border-0 text-danger" 
 																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
-																onclick={() => removeCategory(category.id)}
-																title="Delete category"
-															>
+																		onclick={() => removeCategory(category.id)}
+																		title="Delete category"
+																	>
 																×
-															</button>
+																	</button>
 														</div>
 													{/each}
 												</div>
@@ -1449,9 +1637,9 @@
 								<div class="card-header bg-secondary text-white py-2">
 									<div class="d-flex align-items-center w-100">
 										<div class="flex-grow-1">
-											<h5 class="card-title mb-0">
-												<i class="bi bi-list-ul me-2"></i>Paragraphs
-											</h5>
+									<h5 class="card-title mb-0">
+										<i class="bi bi-list-ul me-2"></i>Paragraphs
+									</h5>
 										</div>
 										<div class="d-flex align-items-center gap-2">
 											<label for="total-marks-input" class="form-label text-white mb-0 fw-bold" style="color: white !important; font-weight: bold !important;">Total Marks:</label>
@@ -1483,17 +1671,16 @@
 													<div class="card-header bg-info text-white py-2">
 														<div class="d-flex align-items-center w-100">
 															<div class="flex-grow-1">
-																<h6 class="mb-0 fw-bold">
+														<h6 class="mb-0 fw-bold">
 																	{#if group.category && group.category !== 'No Knowledge Area'}
-																		{group.category}
-																	{/if}
+																{group.category}
+															{/if}
 																</h6>
-																{#if group.knowledgeArea && group.knowledgeArea !== 'No Knowledge Area'}
+															{#if group.knowledgeArea && group.knowledgeArea !== 'No Knowledge Area'}
 																	<small class="text-light opacity-75">{group.knowledgeArea}</small>
-																{/if}
+															{/if}
 															</div>
-															{#if group.category && !categoriesWithMarks.has(group.category)}
-																{@const _ = categoriesWithMarks.add(group.category)}
+															{#if group.category}
 																<div class="d-flex align-items-center gap-2">
 																	<input 
 																		type="number" 
@@ -1701,6 +1888,134 @@
 						<i class="bi bi-check-circle me-2"></i>I Understand
 					</button>
 				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Add Student Modal -->
+{#if showAddStudent}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header bg-primary text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-person-plus me-2"></i>Add New Student
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={() => showAddStudent = false}></button>
+				</div>
+				<div class="modal-body">
+					<div class="mb-3">
+						<label for="newStudentName" class="form-label fw-bold">Student Name:</label>
+						<input 
+							id="newStudentName"
+							type="text" 
+							class="form-control" 
+							bind:value={newStudentName}
+							placeholder="Enter student name"
+						>
+					</div>
+					<div class="mb-3">
+						<label for="newStudentId" class="form-label fw-bold">Student ID:</label>
+						<input 
+							id="newStudentId"
+							type="text" 
+							class="form-control" 
+							bind:value={newStudentId}
+							placeholder="Enter student ID"
+						>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={() => showAddStudent = false}>
+						<i class="bi bi-x-circle me-2"></i>Cancel
+					</button>
+					<button type="button" class="btn btn-primary" onclick={addStudent}>
+						<i class="bi bi-person-plus me-2"></i>Add Student
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Student Manager Modal -->
+{#if showStudentManager}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-lg modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header bg-primary text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-people me-2"></i>Student Management
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={() => showStudentManager = false}></button>
+				</div>
+				<div class="modal-body">
+					<div class="d-flex justify-content-between align-items-center mb-3">
+						<h6 class="mb-0">Registered Students ({students.length})</h6>
+						<button class="btn btn-primary btn-sm" onclick={() => { showStudentManager = false; showAddStudent = true; }}>
+							<i class="bi bi-person-plus me-1"></i>Add Student
+						</button>
+					</div>
+					
+					{#if students.length === 0}
+						<div class="text-center py-4">
+							<i class="bi bi-people text-muted" style="font-size: 3rem;"></i>
+							<p class="text-muted mt-2">No students registered yet.</p>
+							<button class="btn btn-primary" onclick={() => { showStudentManager = false; showAddStudent = true; }}>
+								<i class="bi bi-person-plus me-2"></i>Add First Student
+							</button>
+						</div>
+					{:else}
+						<div class="list-group">
+							{#each students as student}
+								<div class="list-group-item d-flex justify-content-between align-items-center">
+									<div>
+										<h6 class="mb-1">{student.name}</h6>
+										<small class="text-muted">ID: {student.studentId}</small>
+									</div>
+									<div class="btn-group" role="group">
+										<button 
+											class="btn btn-outline-primary btn-sm"
+											onclick={() => { selectStudent(student.id); showStudentManager = false; }}
+											title="Select this student"
+										>
+											<i class="bi bi-check-circle"></i>
+										</button>
+										<button 
+											class="btn btn-outline-danger btn-sm"
+											onclick={() => deleteStudent(student.id)}
+											title="Delete this student"
+										>
+											<i class="bi bi-trash"></i>
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={() => showStudentManager = false}>
+						<i class="bi bi-x-circle me-2"></i>Close
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Success Notification Toast -->
+{#if showNotification}
+	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+		<div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+			<div class="toast-header bg-success text-white">
+				<i class="bi bi-check-circle me-2"></i>
+				<strong class="me-auto">Success</strong>
+				<button type="button" class="btn-close btn-close-white" onclick={() => showNotification = false}></button>
+			</div>
+			<div class="toast-body">
+				{notificationMessage}
 			</div>
 		</div>
 	</div>

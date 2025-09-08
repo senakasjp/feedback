@@ -3,7 +3,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file])
+        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file, write_student_evaluation, read_student_evaluation])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -172,4 +172,24 @@ fn generate_pdf_file(
     doc.save(&mut writer).map_err(|e| e.to_string())?;
     
     Ok(pdf_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn write_student_evaluation(student_id: String, assessment_id: String, data: String) -> Result<(), String> {
+    let dir = portable_data_dir()?;
+    let filename = format!("student-evaluation-{}-{}.json", student_id, assessment_id);
+    let path = std::path::Path::new(&dir).join(filename);
+    std::fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_student_evaluation(student_id: String, assessment_id: String) -> Result<String, String> {
+    let dir = portable_data_dir()?;
+    let filename = format!("student-evaluation-{}-{}.json", student_id, assessment_id);
+    let path = std::path::Path::new(&dir).join(filename);
+    match std::fs::read_to_string(&path) {
+        Ok(s) => Ok(s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(e.to_string()),
+    }
 }
