@@ -36,6 +36,8 @@
 	let availableKnowledgeAreas = $state([])
 	let categoryMarks = $state({}) // Store marks for each category
 	let categoriesWithMarks = $state(new Set()) // Track which categories already have marks input
+	let manualTotalMarks = $state('') // Store manually entered total marks
+	let showTotalMarksWarning = $state(false) // Show warning modal
 
 	// UI state
 	let showAddSubject = $state(false)
@@ -167,6 +169,8 @@
 				selectedParagraphs = new Set(parsed.selectedParagraphs || [])
 				studentName = parsed.studentName || ''
 				studentImage = parsed.studentImage || ''
+				categoryMarks = parsed.categoryMarks || {}
+				manualTotalMarks = parsed.manualTotalMarks || ''
 			} else {
 				// Initialize empty data
 				paragraphs = []
@@ -206,7 +210,9 @@
 			paragraphs,
 			selectedParagraphs: Array.from(selectedParagraphs),
 			studentName,
-			studentImage
+			studentImage,
+			categoryMarks,
+			manualTotalMarks
 		}
 		
 		try {
@@ -430,6 +436,17 @@
 			const numMarks = parseFloat(marks) || 0
 			return total + numMarks
 		}, 0)
+	}
+
+	function updateTotalMarks(totalMarks) {
+		manualTotalMarks = totalMarks
+		saveAssessmentData()
+		
+		// Check for warning condition: calculated total > 0 but manual total is 0 or empty
+		const calculatedTotal = getTotalMarks()
+		if (calculatedTotal > 0 && (!totalMarks || totalMarks === '0' || totalMarks === '')) {
+			showTotalMarksWarning = true
+		}
 	}
 
 
@@ -893,7 +910,8 @@
 		if (totalMarks > 0) {
 			doc.setTextColor(255, 0, 0) // Red color
 			doc.setFontSize(10) // Same font size as name and subject
-			doc.text(`Total Marks: ${totalMarks}`, margin, yPosition)
+			const manualTotal = manualTotalMarks ? `/${manualTotalMarks}` : ''
+			doc.text(`Total Marks: ${totalMarks}${manualTotal}`, margin, yPosition)
 			doc.setTextColor(0, 0, 0) // Reset to black
 			yPosition += 8
 		}
@@ -1420,9 +1438,27 @@
 						<div class="col-12">
 							<div class="card border-secondary">
 								<div class="card-header bg-secondary text-white py-2">
-									<h5 class="card-title mb-0">
-										<i class="bi bi-list-ul me-2"></i>Paragraphs
-									</h5>
+									<div class="d-flex align-items-center w-100">
+										<div class="flex-grow-1">
+											<h5 class="card-title mb-0">
+												<i class="bi bi-list-ul me-2"></i>Paragraphs
+											</h5>
+										</div>
+										<div class="d-flex align-items-center gap-2">
+											<label for="total-marks-input" class="form-label text-white mb-0 fw-bold" style="color: white !important; font-weight: bold !important;">Total Marks:</label>
+											<input
+												type="number"
+												class="form-control form-control-sm"
+												id="total-marks-input"
+												style="width: 80px;"
+												placeholder="0"
+												value={getTotalMarks() || ''}
+												oninput={(e) => updateTotalMarks(e.target.value)}
+												min="0"
+												step="0.5"
+											>
+										</div>
+									</div>
 								</div>
 								<div class="card-body p-0">
 									{#if paragraphs.length === 0}
@@ -1633,3 +1669,30 @@
 		box-sizing: border-box;
 	}
 </style>
+
+<!-- Total Marks Warning Modal -->
+{#if showTotalMarksWarning}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header bg-warning text-dark">
+					<h5 class="modal-title">
+						<i class="bi bi-exclamation-triangle me-2"></i>Total Marks Warning
+					</h5>
+				</div>
+				<div class="modal-body">
+					<div class="alert alert-warning">
+						<i class="bi bi-warning me-2"></i>
+						<strong>Warning:</strong> You have entered marks for individual categories (Total: {getTotalMarks()}) but the total marks field is empty or zero.
+					</div>
+					<p class="mb-0">Please enter the total marks in the "Total Marks" field to ensure proper PDF generation with the slash format (e.g., "Total Marks: {getTotalMarks()}/100").</p>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-warning" onclick={() => showTotalMarksWarning = false}>
+						<i class="bi bi-check-circle me-2"></i>I Understand
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
