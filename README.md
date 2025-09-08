@@ -32,17 +32,27 @@ Subject (1 or more)
 - **Topic Management**: Organize feedback with topics and categories
 - **Reusable Categories**: Categories created for an assessment can be used for all students
 
-### 🏷️ Category System
+### 🏷️ Universal Category System
+- **Universal Support**: Works with any assessment type, not just PDR assessments
 - **Custom Categories**: Create categories specific to each assessment
-- **Category Descriptions**: Add optional descriptions for better organization
-- **Visual Indicators**: Categories displayed as blue badges in feedback
-- **Category Filtering**: Filter paragraphs by category
+- **Dynamic Detection**: Automatically enables category selection when categories are defined
+- **Category Grouping**: Paragraphs grouped by category with headers and marks input
+- **Fallback Handling**: Legacy paragraphs grouped under "General Feedback"
+- **Visual Indicators**: Categories displayed as blue headers in feedback sections
 
 ### 📝 Feedback Management
 - **Add Paragraphs**: Create feedback paragraphs with category and topic selection
 - **Checkbox Selection**: Select specific paragraphs for inclusion in reports
 - **Live Preview**: See selected paragraphs in a dedicated section
 - **Auto-save**: All data is automatically saved as you work
+
+### 🎯 Marks Management System
+- **Individual Category Marks**: Enter marks for each category at first appearance
+- **Total Marks Input**: Right-aligned input box in "Paragraphs" header
+- **PDF Integration**: Displays marks in professional slash format (calculated/manual)
+- **Warning System**: Popup alert when marks are incomplete
+- **Real-time Calculation**: Automatic total marks calculation from individual categories
+- **Persistent Storage**: Marks saved with assessment data
 
 ### 👤 Student Information
 - **Student Name**: Enter and store student names
@@ -385,6 +395,47 @@ The PDF output now uses **10px as the standard font size** for consistent, compa
 
 This approach optimizes PDF output for print density while maintaining comfortable screen readability.
 
+## Universal Category System & Marks Management
+
+### 🏷️ Universal Category Support (v2.1.0)
+
+The application now supports **universal category management** for any assessment type, not just specific PDR assessments:
+
+#### **Category System Features:**
+- **Universal Detection**: Any assessment with categories defined will automatically enable category selection
+- **Dynamic Category Lists**: Uses assessment-specific categories instead of hardcoded lists
+- **Fallback Support**: Existing PDR assessments continue to work with their predefined categories
+- **Default Grouping**: Paragraphs without categories are grouped under "General Feedback"
+
+#### **Marks Management System:**
+- **Individual Category Marks**: Enter marks for each category at its first appearance
+- **Total Marks Input**: Right-aligned input box in the "Paragraphs" header
+- **PDF Integration**: Displays marks in slash format (calculated/manual total)
+- **Warning System**: Popup alert when individual marks are entered but total marks field is empty
+
+#### **Category Workflow:**
+1. **Create Assessment**: Add categories to any assessment
+2. **Select Category**: Choose from dropdown when adding paragraphs
+3. **Add Paragraphs**: Text is automatically prefixed with selected category
+4. **Enter Marks**: Assign marks to categories and total marks
+5. **Generate PDF**: Marks appear in professional format with slash notation
+
+#### **Marks Display Format:**
+- **Individual Categories**: `[X MARKS]` after category name in PDF
+- **Total Marks**: `Total Marks: 15/100` (calculated/manual total)
+- **GUI Display**: Shows total marks in red alert box above selected paragraphs
+
+#### **Backward Compatibility:**
+- **Legacy Paragraphs**: Automatically grouped under "General Feedback" if no category prefix
+- **PDR Assessments**: Continue to work with existing hardcoded categories
+- **Data Migration**: No data loss when upgrading to universal system
+
+### **Technical Implementation:**
+- **Dynamic Detection**: `needsCategorySelection()` checks for assessment categories
+- **Flexible Grouping**: `getGroupedParagraphs()` handles any category format
+- **State Management**: Marks stored per category and total marks separately
+- **PDF Generation**: Universal category detection with bold formatting
+
 ## Version History
 
 - **v1.0.0** - Initial release with basic feedback management
@@ -400,3 +451,12 @@ This approach optimizes PDF output for print density while maintaining comfortab
   - Redesigned UI with dedicated management screens
   - Categories are reusable across all students for each assessment
   - Improved data structure with hierarchical organization
+- **v2.1.0** - **UNIVERSAL CATEGORY SYSTEM & MARKS MANAGEMENT**
+  - Universal category support for any assessment type (not just PDR)
+  - Dynamic category detection and management
+  - Individual category marks input system
+  - Total marks input with slash format in PDF
+  - Warning system for incomplete marks entry
+  - Backward compatibility with legacy paragraphs
+  - Professional PDF formatting with bold category headers
+  - Right-aligned marks input in "Paragraphs" header

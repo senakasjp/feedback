@@ -42,12 +42,8 @@
           "name": "Mid-PDR",
           "categories": [
             {
-              "id": "1757298682745",
-              "name": "Decision"
-            },
-            {
-              "id": "1757298768255",
-              "name": "Sub Learning Objective 1.1"
+              "id": "1757266890579",
+              "name": "Test"
             }
           ]
         },
@@ -57,11 +53,40 @@
           "categories": []
         }
       ]
+    },
+    {
+      "id": "1757293726963",
+      "name": "IoT and Cloud Computing",
+      "assessments": [
+        {
+          "id": "1757294322038",
+          "name": "Case Study Analysis",
+          "topics": [],
+          "categories": [
+            {
+              "id": "1757294798444",
+              "name": "Executive Summary"
+            },
+            {
+              "id": "1757294824776",
+              "name": "Technical Architecture Analysis"
+            },
+            {
+              "id": "1757294848394",
+              "name": "IoT Theory & Scientific Foundation"
+            },
+            {
+              "id": "1757294891410",
+              "name": "Cloud Infrastructure Standards & Methodologies"
+            },
+            {
+              "id": "1757294902943",
+              "name": "Challenges & Risk Analysis"
+            }
+          ]
+        }
+      ]
     }
   ],
-  "knowledgeAreas": [
-    "Performance",
-    "Coding",
-    "CI/CD"
-  ]
+  "knowledgeAreas": []
 }

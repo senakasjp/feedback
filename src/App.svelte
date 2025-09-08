@@ -441,12 +441,6 @@
 	function updateTotalMarks(totalMarks) {
 		manualTotalMarks = totalMarks
 		saveAssessmentData()
-		
-		// Check for warning condition: calculated total > 0 but manual total is 0 or empty
-		const calculatedTotal = getTotalMarks()
-		if (calculatedTotal > 0 && (!totalMarks || totalMarks === '0' || totalMarks === '')) {
-			showTotalMarksWarning = true
-		}
 	}
 
 
@@ -498,11 +492,18 @@
 
 	// Helper function to check if current assessment needs category selection
 	function needsCategorySelection() {
-		return isStudio6PDR() || isStudio4PDR() || isStudio5PDR()
+		// Return true if current assessment has categories defined
+		return currentAssessment?.categories && currentAssessment.categories.length > 0
 	}
 
 	// Helper function to get the appropriate categories for current assessment
 	function getCurrentCategories() {
+		// Use assessment's own categories if available
+		if (currentAssessment?.categories && currentAssessment.categories.length > 0) {
+			return currentAssessment.categories.map(cat => cat.name)
+		}
+		
+		// Fallback to hardcoded categories for specific PDR assessments
 		if (isStudio6PDR()) {
 			return pdrCategories
 		} else if (isStudio4PDR()) {
@@ -703,12 +704,13 @@
 				}
 			}
 			
-			// Create group key
-			const groupKey = `${category}|||${knowledgeArea || 'No Knowledge Area'}`
+			// Create group key - use default category if none specified
+			const finalCategory = category || 'General Feedback'
+			const groupKey = `${finalCategory}|||${knowledgeArea || 'No Knowledge Area'}`
 			
 			if (!grouped[groupKey]) {
 				grouped[groupKey] = {
-					category,
+					category: finalCategory,
 					knowledgeArea: knowledgeArea || 'No Knowledge Area',
 					paragraphs: []
 				}
@@ -833,6 +835,13 @@
 		const selectedText = getSelectedText()
 		if (!selectedText) {
 			alert('No paragraphs selected!')
+			return
+		}
+
+		// Check for marks warning: category marks > 0 but total marks is 0 or empty
+		const calculatedTotal = getTotalMarks()
+		if (calculatedTotal > 0 && (!manualTotalMarks || manualTotalMarks === '0' || manualTotalMarks === '')) {
+			showTotalMarksWarning = true
 			return
 		}
 
@@ -1452,7 +1461,7 @@
 												id="total-marks-input"
 												style="width: 80px;"
 												placeholder="0"
-												value={getTotalMarks() || ''}
+												value={manualTotalMarks || ''}
 												oninput={(e) => updateTotalMarks(e.target.value)}
 												min="0"
 												step="0.5"
