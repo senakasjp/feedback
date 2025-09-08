@@ -47,6 +47,7 @@
 	let showAddAssessment = $state(false)
 	let showAddStudent = $state(false)
 	let showStudentManager = $state(false)
+	let showAddCategoryKnowledgeArea = $state(false)
 	let newSubjectName = $state('')
 	let newAssessmentName = $state('')
 	let newStudentName = $state('')
@@ -1446,35 +1447,45 @@
 									<div class="mb-3">
 										<div class="d-flex justify-content-between align-items-center mb-2">
 											<label class="form-label fw-bold mb-0">Knowledge Areas:</label>
-											<small class="text-muted">{availableKnowledgeAreas.length} areas</small>
-										</div>
-										
-										<!-- Add Knowledge Area Form -->
-										<div class="mb-3">
-											<label for="knowledgeAreaName" class="form-label">Knowledge Area Name:</label>
-											<div class="input-group">
-												<input
-													id="knowledgeAreaName"
-													type="text"
-													class="form-control"
-													placeholder="Enter knowledge area name..."
-													bind:value={newKnowledgeAreaName}
-													onkeydown={(e) => {
-														if (e.key === 'Enter') {
-															e.preventDefault();
-															addKnowledgeArea();
-														}
-													}}
-												>
+											<div class="d-flex align-items-center gap-2">
+												<small class="text-muted">{availableKnowledgeAreas.length} areas</small>
 												<button 
-													class="btn btn-outline-success"
-													onclick={addKnowledgeArea}
-													disabled={!newKnowledgeAreaName.trim()}
+													class="btn btn-outline-secondary btn-sm"
+													onclick={() => showAddCategoryKnowledgeArea = !showAddCategoryKnowledgeArea}
 												>
-													<i class="bi bi-plus-circle me-1"></i>Add
+													<i class="bi bi-plus-circle me-1"></i>Add Category or Knowledge Area
 												</button>
 											</div>
 										</div>
+										
+										{#if showAddCategoryKnowledgeArea}
+											<!-- Add Knowledge Area Form -->
+											<div class="mb-3">
+												<label for="knowledgeAreaName" class="form-label">Knowledge Area Name:</label>
+												<div class="input-group">
+													<input
+														id="knowledgeAreaName"
+														type="text"
+														class="form-control"
+														placeholder="Enter knowledge area name..."
+														bind:value={newKnowledgeAreaName}
+														onkeydown={(e) => {
+															if (e.key === 'Enter') {
+																e.preventDefault();
+																addKnowledgeArea();
+															}
+														}}
+													>
+													<button 
+														class="btn btn-outline-success"
+														onclick={addKnowledgeArea}
+														disabled={!newKnowledgeAreaName.trim()}
+													>
+														<i class="bi bi-plus-circle me-1"></i>Add
+													</button>
+												</div>
+											</div>
+										{/if}
 										
 										<!-- Knowledge Areas List - Compact Horizontal -->
 										{#if availableKnowledgeAreas.length > 0}
@@ -1505,32 +1516,34 @@
 											<small class="text-muted">{currentAssessment?.categories?.length || 0} categories</small>
 										</div>
 										
-									<!-- Add Category Form -->
-									<div class="mb-3">
-										<label for="categoryName" class="form-label">Category Name:</label>
-										<div class="input-group">
-											<input
-												id="categoryName"
-												type="text"
-												class="form-control"
-												placeholder="Enter category name..."
-												bind:value={newCategoryName}
-												onkeydown={(e) => {
-													if (e.key === 'Enter') {
-														e.preventDefault();
-														addCategory();
-													}
-												}}
-											>
-											<button 
-												class="btn btn-outline-primary"
-												onclick={addCategory}
-												disabled={!newCategoryName.trim()}
-											>
-												<i class="bi bi-plus-circle me-1"></i>Add
-											</button>
-										</div>
-									</div>
+										{#if showAddCategoryKnowledgeArea}
+											<!-- Add Category Form -->
+											<div class="mb-3">
+												<label for="categoryName" class="form-label">Category Name:</label>
+												<div class="input-group">
+													<input
+														id="categoryName"
+														type="text"
+														class="form-control"
+														placeholder="Enter category name..."
+														bind:value={newCategoryName}
+														onkeydown={(e) => {
+															if (e.key === 'Enter') {
+																e.preventDefault();
+																addCategory();
+															}
+														}}
+													>
+													<button 
+														class="btn btn-outline-primary"
+														onclick={addCategory}
+														disabled={!newCategoryName.trim()}
+													>
+														<i class="bi bi-plus-circle me-1"></i>Add
+													</button>
+												</div>
+											</div>
+										{/if}
 										
 										<!-- Categories List - Compact Horizontal -->
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
