@@ -155,6 +155,9 @@
 	}
 
 	async function loadAssessmentData(subjectId, assessmentId) {
+		// Reset categories with marks tracking for new assessment
+		categoriesWithMarks = new Set()
+		
 		try {
 			// Try Tauri first (desktop app)
 			const data = await invoke('read_subject_data', { subjectId: `${subjectId}-${assessmentId}` })
@@ -302,7 +305,6 @@
 		currentAssessmentId = assessment.id
 		currentAssessment = assessment
 		currentView = 'feedback'
-		categoriesWithMarks = new Set() // Reset categories with marks tracking
 		loadAssessmentData(currentSubjectId, currentAssessmentId)
 	}
 
@@ -421,6 +423,13 @@
 		categoryMarks[category] = marks
 		categoryMarks = {...categoryMarks} // trigger reactivity
 		saveAssessmentData()
+	}
+
+	function getTotalMarks() {
+		return Object.values(categoryMarks).reduce((total, marks) => {
+			const numMarks = parseFloat(marks) || 0
+			return total + numMarks
+		}, 0)
 	}
 
 
@@ -738,17 +747,25 @@
 			groupedSections[category].push(content)
 		})
 		
-		// Format output with category headers
-		const sectionOrder = [
+		// Format output with category headers - use all categories dynamically
+		const allCategories = Object.keys(groupedSections)
+		
+		// Define preferred order for known categories, but include all categories
+		const preferredOrder = [
 			'Sub Objective 1.1', 'Sub Objective 1.2', 'Sub Objective 2.1', 'Sub Objective 2.2', 'Sub Objective 3.1', 'Sub Objective 3.2', 'Sub Objective 3.3',
 			'Sub Learning Objective 1.1', 'Sub Learning Objective 1.2', 'Sub Learning Objective 2.1', 'Sub Learning Objective 2.2',
 			'Report', 'Decision'
 		]
 		
-		// Add any other categories that exist but aren't in the predefined order
-		const allCategories = Object.keys(groupedSections)
+		// Create final order: preferred categories first, then any others
+		const sectionOrder = []
+		preferredOrder.forEach(category => {
+			if (allCategories.includes(category)) {
+				sectionOrder.push(category)
+			}
+		})
 		allCategories.forEach(category => {
-			if (!sectionOrder.includes(category)) {
+			if (!preferredOrder.includes(category)) {
 				sectionOrder.push(category)
 			}
 		})
@@ -756,7 +773,10 @@
 		
 		sectionOrder.forEach(section => {
 			if (groupedSections[section]) {
-				result.push(`${section}:`)
+				// Add marks information to category header
+				const categoryMarksValue = categoryMarks[section] || 0
+				const marksText = categoryMarksValue > 0 ? ` [${categoryMarksValue} MARKS]` : ''
+				result.push(`${section}: ${marksText}`)
 				groupedSections[section].forEach(content => {
 					result.push(content)
 				})
@@ -868,6 +888,16 @@
 			yPosition += 6
 		}
 		
+		// Add total marks in red color
+		const totalMarks = getTotalMarks()
+		if (totalMarks > 0) {
+			doc.setTextColor(255, 0, 0) // Red color
+			doc.setFontSize(10) // Same font size as name and subject
+			doc.text(`Total Marks: ${totalMarks}`, margin, yPosition)
+			doc.setTextColor(0, 0, 0) // Reset to black
+			yPosition += 8
+		}
+		
 		// Reset font to normal for content
 		doc.setFont('helvetica', 'normal')
 		
@@ -898,13 +928,24 @@
 				return
 			}
 			
-			// Check if this line is a category header (ends with ':')
-			if (line.match(/^(Sub (?:Objective|Learning Objective) \d\.\d|Report|Decision):$/i)) {
-				// Bold font for category headers
+			// Check if this line is a category header (contains ':' and optionally marks)
+			if (line.includes(':')) {
+				// Extract category name (everything before the colon)
+				const categoryName = line.split(':')[0].trim()
+				
+				// Get marks for this category
+				const categoryMarksValue = categoryMarks[categoryName] || 0
+				const marksText = categoryMarksValue > 0 ? ` [${categoryMarksValue} MARKS]` : ''
+				
+				// Bold font for category headers and marks
 				doc.setFont('helvetica', 'bold')
 				doc.setFontSize(10) // Same size as other content
-			doc.text(line, margin, yPosition)
-				doc.setFont('helvetica', 'normal') // Reset to normal
+				
+				// Draw category name and marks (both will be bold)
+				doc.text(`${categoryName}: ${marksText}`, margin, yPosition)
+				
+				// Reset font to normal for content
+				doc.setFont('helvetica', 'normal')
 				doc.setFontSize(10) // Back to small font
 				yPosition += lineHeight + 1 // Minimal extra spacing after headers
 			} else {
@@ -1499,6 +1540,12 @@
 						</h5>
 					</div>
 					<div class="card-body">
+						{#if getTotalMarks() > 0}
+							<div class="alert alert-danger mb-3" role="alert">
+								<i class="bi bi-trophy me-2"></i>
+								<strong>Total Marks: {getTotalMarks()}</strong>
+							</div>
+						{/if}
 						<textarea 
 							class="form-control" 
 							rows="10" 
