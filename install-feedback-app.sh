@@ -20,10 +20,10 @@ fi
 echo "Copying Feedback.app to Applications..."
 cp -r "$BUNDLE_DIR/Feedback.app" /Applications/
 
-# Copy the data folder to Applications
-echo "Copying data folder to Applications..."
-cp -r "$BUNDLE_DIR/data" /Applications/
+# Copy the FeedbackData folder to Applications
+echo "Copying FeedbackData folder to Applications..."
+cp -r "$BUNDLE_DIR/FeedbackData" /Applications/
 
 echo "Installation complete!"
 echo "You can now find Feedback.app in your Applications folder"
-echo "The data folder is also in Applications/ for the app to access"
+echo "The FeedbackData folder is also in Applications/ for the app to access"

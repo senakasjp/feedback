@@ -70,7 +70,7 @@ If you have existing feedback data from the previous version:
 ## File Structure
 
 ```
-data/
+FeedbackData/
 ├── feedback-data.json              # Main subjects/assessments structure
 ├── subject-{id1}-{id2}.json       # Individual assessment feedback data
 ├── subject-{id3}-{id4}.json       # Individual assessment feedback data

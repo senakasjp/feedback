@@ -58,7 +58,7 @@ Subject (1 or more)
 - **Clean Layout**: Professional formatting with proper spacing and typography
 
 ### 💾 Data Persistence
-- **Portable Storage**: Data stored in local `data` folder next to executable
+- **Portable Storage**: Data stored in local `FeedbackData` folder next to executable
 - **Cross-Platform**: Copy entire app folder between computers with data intact
 - **JSON Format**: Human-readable data storage
 - **Auto-backup**: No manual save required
@@ -98,7 +98,7 @@ npm run tauri build
 1. Run `npm run tauri build`
 2. Find the executable in `src-tauri/target/release/`
 3. Copy the entire app folder to any computer
-4. Data is stored in `data/feedback.txt` alongside the executable
+4. Data is stored in `FeedbackData/feedback.txt` alongside the executable
 
 ## Usage
 
@@ -149,7 +149,7 @@ feedback-app/
 │   │   └── lib.rs         # Rust backend with file system commands
 │   ├── tauri.conf.json    # Tauri configuration
 │   └── capabilities/      # Permission definitions
-├── data/                  # Data storage (created at runtime)
+├── FeedbackData/          # Data storage (created at runtime)
 │   └── feedback.txt       # JSON data file
 └── package.json           # Node.js dependencies
 ```
@@ -266,7 +266,7 @@ npm run tauri dev  # Desktop development with hot reload
 - Verify image size (very large images may cause issues)
 
 **Data not persisting**
-- Check if `data` folder has write permissions
+- Check if `FeedbackData` folder has write permissions
 - Verify Tauri file system plugin is properly configured
 
 **Confirmation dialogs not appearing (Tauri on Mac/Windows)**

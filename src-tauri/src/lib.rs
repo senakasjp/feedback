@@ -38,7 +38,7 @@ fn portable_data_dir() -> Result<String, String> {
         .ok_or("failed to resolve executable directory")?
         .to_path_buf();
 
-    let data_dir = base.join("data");
+    let data_dir = base.join("FeedbackData");
     std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
     Ok(data_dir
         .to_str()

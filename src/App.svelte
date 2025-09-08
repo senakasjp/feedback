@@ -1199,22 +1199,21 @@
 											</div>
 										</div>
 										
-										<!-- Knowledge Areas List -->
+										<!-- Knowledge Areas List - Compact Horizontal -->
 										{#if availableKnowledgeAreas.length > 0}
-											<div class="mb-3">
-												<div class="row g-2">
+											<div class="mb-2">
+												<div class="d-flex flex-wrap gap-1">
 													{#each availableKnowledgeAreas as area}
-														<div class="col-md-6">
-															<div class="d-flex align-items-center justify-content-between p-2 border rounded">
-																<span class="fw-medium">{area}</span>
-																<button 
-																	class="btn btn-sm btn-outline-danger"
-																	onclick={() => removeKnowledgeArea(area)}
-																	title="Delete knowledge area"
-																>
-																	<i class="bi bi-x"></i>
-																</button>
-															</div>
+														<div class="d-flex align-items-center bg-light border rounded px-1 py-0" style="font-size: 0.6rem;">
+															<span class="text-muted me-1">{area}</span>
+															<button 
+																class="btn btn-sm p-0 border-0 text-danger" 
+																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
+																onclick={() => removeKnowledgeArea(area)}
+																title="Delete knowledge area"
+															>
+																×
+															</button>
 														</div>
 													{/each}
 												</div>
@@ -1256,32 +1255,21 @@
 										</div>
 									</div>
 										
-										<!-- Categories List -->
+										<!-- Categories List - Compact Horizontal -->
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
-											<div class="mb-3">
-												<div class="row g-2">
+											<div class="mb-2">
+												<div class="d-flex flex-wrap gap-1">
 													{#each currentAssessment.categories as category}
-														<div class="col-md-6">
-															<div class="p-3 border rounded">
-																<div class="d-flex justify-content-between align-items-start mb-2">
-																	<div class="flex-grow-1">
-																		<h6 class="fw-bold mb-1">{category.name}</h6>
-																		{#if category.knowledgeArea}
-																			<small class="text-muted">
-																				<i class="bi bi-info-circle me-1"></i>
-																				{category.knowledgeArea}
-																			</small>
-																		{/if}
-																	</div>
-																	<button 
-																		class="btn btn-sm btn-outline-danger"
-																		onclick={() => removeCategory(category.id)}
-																		title="Delete category"
-																	>
-																		<i class="bi bi-x"></i>
-																	</button>
-																</div>
-															</div>
+														<div class="d-flex align-items-center bg-light border rounded px-1 py-0" style="font-size: 0.6rem;">
+															<span class="text-muted me-1">{category.name}</span>
+															<button 
+																class="btn btn-sm p-0 border-0 text-danger" 
+																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
+																onclick={() => removeCategory(category.id)}
+																title="Delete category"
+															>
+																×
+															</button>
 														</div>
 													{/each}
 												</div>

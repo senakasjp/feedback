@@ -147,9 +147,6 @@
 				{#if availableCategories.length === 0}
 					<small class="text-warning">No categories available. Add categories in the assessment manager.</small>
 				{/if}
-				{#if selectedCategory}
-					<small class="text-muted">Selected category: <strong>{availableCategories.find(c => c.id === selectedCategory)?.name}</strong></small>
-				{/if}
 			</div>
 
 			<!-- Topic selector -->
@@ -238,18 +235,6 @@
 						{/if}
 					</div>
 					<div class="flex-grow-1">
-						<div class="mb-2">
-							{#if categoryId}
-								<span class="badge bg-primary me-2">
-									{availableCategories.find(c => c.id === categoryId)?.name || 'Unknown Category'}
-								</span>
-							{/if}
-							{#if topicId}
-								<span class="badge bg-info">
-									{availableTopics.find(t => t.id === topicId)?.name || 'Unknown Topic'}
-								</span>
-							{/if}
-						</div>
 						<p class="mb-0">{paragraph}</p>
 					</div>
 					<button 
