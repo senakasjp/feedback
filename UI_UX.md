@@ -173,6 +173,41 @@ Cards are used for interactive elements like subject and assessment selection in
 }
 ```
 
+#### Delete Button Consistency
+All delete buttons throughout the application use consistent styling for a unified design language.
+
+**Delete Button Style:**
+```html
+<button 
+  class="btn btn-sm btn-outline-danger border-0"
+  onclick={() => deleteItem(item.id)}
+  title="Delete item"
+  aria-label="Delete item"
+>
+  <i class="bi bi-x"></i>
+</button>
+```
+
+**CSS Implementation:**
+```css
+.btn-outline-danger {
+  color: var(--color-white) !important;
+  border: 1px solid var(--color-danger) !important;
+  background-color: var(--color-danger) !important;
+}
+
+.btn-outline-danger:hover {
+  background-color: var(--color-danger-hover) !important;
+  color: var(--color-white) !important;
+}
+```
+
+**Usage Examples:**
+- **Subject Delete Buttons**: Consistent with assessment delete buttons
+- **Assessment Delete Buttons**: Standard outline danger style
+- **Category Delete Buttons**: Same styling across all components
+- **Paragraph Delete Buttons**: Unified appearance in feedback editor
+
 ### 3. Buttons
 
 #### Button Hierarchy
@@ -572,7 +607,46 @@ Consistent spacing between form elements and buttons is enforced through CSS:
   <button class="btn btn-primary">Save</button>
   <button class="btn btn-secondary">Cancel</button>
 </div>
+
+<!-- Flexbox layout with gap (recommended) -->
+<div class="d-flex gap-2">
+  <select class="form-select flex-grow-1">
+    <option>Select option...</option>
+  </select>
+  <button class="btn btn-primary">Action 1</button>
+  <button class="btn btn-secondary">Action 2</button>
+</div>
 ```
+
+#### Form Layout Best Practices
+**Student Selection Pattern:**
+```html
+<label for="studentSelect" class="form-label fw-bold">Student:</label>
+<div class="d-flex gap-2">
+  <select 
+    id="studentSelect" 
+    class="form-select flex-grow-1" 
+    bind:value={currentStudentId}
+  >
+    <option value="">Select a student...</option>
+    {#each students as student}
+      <option value={student.id}>{student.displayName}</option>
+    {/each}
+  </select>
+  <button class="btn btn-outline-primary" onclick={() => showAddStudent = true}>
+    <i class="bi bi-person-plus"></i>
+  </button>
+  <button class="btn btn-outline-secondary" onclick={() => showStudentManager = true}>
+    <i class="bi bi-gear"></i>
+  </button>
+</div>
+```
+
+**Key Benefits:**
+- **Consistent Spacing**: 0.5rem gap between all elements
+- **Responsive Design**: Select box grows to fill available space
+- **Clean Layout**: No complex input-group nesting
+- **Accessibility**: Proper labels and ARIA attributes
 
 ### Flexbox Utilities
 ```html
@@ -730,10 +804,11 @@ Consistent spacing between form elements and buttons is enforced through CSS:
 - [ ] Configure CSS imports
 
 ### 2. Base Components
-- [ ] Create card components (interactive cards for navigation)
-- [ ] Implement button system (filled backgrounds, consistent spacing)
-- [ ] Set up form elements
-- [ ] Create modal system
+- [x] Create card components (interactive cards for navigation)
+- [x] Implement button system (filled backgrounds, consistent spacing)
+- [x] Set up form elements (with proper spacing and layout)
+- [x] Create modal system
+- [x] Implement consistent delete button styling
 
 ### 3. Layout System
 - [ ] Implement responsive grid
