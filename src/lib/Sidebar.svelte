@@ -259,4 +259,37 @@
 	.action-btn i {
 		font-size: 16px;
 	}
+	
+	/* Sidebar button styles */
+	.btn-outline-primary,
+	.btn-outline-success {
+		background-color: transparent !important;
+		border: 1px solid currentColor !important;
+		text-align: left !important;
+		color: #333 !important;
+		justify-content: flex-start !important;
+	}
+	
+	.btn-outline-primary:hover,
+	.btn-outline-success:hover {
+		background-color: rgba(0, 0, 0, 0.05) !important;
+		color: #333 !important;
+	}
+	
+	.btn-outline-primary strong,
+	.btn-outline-success strong {
+		color: #333 !important;
+		text-align: left !important;
+	}
+	
+	.btn-outline-primary .d-flex,
+	.btn-outline-success .d-flex {
+		justify-content: flex-start !important;
+		text-align: left !important;
+	}
+	
+	/* Spacing between buttons in groups */
+	.btn-group .btn + .btn {
+		margin-left: 0.25rem !important;
+	}
 </style>

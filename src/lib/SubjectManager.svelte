@@ -182,13 +182,13 @@
 							<span class="fw-bold text-dark">{subject.name}</span>
 						</div>
 						<button 
-							class="btn btn-sm btn-danger rounded-circle border-0"
-							style="width: 32px; height: 32px; padding: 0; border: none !important; outline: none !important; box-shadow: none !important;"
+							class="btn btn-sm btn-outline-danger border-0"
 							onclick={() => {
 								console.log('DELETE CLICKED FOR:', subject.name, subject.id);
 								handleDeleteClick(subject.id);
 							}}
 							title="Delete subject"
+							aria-label="Delete subject"
 						>
 							<i class="bi bi-x"></i>
 						</button>

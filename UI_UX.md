@@ -12,6 +12,7 @@ This document provides a complete guide to recreate the UI/UX system used in the
 - **Responsiveness**: Mobile-first design that scales to desktop
 - **Professional**: Clean, modern appearance suitable for business applications
 - **User Feedback**: Clear visual confirmation for all actions
+- **Visual Clarity**: All buttons use filled backgrounds for better visibility and consistency
 
 ### Color Scheme
 - **Primary**: Bootstrap blue (`#0d6efd`)
@@ -88,7 +89,91 @@ This document provides a complete guide to recreate the UI/UX system used in the
 - **Warning**: `bg-warning` - Caution elements
 - **Danger**: `bg-danger` - Critical actions
 
-### 2. Buttons
+### 2. Cards
+
+#### Interactive Cards
+Cards are used for interactive elements like subject and assessment selection in the sidebar. They provide better visual hierarchy and modern appearance compared to buttons.
+
+**Subject Cards:**
+```html
+<div 
+  class="subject-card mb-2" 
+  onclick={() => selectSubject(subject)}
+  role="button"
+  tabindex="0"
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      selectSubject(subject);
+    }
+  }}
+>
+  <div class="card border-primary h-100">
+    <div class="card-body p-3">
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-book me-2 text-primary"></i>
+          <strong class="text-dark">{subject.name}</strong>
+        </div>
+        <span class="badge bg-primary">{subject.assessments.length}</span>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**Assessment Cards:**
+```html
+<div 
+  class="assessment-card mb-2" 
+  onclick={() => selectAssessment(assessment)}
+  role="button"
+  tabindex="0"
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      selectAssessment(assessment);
+    }
+  }}
+>
+  <div class="card border-success h-100">
+    <div class="card-body p-3">
+      <div class="d-flex align-items-center">
+        <i class="bi bi-clipboard-check me-2 text-success"></i>
+        <strong class="text-dark">{assessment.name}</strong>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**Card Styling:**
+```css
+.subject-card,
+.assessment-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 8px;
+}
+
+.subject-card:hover,
+.assessment-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.subject-card:hover .card {
+  border-color: #0d6efd !important;
+  box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2);
+}
+
+.assessment-card:hover .card {
+  border-color: #198754 !important;
+  box-shadow: 0 4px 15px rgba(25, 135, 84, 0.2);
+}
+```
+
+### 3. Buttons
 
 #### Button Hierarchy
 ```html
@@ -111,6 +196,59 @@ This document provides a complete guide to recreate the UI/UX system used in the
 <button class="btn btn-outline-danger btn-sm">
   <i class="bi bi-trash"></i>
 </button>
+```
+
+#### Button Styling System
+All buttons in the system use filled backgrounds (no transparent/outline buttons) for better visual consistency and accessibility.
+
+**Button Variants:**
+- **Primary**: Blue background with white text (`btn-primary`, `btn-outline-primary`)
+- **Success**: Green background with white text (`btn-success`, `btn-outline-success`)
+- **Danger**: Red background with white text (`btn-danger`, `btn-outline-danger`)
+- **Secondary**: Gray background with white text (`btn-secondary`, `btn-outline-secondary`)
+- **Warning**: Yellow background with dark text (`btn-warning`)
+
+**CSS Implementation:**
+```css
+/* All outline buttons are filled by default */
+.btn-outline-primary {
+  color: var(--color-white) !important;
+  border: 1px solid var(--color-primary) !important;
+  background-color: var(--color-primary) !important;
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--color-primary-hover) !important;
+  color: var(--color-white) !important;
+}
+
+/* Consistent spacing between inputs and buttons */
+.input-group + .btn,
+.input-group + button,
+.form-control + .btn,
+.form-control + button {
+  margin-left: 0.5rem !important;
+}
+
+/* Spacing for button groups */
+.btn-group .btn + .btn {
+  margin-left: 0.25rem !important;
+}
+```
+
+**Color Variables:**
+```css
+:root {
+  --color-primary: #1e3a8a;
+  --color-primary-hover: #1e40af;
+  --color-success: #28a745;
+  --color-success-hover: #1e7e34;
+  --color-secondary: #6c757d;
+  --color-secondary-hover: #5a6268;
+  --color-danger: #dc3545;
+  --color-danger-hover: #c82333;
+  --color-white: #ffffff;
+}
 ```
 
 #### Custom Action Buttons (Sidebar)
@@ -395,6 +533,47 @@ This document provides a complete guide to recreate the UI/UX system used in the
 - **Medium**: `gap-3`
 - **Large**: `gap-4`
 
+### Button and Input Spacing
+Consistent spacing between form elements and buttons is enforced through CSS:
+
+**Input Group Spacing:**
+```css
+/* 0.5rem spacing between input groups and standalone buttons */
+.input-group + .btn,
+.input-group + button,
+.form-control + .btn,
+.form-control + button {
+  margin-left: 0.5rem !important;
+}
+```
+
+**Button Group Spacing:**
+```css
+/* 0.25rem spacing between buttons in groups */
+.btn-group .btn + .btn {
+  margin-left: 0.25rem !important;
+}
+```
+
+**Usage Examples:**
+```html
+<!-- Input with button - automatic spacing -->
+<div class="input-group">
+  <input type="text" class="form-control" placeholder="Enter text...">
+  <button class="btn btn-primary">Add</button>
+</div>
+
+<!-- Standalone input with button - automatic spacing -->
+<input type="text" class="form-control" placeholder="Enter text...">
+<button class="btn btn-primary">Submit</button>
+
+<!-- Button group - automatic spacing -->
+<div class="btn-group">
+  <button class="btn btn-primary">Save</button>
+  <button class="btn btn-secondary">Cancel</button>
+</div>
+```
+
 ### Flexbox Utilities
 ```html
 <!-- Center content -->
@@ -551,8 +730,8 @@ This document provides a complete guide to recreate the UI/UX system used in the
 - [ ] Configure CSS imports
 
 ### 2. Base Components
-- [ ] Create card components
-- [ ] Implement button system
+- [ ] Create card components (interactive cards for navigation)
+- [ ] Implement button system (filled backgrounds, consistent spacing)
 - [ ] Set up form elements
 - [ ] Create modal system
 

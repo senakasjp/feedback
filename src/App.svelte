@@ -1338,10 +1338,10 @@
 									<div class="row g-3">
 										<div class="col-12">
 											<label for="studentSelect" class="form-label fw-bold">Student:</label>
-											<div class="input-group input-group-lg">
+											<div class="d-flex gap-2">
 												<select 
 													id="studentSelect" 
-													class="form-select" 
+													class="form-select flex-grow-1" 
 													bind:value={currentStudentId}
 													onchange={(e) => selectStudent(e.target.value)}
 												>

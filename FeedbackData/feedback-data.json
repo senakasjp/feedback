@@ -1,1 +1,101 @@
-{"subjects":[{"id":"mf1xsaj3gu74u4uhju5","name":"Studio 6","assessments":[{"id":"mf1xupfy3pq0nfp39dc","name":"Mid-PDR","categories":[{"id":"1757267084150","name":"Decision"}]},{"id":"mf1xuzhf3evuktc72rw","name":"Final PDR","categories":[]}]},{"id":"mf1xsq0h2i6xoaah3r5","name":"Studio 5","assessments":[{"id":"1757148243144","name":"Mid-PDR","topics":[],"categories":[]}]},{"id":"mf3b9ezabnnp1sdc3xp","name":"Studio 4","assessments":[{"id":"mf3bvw1cpo7msgxqls","name":"Mid-PDR","categories":[{"id":"1757266890579","name":"Test"}]},{"id":"mf3bwg5g9o5unrif9yi","name":"Final-PDR","categories":[]}]},{"id":"1757293726963","name":"IoT and Cloud Computing","assessments":[{"id":"1757294322038","name":"Case Study Analysis","topics":[],"categories":[{"id":"1757294798444","name":"Executive Summary"},{"id":"1757294824776","name":"Technical Architecture Analysis"},{"id":"1757294848394","name":"IoT Theory & Scientific Foundation"},{"id":"1757294891410","name":"Cloud Infrastructure Standards & Methodologies"},{"id":"1757294902943","name":"Challenges & Risk Analysis"}]}]}],"knowledgeAreas":[],"students":[{"id":"mfbjyyqgxwncvbe5wu","name":"Reetika Shrestha","studentId":"1000117679","displayName":"Reetika Shrestha (1000117679)","createdAt":"2025-09-08T20:06:57.112Z"}]}
+{
+  "subjects": [
+    {
+      "id": "mf1xsaj3gu74u4uhju5",
+      "name": "Studio 6",
+      "assessments": [
+        {
+          "id": "mf1xupfy3pq0nfp39dc",
+          "name": "Mid-PDR",
+          "categories": [
+            {
+              "id": "1757267084150",
+              "name": "Decision"
+            }
+          ]
+        },
+        {
+          "id": "mf1xuzhf3evuktc72rw",
+          "name": "Final PDR",
+          "categories": []
+        }
+      ]
+    },
+    {
+      "id": "mf1xsq0h2i6xoaah3r5",
+      "name": "Studio 5",
+      "assessments": [
+        {
+          "id": "1757148243144",
+          "name": "Mid-PDR",
+          "topics": [],
+          "categories": []
+        }
+      ]
+    },
+    {
+      "id": "mf3b9ezabnnp1sdc3xp",
+      "name": "Studio 4",
+      "assessments": [
+        {
+          "id": "mf3bvw1cpo7msgxqls",
+          "name": "Mid-PDR",
+          "categories": [
+            {
+              "id": "1757266890579",
+              "name": "Test"
+            }
+          ]
+        },
+        {
+          "id": "mf3bwg5g9o5unrif9yi",
+          "name": "Final-PDR",
+          "categories": []
+        }
+      ]
+    },
+    {
+      "id": "1757293726963",
+      "name": "IoT and Cloud Computing",
+      "assessments": [
+        {
+          "id": "1757294322038",
+          "name": "Case Study Analysis",
+          "topics": [],
+          "categories": [
+            {
+              "id": "1757294798444",
+              "name": "Executive Summary"
+            },
+            {
+              "id": "1757294824776",
+              "name": "Technical Architecture Analysis"
+            },
+            {
+              "id": "1757294848394",
+              "name": "IoT Theory & Scientific Foundation"
+            },
+            {
+              "id": "1757294891410",
+              "name": "Cloud Infrastructure Standards & Methodologies"
+            },
+            {
+              "id": "1757294902943",
+              "name": "Challenges & Risk Analysis"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "knowledgeAreas": [],
+  "students": [
+    {
+      "id": "mfbjyyqgxwncvbe5wu",
+      "name": "Reetika Shrestha",
+      "studentId": "1000117679",
+      "displayName": "Reetika Shrestha (1000117679)",
+      "createdAt": "2025-09-08T20:06:57.112Z"
+    }
+  ]
+}
