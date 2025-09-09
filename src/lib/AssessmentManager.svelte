@@ -36,6 +36,11 @@
 		onAddAssessment?: (name: string) => void;
 	} = $props()
 
+	// Sort assessments alphabetically by name
+	let sortedAssessments = $derived(
+		[...assessments].sort((a, b) => a.name.localeCompare(b.name))
+	)
+
 	// Local state
 	let showDeleteConfirm = $state(false);
 	let assessmentToDelete = $state(null);
@@ -142,9 +147,9 @@
 		</div>
 	{/if}
 
-	{#if assessments.length > 0}
+	{#if sortedAssessments.length > 0}
 		<div class="d-flex flex-wrap gap-3">
-			{#each assessments as assessment}
+			{#each sortedAssessments as assessment}
 				<div class="border rounded p-3 shadow-sm d-flex flex-column" style="min-width: 300px; max-width: 350px; aspect-ratio: 1; height: 300px;">
 					<!-- Header Section -->
 					<div class="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">

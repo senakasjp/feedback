@@ -584,6 +584,11 @@
 		return students.find(s => s.id === currentStudentId)
 	}
 
+	// Sort students alphabetically by display name
+	let sortedStudents = $derived(
+		[...students].sort((a, b) => a.displayName.localeCompare(b.displayName))
+	)
+
 	// Save student evaluation data
 	async function saveStudentEvaluation() {
 		if (!currentStudentId || !currentAssessmentId) return
@@ -1432,7 +1437,7 @@
 													onchange={(e) => selectStudent(e.currentTarget.value)}
 												>
 													<option value="">Select a student...</option>
-													{#each students as student}
+													{#each sortedStudents as student}
 														<option value={student.id}>{student.displayName}</option>
 													{/each}
 												</select>
@@ -2115,7 +2120,7 @@
 						</div>
 					{:else}
 						<div class="list-group">
-							{#each students as student}
+							{#each sortedStudents as student}
 								<div class="list-group-item d-flex justify-content-between align-items-center">
 									<div>
 										<h6 class="mb-1">{student.name}</h6>
