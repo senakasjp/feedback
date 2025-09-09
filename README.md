@@ -54,6 +54,16 @@ Subject (1 or more)
 - **Real-time Calculation**: Automatic total marks calculation from individual categories
 - **Persistent Storage**: Marks saved with assessment data
 
+### 📊 Universal Percentage Ranges
+- **Universal Access**: Available across all views (subjects, assessments, feedback)
+- **Custom Ranges**: Create percentage ranges with value, color, and percentage bounds
+- **Color Coding**: Visual indicators with 5 color options (red, orange, yellow, light green, green)
+- **Automatic Calculation**: Calculates actual value ranges based on percentage inputs
+- **Persistent Storage**: Ranges saved globally and persist across app sessions
+- **Real-time Display**: Shows calculated ranges with color indicators
+- **Easy Management**: Add and delete ranges with simple form interface
+- **Cross-Session Persistence**: Data automatically loads when app reopens
+
 ### 👤 Student Information
 - **Student Name**: Enter and store student names
 - **Photo Upload**: Upload and display student photos
@@ -183,6 +193,17 @@ npm run tauri build
 3. **Generate PDF** - Click "📄 Generate PDF" button
 4. **Copy text** - Use "📋 Copy to Clipboard" for other uses
 
+### Managing Percentage Ranges
+1. **Access Ranges** - Navigate to any view (subjects, assessments, or feedback)
+2. **Add New Range** - Fill in the percentage range form in the sidebar:
+   - **Value**: Enter the base value (e.g., 100 for 100 points)
+   - **Lower %**: Enter lower percentage (0-100)
+   - **Upper %**: Enter upper percentage (0-100)
+   - **Color**: Select from 5 color options (red, orange, yellow, light green, green)
+3. **View Ranges** - See calculated ranges with color indicators
+4. **Delete Ranges** - Click the trash icon to remove unwanted ranges
+5. **Universal Access** - Ranges are available across all views and persist between sessions
+
 ### PDF Output
 - **Header Image**: Student photo spans full page width at the top
 - **Title**: "Feedback Report"
@@ -242,6 +263,27 @@ The application stores data in JSON format with hierarchical structure:
           ]
         }
       ]
+    }
+  ],
+  "knowledgeAreas": ["Prior Experience", "Student Specific Comments"],
+  "students": [
+    {
+      "id": "student-1",
+      "name": "John Doe",
+      "studentId": "12345",
+      "displayName": "John Doe (12345)",
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "percentageRanges": [
+    {
+      "id": "range-1",
+      "value": 100,
+      "color": "red",
+      "lowerPercentage": 0,
+      "upperPercentage": 50,
+      "calculatedLower": 0,
+      "calculatedUpper": 50
     }
   ]
 }

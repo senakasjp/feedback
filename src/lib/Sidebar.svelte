@@ -264,8 +264,7 @@
 	</div>
 </div>
 
-<!-- Percentage Range Card - Only show on feedback page (level 3) -->
-{#if currentView === 'feedback' && currentAssessment}
+<!-- Percentage Range Card - Universal across all views -->
 <div class="card mt-3" style="margin: 0; width: 100%; box-sizing: border-box;">
 	<div class="card-header bg-info text-white">
 		<h5 class="card-title mb-0">
@@ -374,7 +373,6 @@
 		{/if}
 	</div>
 </div>
-{/if}
 
 <style>
 .compact-label { font-size: 0.5rem; }
