@@ -1336,6 +1336,7 @@
 					onAddPercentageRange={addPercentageRange}
 					onDeletePercentageRange={deletePercentageRange}
 					currentStudentId={currentStudentId}
+					{studentName}
 				/>
 			</div>
 

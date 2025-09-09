@@ -26,7 +26,8 @@
 		onLoadStudentEvaluation,
 		onAddPercentageRange,
 		onDeletePercentageRange,
-		currentStudentId
+		currentStudentId,
+		studentName = ''
 	} = $props()
 
 	// Percentage range form state
@@ -204,6 +205,38 @@
 				</button>
 				
 				
+				<!-- Current Session Info - Only show in feedback page (3rd level) -->
+				{#if currentView === 'feedback' && currentAssessment}
+					<div class="mt-4 mb-4">
+						<div class="session-info">
+							<h6 class="session-title mb-3">
+								<i class="bi bi-info-circle me-2"></i>Current Session
+							</h6>
+							<div class="session-details">
+								{#if currentSubject}
+									<div class="session-item">
+										<strong>Subject:</strong> {currentSubject.name}
+									</div>
+								{/if}
+								{#if currentAssessment}
+									<div class="session-item">
+										<strong>Assessment:</strong> {currentAssessment.name}
+									</div>
+								{/if}
+								{#if currentStudentId && studentName}
+									<div class="session-item">
+										<strong>Student:</strong> {studentName}
+									</div>
+								{:else if currentStudentId}
+									<div class="session-item text-muted">
+										<strong>Student:</strong> Loading...
+									</div>
+								{/if}
+							</div>
+						</div>
+					</div>
+				{/if}
+
 				<!-- Action Buttons - Only show in feedback page (3rd level) -->
 				{#if currentView === 'feedback' && currentAssessment}
 					<div class="mt-3">
@@ -243,6 +276,7 @@
 	<div class="card-body py-2">
 		<!-- Add new range form -->
 		<div class="mb-2">
+			<!-- First row: Value and Percentage inputs -->
 			<div class="d-flex align-items-end gap-1 mb-2 justify-content-center">
 				<div class="flex-shrink-0" style="width: 60px;">
 					<label for="newValue" class="form-label small fw-bold mb-1 compact-label">Value:</label>
@@ -254,14 +288,6 @@
 						bind:value={newValue}
 						inputmode="decimal"
 					>
-				</div>
-				<div class="flex-shrink-0" style="width: 80px;">
-					<label for="newColor" class="form-label small fw-bold mb-1 compact-label">Color:</label>
-					<select id="newColor" class="form-select form-select-sm compact-input" bind:value={newColor}>
-						{#each colorOptions as option}
-							<option value={option.value}>{option.label}</option>
-						{/each}
-					</select>
 				</div>
 				<div class="flex-shrink-0" style="width: 60px;">
 					<label for="newLowerPercentage" class="form-label small fw-bold mb-1 compact-label">Lower %:</label>
@@ -286,7 +312,16 @@
 					>
 				</div>
 			</div>
-			<div class="d-flex justify-content-center">
+			<!-- Second row: Color dropdown and Add button -->
+			<div class="d-flex align-items-end gap-2 mb-2 justify-content-center">
+				<div class="flex-shrink-0" style="width: 80px;">
+					<label for="newColor" class="form-label small fw-bold mb-1 compact-label">Color:</label>
+					<select id="newColor" class="form-select form-select-sm compact-input" bind:value={newColor}>
+						{#each colorOptions as option}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+					</select>
+				</div>
 				<button 
 					class="btn btn-primary btn-sm" 
 					onclick={addPercentageRange}
@@ -392,21 +427,21 @@
 	}
 	
 	.save-btn {
-		background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+		background: linear-gradient(135deg, #198754 0%, #146c43 100%);
 	}
 	
 	.save-btn:hover {
-		background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
-		box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+		background: linear-gradient(135deg, #146c43 0%, #0f5132 100%);
+		box-shadow: 0 6px 20px rgba(25, 135, 84, 0.4);
 	}
 	
 	.load-btn {
-		background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);
+		background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
 	}
 	
 	.load-btn:hover {
-		background: linear-gradient(135deg, #5a32a3 0%, #4c2a8a 100%);
-		box-shadow: 0 6px 20px rgba(111, 66, 193, 0.4);
+		background: linear-gradient(135deg, #0b5ed7 0%, #0a58ca 100%);
+		box-shadow: 0 6px 20px rgba(13, 110, 253, 0.4);
 	}
 	
 	.action-btn i {
@@ -444,5 +479,36 @@
 	/* Spacing between buttons in groups */
 	.btn-group .btn + .btn {
 		margin-left: 0.25rem !important;
+	}
+	
+	/* Session Info Styles */
+	.session-info {
+		padding: 0;
+	}
+	
+	.session-title {
+		color: #495057;
+		font-size: 1rem;
+		font-weight: 600;
+		margin-bottom: 0.75rem;
+	}
+	
+	.session-details {
+		font-size: 0.9rem;
+		line-height: 1.5;
+	}
+	
+	.session-item {
+		margin-bottom: 0.4rem;
+		color: #6c757d;
+	}
+	
+	.session-item:last-child {
+		margin-bottom: 0;
+	}
+	
+	.session-item strong {
+		color: #495057;
+		font-weight: 600;
 	}
 </style>
