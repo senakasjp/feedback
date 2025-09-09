@@ -391,14 +391,12 @@
 			const newCategory = {
 				id: Date.now().toString(),
 				name: newCategoryName.trim(),
-				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined,
-				allocatedMarks: newCategoryAllocatedMarks ? parseFloat(newCategoryAllocatedMarks) : undefined
+				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined
 			}
 			
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
 			newCategoryName = ''
 			newCategoryKnowledgeArea = ''
-			newCategoryAllocatedMarks = ''
 			
 			// Update the current subject's assessments
 			if (currentSubject) {
@@ -1545,44 +1543,27 @@
 										{#if showAddCategoryKnowledgeArea}
 											<!-- Add Category Form -->
 											<div class="mb-3">
-												<div class="row g-2">
-													<div class="col-md-6">
-														<label for="categoryName" class="form-label">Category Name:</label>
-														<input
-															id="categoryName"
-															type="text"
-															class="form-control"
-															placeholder="Enter category name..."
-															bind:value={newCategoryName}
-															onkeydown={(e) => {
-																if (e.key === 'Enter') {
-																	e.preventDefault();
-																	addCategory();
-																}
-															}}
-														>
-													</div>
-													<div class="col-md-4">
-														<label for="categoryAllocatedMarks" class="form-label">Allocated Marks:</label>
-														<input
-															id="categoryAllocatedMarks"
-															type="number"
-															class="form-control"
-															placeholder="Marks"
-															bind:value={newCategoryAllocatedMarks}
-															min="0"
-															step="0.5"
-														>
-													</div>
-													<div class="col-md-2 d-flex align-items-end">
-														<button 
-															class="btn btn-outline-primary w-100"
-															onclick={addCategory}
-															disabled={!newCategoryName.trim()}
-														>
-															<i class="bi bi-plus-circle me-1"></i>Add
-														</button>
-													</div>
+												<div class="input-group">
+													<input
+														id="categoryName"
+														type="text"
+														class="form-control"
+														placeholder="Enter category name..."
+														bind:value={newCategoryName}
+														onkeydown={(e) => {
+															if (e.key === 'Enter') {
+																e.preventDefault();
+																addCategory();
+															}
+														}}
+													>
+													<button 
+														class="btn btn-outline-primary"
+														onclick={addCategory}
+														disabled={!newCategoryName.trim()}
+													>
+														<i class="bi bi-plus-circle me-1"></i>Add
+													</button>
 												</div>
 											</div>
 										{/if}
