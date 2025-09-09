@@ -43,7 +43,7 @@
           "categories": [
             {
               "id": "1757266890579",
-              "name": "Test"
+              "name": "IoT"
             }
           ]
         },
@@ -89,7 +89,9 @@
       ]
     }
   ],
-  "knowledgeAreas": [],
+  "knowledgeAreas": [
+    "Knowladge area"
+  ],
   "students": [
     {
       "id": "mfbjyyqgxwncvbe5wu",

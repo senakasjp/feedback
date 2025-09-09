@@ -40,6 +40,7 @@
 	let categoryMarks = $state({}) // Store marks for each category
 	let manualTotalMarks = $state('') // Store manually entered total marks
 	let showTotalMarksWarning = $state(false) // Show warning modal
+	let categoryWarnings = $state({}) // Store warnings for each category
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
 
@@ -446,9 +447,45 @@
 		saveSubjects()
 	}
 
+	function checkCategoryHasSelectedParagraphs(category) {
+		// Check if any selected paragraphs belong to this category
+		for (const selectedIndex of selectedParagraphs) {
+			const paragraph = paragraphs[selectedIndex]
+			if (paragraph) {
+				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
+				
+				// Check if paragraph belongs to this category
+				if (paragraphText.includes(': ')) {
+					const parts = paragraphText.split(': ')
+					if (parts.length >= 2 && parts[0].trim() === category) {
+						return true
+					}
+				} else {
+					// Check if it's a general feedback paragraph (no category prefix)
+					if (category === 'General Feedback') {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+
 	function updateCategoryMarks(category, marks) {
 		categoryMarks[category] = marks
 		categoryMarks = {...categoryMarks} // trigger reactivity
+		
+		// Check if any paragraphs under this category are selected
+		if (marks && marks.trim() !== '') {
+			const hasSelectedParagraphs = checkCategoryHasSelectedParagraphs(category)
+			categoryWarnings[category] = !hasSelectedParagraphs
+			categoryWarnings = {...categoryWarnings} // trigger reactivity
+		} else {
+			// Clear warning if marks are empty
+			categoryWarnings[category] = false
+			categoryWarnings = {...categoryWarnings} // trigger reactivity
+		}
+		
 		saveAssessmentData()
 	}
 
@@ -694,6 +731,16 @@
 			selectedParagraphs.add(index)
 		}
 		selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
+		
+		// Update warnings for all categories with marks
+		Object.keys(categoryMarks).forEach(category => {
+			if (categoryMarks[category] && categoryMarks[category].trim() !== '') {
+				const hasSelectedParagraphs = checkCategoryHasSelectedParagraphs(category)
+				categoryWarnings[category] = !hasSelectedParagraphs
+			}
+		})
+		categoryWarnings = {...categoryWarnings} // trigger reactivity
+		
 		saveAssessmentData()
 	}
 
@@ -714,6 +761,15 @@
 			// Don't add the deleted index
 		})
 		selectedParagraphs = newSelectedParagraphs
+		
+		// Update warnings for all categories with marks
+		Object.keys(categoryMarks).forEach(category => {
+			if (categoryMarks[category] && categoryMarks[category].trim() !== '') {
+				const hasSelectedParagraphs = checkCategoryHasSelectedParagraphs(category)
+				categoryWarnings[category] = !hasSelectedParagraphs
+			}
+		})
+		categoryWarnings = {...categoryWarnings} // trigger reactivity
 		
 		saveAssessmentData()
 	}
@@ -805,14 +861,15 @@
 	}
 
 	function cleanParagraphTextForDisplay(text) {
-		// Remove knowledge area prefix (format: "Knowledge Area - text")
+		// Remove knowledge area suffix (format: "text - Knowledge Area")
 		if (text.includes(' - ')) {
 			const parts = text.split(' - ')
 			if (parts.length >= 2) {
-				// Check if the first part looks like a knowledge area (not a category)
+				// Check if the last part looks like a knowledge area (not a category)
 				// Categories have format "Category: text", knowledge areas are just "Knowledge Area"
-				if (!parts[0].includes(':')) {
-					return parts.slice(1).join(' - ')
+				const lastPart = parts[parts.length - 1]
+				if (!lastPart.includes(':')) {
+					return parts.slice(0, -1).join(' - ')
 				}
 			}
 		}
@@ -820,13 +877,14 @@
 	}
 
 	function extractKnowledgeArea(text) {
-		// Extract knowledge area from paragraph text (format: "Knowledge Area - text")
+		// Extract knowledge area from paragraph text (format: "text - Knowledge Area")
 		if (text.includes(' - ')) {
 			const parts = text.split(' - ')
 			if (parts.length >= 2) {
-				// Check if the first part looks like a knowledge area (not a category)
-				if (!parts[0].includes(':')) {
-					return parts[0]
+				// Check if the last part looks like a knowledge area (not a category)
+				const lastPart = parts[parts.length - 1]
+				if (!lastPart.includes(':')) {
+					return lastPart
 				}
 			}
 		}
@@ -871,26 +929,31 @@
 					}
 				}
 			} else {
-				// Check if paragraph has only knowledge area prefix
+				// Check if paragraph has only knowledge area prefix (format: "text - KnowledgeArea")
 				knowledgeArea = extractKnowledgeArea(paragraph)
 				if (knowledgeArea) {
 					cleanText = cleanParagraphTextForDisplay(paragraph)
 				}
 			}
 			
-			// Create group key - use default category if none specified
+			// Create group key - group by category only, knowledge areas will be sub-groups
 			const finalCategory = category || 'General Feedback'
-			const groupKey = `${finalCategory}|||${knowledgeArea || 'No Knowledge Area'}`
+			const groupKey = finalCategory
 			
 			if (!grouped[groupKey]) {
 				grouped[groupKey] = {
 					category: finalCategory,
-					knowledgeArea: knowledgeArea || 'No Knowledge Area',
-					paragraphs: []
+					knowledgeAreas: {}
 				}
 			}
 			
-			grouped[groupKey].paragraphs.push({
+			// Add to knowledge area sub-group
+			const knowledgeAreaKey = knowledgeArea || 'No Knowledge Area'
+			if (!grouped[groupKey].knowledgeAreas[knowledgeAreaKey]) {
+				grouped[groupKey].knowledgeAreas[knowledgeAreaKey] = []
+			}
+			
+			grouped[groupKey].knowledgeAreas[knowledgeAreaKey].push({
 				text: cleanText,
 				color,
 				originalIndex,
@@ -1730,14 +1793,11 @@
 													<div class="card-header bg-info text-white py-2">
 														<div class="d-flex align-items-center w-100">
 															<div class="flex-grow-1">
-														<h6 class="mb-0 fw-bold">
+																<h6 class="mb-0 fw-bold">
 																	{#if group.category && group.category !== 'No Knowledge Area'}
-																{group.category}
-															{/if}
+																		{group.category}
+																	{/if}
 																</h6>
-															{#if group.knowledgeArea && group.knowledgeArea !== 'No Knowledge Area'}
-																	<small class="text-light opacity-75">{group.knowledgeArea}</small>
-															{/if}
 															</div>
 															{#if group.category}
 																<div class="d-flex align-items-center gap-2">
@@ -1761,46 +1821,65 @@
 															{/if}
 														</div>
 													</div>
-													<div class="card-body p-0">
-														{#each group.paragraphs as {text, color, originalIndex, fullText}}
-															<div class="border-bottom p-3 {originalIndex === group.paragraphs[group.paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
-																<div class="d-flex align-items-start">
-																	<div class="form-check me-3">
-																		<input 
-																			class="form-check-input form-check-input-lg" 
-																			type="checkbox" 
-																			id="paragraph-{originalIndex}"
-																			checked={selectedParagraphs.has(originalIndex)}
-																			onchange={() => toggleParagraph(originalIndex)}
-																		>
-																		<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
-																		</label>
-																	</div>
-													<!-- Color indicator between checkbox and text -->
-													{#if color}
-														<div class="me-3 d-flex align-items-center">
-															<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
-														</div>
-													{:else}
-														<div class="me-3 d-flex align-items-center">
-															<div class="color-indicator" style="width: 16px; height: 16px; background-color: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6;" title="No Color"></div>
+													{#if categoryWarnings[group.category]}
+														<div class="alert alert-warning alert-sm m-0 rounded-0 border-0" style="border-top: 1px solid #ffc107 !important;">
+															<div class="d-flex align-items-center">
+																<i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
+																<small class="mb-0 fw-bold">
+																	Warning: No paragraphs selected for this category. Marks entered will not be included in the final report.
+																</small>
+															</div>
 														</div>
 													{/if}
-																	<div class="flex-grow-1 me-3">
-																		<p class="mb-0 fs-5 lh-base">{text}</p>
-																	</div>
-																	<div class="d-flex gap-1">
-																		<button 
-																			class="btn btn-outline-danger btn-sm" 
-																			onclick={() => deleteParagraph(originalIndex)}
-																			title="Delete paragraph"
-																			aria-label="Delete paragraph"
-																		>
-																			<i class="bi bi-trash"></i>
-																		</button>
+													<div class="card-body p-0">
+														{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs]}
+															{#if knowledgeArea !== 'No Knowledge Area'}
+																<div class="bg-light border-bottom px-3 py-2">
+																	<small class="text-muted fw-bold">
+																		<i class="bi bi-bookmark me-1"></i>{knowledgeArea}
+																	</small>
+																</div>
+															{/if}
+															{#each paragraphs as {text, color, originalIndex, fullText}}
+																<div class="border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
+																	<div class="d-flex align-items-start">
+																		<div class="form-check me-3">
+																			<input 
+																				class="form-check-input form-check-input-lg" 
+																				type="checkbox" 
+																				id="paragraph-{originalIndex}"
+																				checked={selectedParagraphs.has(originalIndex)}
+																				onchange={() => toggleParagraph(originalIndex)}
+																			>
+																			<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
+																			</label>
+																		</div>
+																		<!-- Color indicator between checkbox and text -->
+																		{#if color}
+																			<div class="me-3 d-flex align-items-center">
+																				<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+																			</div>
+																		{:else}
+																			<div class="me-3 d-flex align-items-center">
+																				<div class="color-indicator" style="width: 16px; height: 16px; background-color: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6;" title="No Color"></div>
+																			</div>
+																		{/if}
+																		<div class="flex-grow-1 me-3">
+																			<p class="mb-0 fs-5 lh-base">{text}</p>
+																		</div>
+																		<div class="d-flex gap-1">
+																			<button 
+																				class="btn btn-outline-danger btn-sm" 
+																				onclick={() => deleteParagraph(originalIndex)}
+																				title="Delete paragraph"
+																				aria-label="Delete paragraph"
+																			>
+																				<i class="bi bi-trash"></i>
+																			</button>
+																		</div>
 																	</div>
 																</div>
-															</div>
+															{/each}
 														{/each}
 													</div>
 												</div>

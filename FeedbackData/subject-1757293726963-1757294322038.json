@@ -7,13 +7,30 @@
     {
       "text": "Technical Architecture Analysis: Test",
       "color": "red"
+    },
+    {
+      "text": "Test paragraph - IoT",
+      "color": "red"
+    },
+    {
+      "text": "Test paragraph 2 for selection - IoT",
+      "color": "red"
+    },
+    {
+      "text": "New paragraph - Knowladge area",
+      "color": "red"
     }
   ],
-  "selectedParagraphs": [],
+  "selectedParagraphs": [
+    2,
+    4,
+    1
+  ],
   "studentName": "Reetika Shrestha (1000117679)",
   "studentImage": "",
   "categoryMarks": {
-    "Executive Summary": "66"
+    "Executive Summary": "",
+    "Technical Architecture Analysis": "30"
   },
   "manualTotalMarks": "30"
 }
