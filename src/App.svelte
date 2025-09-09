@@ -585,13 +585,10 @@
 				await loadStudentEvaluation()
 			}
 		} else {
-			// Clear data if no student selected
-			paragraphs = []
-			selectedParagraphs = new Set()
+			// Clear only student-specific data, keep paragraphs visible
 			studentName = ''
 			studentImage = ''
-			categoryMarks = {}
-			manualTotalMarks = ''
+			// Don't clear paragraphs, selectedParagraphs, or marks - keep them visible
 		}
 	}
 
