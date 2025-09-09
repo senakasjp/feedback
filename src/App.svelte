@@ -575,11 +575,23 @@
 		}
 	}
 
-	function selectStudent(studentId) {
+	async function selectStudent(studentId) {
 		currentStudentId = studentId
 		const student = students.find(s => s.id === studentId)
 		if (student) {
 			studentName = student.displayName
+			// Automatically load student evaluation data if we're on the feedback page
+			if (currentView === 'feedback' && currentAssessmentId) {
+				await loadStudentEvaluation()
+			}
+		} else {
+			// Clear data if no student selected
+			paragraphs = []
+			selectedParagraphs = new Set()
+			studentName = ''
+			studentImage = ''
+			categoryMarks = {}
+			manualTotalMarks = ''
 		}
 	}
 
@@ -1464,7 +1476,7 @@
 													id="studentSelect" 
 													class="form-select flex-grow-1" 
 													bind:value={currentStudentId}
-													onchange={(e) => selectStudent(e.currentTarget.value)}
+													onchange={async (e) => await selectStudent(e.currentTarget.value)}
 												>
 													<option value="">Select a student...</option>
 													{#each sortedStudents as student}
@@ -2159,7 +2171,7 @@
 									<div class="btn-group" role="group">
 										<button 
 											class="btn btn-outline-primary btn-sm"
-											onclick={() => { selectStudent(student.id); showStudentManager = false; }}
+											onclick={async () => { await selectStudent(student.id); showStudentManager = false; }}
 											title="Select this student"
 										>
 											<i class="bi bi-check-circle"></i>
