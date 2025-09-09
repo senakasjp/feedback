@@ -167,8 +167,11 @@
 				{/if}
 			</div>
 		</div>
-		
-		<label for="paragraphInput" class="form-label">Add a new paragraph:</label>
+	</div>
+	
+	<!-- New paragraph section moved to very end of Add Paragraph section -->
+	<div class="add-paragraph-form">
+		<label for="paragraphInput" class="form-label">New paragraph:</label>
 		<div class="input-group flex-column flex-sm-row">
 			<textarea id="paragraphInput" class="form-control mb-2 mb-sm-0" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
 			<button class="btn btn-primary" type="button" onclick={onAddParagraph}>Add</button>

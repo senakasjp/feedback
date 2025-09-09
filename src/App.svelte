@@ -19,6 +19,7 @@
 	// Data structure for hierarchical subjects/assessments
 	let subjects = $state([])
 	let students = $state([]) // Student management
+	let percentageRanges = $state([]) // Percentage ranges for feedback
 	let currentSubjectId = $state(null)
 	let currentAssessmentId = $state(null)
 	let currentSubject = $state(null)
@@ -145,6 +146,7 @@
 				subjects = parsed.subjects || []
 				availableKnowledgeAreas = parsed.knowledgeAreas || []
 				students = parsed.students || []
+				percentageRanges = parsed.percentageRanges || []
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -156,6 +158,7 @@
 					subjects = parsed.subjects || []
 					availableKnowledgeAreas = parsed.knowledgeAreas || []
 					students = parsed.students || []
+					percentageRanges = parsed.percentageRanges || []
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
@@ -164,7 +167,7 @@
 	}
 
 	async function saveSubjects() {
-		const data = { subjects, knowledgeAreas: availableKnowledgeAreas, students }
+		const data = { subjects, knowledgeAreas: availableKnowledgeAreas, students, percentageRanges }
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -582,6 +585,29 @@
 
 	function getCurrentStudent() {
 		return students.find(s => s.id === currentStudentId)
+	}
+
+	// Percentage range management
+	function addPercentageRange(value, color, lowerPercentage, upperPercentage) {
+		const calculatedLower = (value * lowerPercentage / 100).toFixed(2)
+		const calculatedUpper = (value * upperPercentage / 100).toFixed(2)
+		
+		percentageRanges = [...percentageRanges, {
+			id: Date.now().toString(),
+			value: value,
+			color: color,
+			lowerPercentage: lowerPercentage,
+			upperPercentage: upperPercentage,
+			calculatedLower: parseFloat(calculatedLower),
+			calculatedUpper: parseFloat(calculatedUpper)
+		}]
+		
+		saveSubjects()
+	}
+
+	function deletePercentageRange(id) {
+		percentageRanges = percentageRanges.filter(range => range.id !== id)
+		saveSubjects()
 	}
 
 	// Sort students alphabetically by display name
@@ -1293,6 +1319,7 @@
 					{newSubjectName}
 					{newAssessmentName}
 					{showMobileSidebar}
+					{percentageRanges}
 					onSelectSubject={selectSubject}
 					onSelectAssessment={selectAssessment}
 					onAddSubject={addSubject}
@@ -1306,6 +1333,8 @@
 					onGeneratePDF={generatePDF}
 					onSaveStudentEvaluation={saveStudentEvaluation}
 					onLoadStudentEvaluation={loadStudentEvaluation}
+					onAddPercentageRange={addPercentageRange}
+					onDeletePercentageRange={deletePercentageRange}
 					currentStudentId={currentStudentId}
 				/>
 			</div>

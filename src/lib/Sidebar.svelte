@@ -10,6 +10,7 @@
 		newSubjectName = '',
 		newAssessmentName = '',
 		showMobileSidebar = false,
+		percentageRanges = [],
 		onSelectSubject,
 		onSelectAssessment,
 		onAddSubject,
@@ -23,8 +24,67 @@
 		onGeneratePDF,
 		onSaveStudentEvaluation,
 		onLoadStudentEvaluation,
+		onAddPercentageRange,
+		onDeletePercentageRange,
 		currentStudentId
 	} = $props()
+
+	// Percentage range form state
+	let newValue = $state('')
+	let newColor = $state('red')
+	let newLowerPercentage = $state('')
+	let newUpperPercentage = $state('')
+
+	const colorOptions = [
+		{ value: 'red', label: 'Red', class: 'bg-danger' },
+		{ value: 'orange', label: 'Orange', class: 'bg-warning' },
+		{ value: 'yellow', label: 'Yellow', class: 'bg-warning' },
+		{ value: 'light-green', label: 'Light Green', class: 'bg-success' },
+		{ value: 'green', label: 'Green', class: 'bg-success' }
+	]
+
+	function addPercentageRange() {
+		if (newValue !== '' && newLowerPercentage !== '' && newUpperPercentage !== '') {
+			const value = parseFloat(newValue)
+			const lowerPct = parseFloat(newLowerPercentage)
+			const upperPct = parseFloat(newUpperPercentage)
+			
+			if (!isNaN(value) && !isNaN(lowerPct) && !isNaN(upperPct) && lowerPct >= 0 && upperPct <= 100 && lowerPct <= upperPct) {
+				onAddPercentageRange(value, newColor, lowerPct, upperPct)
+				
+				// Reset form
+				newValue = ''
+				newLowerPercentage = ''
+				newUpperPercentage = ''
+			}
+		}
+	}
+
+	function deletePercentageRange(id) {
+		onDeletePercentageRange(id)
+	}
+
+	function getColorClass(color) {
+		const colorMap = {
+			'red': 'bg-danger',
+			'orange': 'bg-warning',
+			'yellow': 'bg-warning',
+			'light-green': 'bg-success',
+			'green': 'bg-success'
+		}
+		return colorMap[color] || 'bg-secondary'
+	}
+
+	function getColorStyle(color) {
+		const colorMap = {
+			'red': 'background-color: #dc3545 !important;',
+			'orange': 'background-color: #fd7e14 !important;',
+			'yellow': 'background-color: #ffc107 !important; color: #000 !important;',
+			'light-green': 'background-color: #20c997 !important;',
+			'green': 'background-color: #198754 !important;'
+		}
+		return colorMap[color] || 'background-color: #6c757d !important;'
+	}
 </script>
 
 <div class="card position-sticky d-lg-block" style="top: 20px; margin: 0; width: 100%; box-sizing: border-box;">
@@ -143,26 +203,6 @@
 					<i class="bi bi-arrow-left me-2"></i>Back to Subjects
 				</button>
 				
-				<!-- Context Info -->
-				<div class="card border-info mt-3">
-					<div class="card-header bg-info text-white py-2">
-						<h6 class="card-title mb-0">
-							<i class="bi bi-info-circle me-2"></i>Current Session
-						</h6>
-					</div>
-					<div class="card-body p-2">
-						<small>
-							<div class="mb-1">
-								<i class="bi bi-book me-2"></i>
-								<strong>Subject:</strong> {currentSubject?.name}
-							</div>
-							<div>
-								<i class="bi bi-clipboard-check me-2"></i>
-								<strong>Assessment:</strong> {currentAssessment?.name}
-							</div>
-						</small>
-					</div>
-				</div>
 				
 				<!-- Action Buttons - Only show in feedback page (3rd level) -->
 				{#if currentView === 'feedback' && currentAssessment}
@@ -191,7 +231,120 @@
 	</div>
 </div>
 
+<!-- Percentage Range Card - Only show on feedback page (level 3) -->
+{#if currentView === 'feedback' && currentAssessment}
+<div class="card mt-3" style="margin: 0; width: 100%; box-sizing: border-box;">
+	<div class="card-header bg-info text-white">
+		<h5 class="card-title mb-0">
+			<i class="bi bi-percent me-2"></i>Percentage Ranges
+		</h5>
+	</div>
+	
+	<div class="card-body py-2">
+		<!-- Add new range form -->
+		<div class="mb-2">
+			<div class="d-flex align-items-end gap-1 mb-2 justify-content-center">
+				<div class="flex-shrink-0" style="width: 60px;">
+					<label for="newValue" class="form-label small fw-bold mb-1 compact-label">Value:</label>
+					<input 
+						type="text" 
+						id="newValue"
+						class="form-control form-control-sm compact-input" 
+						placeholder="Value"
+						bind:value={newValue}
+						inputmode="decimal"
+					>
+				</div>
+				<div class="flex-shrink-0" style="width: 80px;">
+					<label for="newColor" class="form-label small fw-bold mb-1 compact-label">Color:</label>
+					<select id="newColor" class="form-select form-select-sm compact-input" bind:value={newColor}>
+						{#each colorOptions as option}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+					</select>
+				</div>
+				<div class="flex-shrink-0" style="width: 60px;">
+					<label for="newLowerPercentage" class="form-label small fw-bold mb-1 compact-label">Lower %:</label>
+					<input 
+						type="text" 
+						id="newLowerPercentage"
+						class="form-control form-control-sm compact-input" 
+						placeholder="0"
+						bind:value={newLowerPercentage}
+						inputmode="decimal"
+					>
+				</div>
+				<div class="flex-shrink-0" style="width: 60px;">
+					<label for="newUpperPercentage" class="form-label small fw-bold mb-1 compact-label">Upper %:</label>
+					<input 
+						type="text" 
+						id="newUpperPercentage"
+						class="form-control form-control-sm compact-input" 
+						placeholder="100"
+						bind:value={newUpperPercentage}
+						inputmode="decimal"
+					>
+				</div>
+			</div>
+			<div class="d-flex justify-content-center">
+				<button 
+					class="btn btn-primary btn-sm" 
+					onclick={addPercentageRange}
+					disabled={newValue === '' || newLowerPercentage === '' || newUpperPercentage === ''}
+				>
+					<i class="bi bi-plus-circle me-1"></i>Add Range
+				</button>
+			</div>
+		</div>
+
+		<!-- Display existing ranges -->
+		{#if percentageRanges.length > 0}
+			<div class="mt-2">
+				<h6 class="small fw-bold text-muted mb-1">Calculated Ranges:</h6>
+				<div class="list-group list-group-flush">
+					{#each percentageRanges as range}
+						<div class="list-group-item px-0 py-1 border-0">
+							<div class="d-flex align-items-center justify-content-between">
+								<div class="d-flex align-items-center">
+									<div class="badge me-2 d-flex align-items-center justify-content-center" style="width: 20px; height: 20px; border-radius: 4px; font-size: 0.7rem; {getColorStyle(range.color)}">
+										{range.color.charAt(0).toUpperCase()}
+									</div>
+									<div class="d-flex align-items-center gap-2">
+										<span class="small fw-bold">{range.value}</span>
+										<span class="small text-muted">
+											{range.calculatedLower} - {range.calculatedUpper}
+										</span>
+									</div>
+								</div>
+								<i 
+									class="bi bi-trash text-danger" 
+									onclick={() => deletePercentageRange(range.id)}
+									onkeydown={(e) => e.key === 'Enter' && deletePercentageRange(range.id)}
+									title="Delete range"
+									aria-label="Delete percentage range"
+									style="cursor: pointer; font-size: 0.8rem;"
+									role="button"
+									tabindex="0"
+								></i>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{:else}
+			<div class="text-center py-3">
+				<i class="bi bi-percent text-muted me-2" style="font-size: 1.2rem;"></i>
+				<span class="text-muted small">No percentage ranges yet. Add your first range above.</span>
+			</div>
+		{/if}
+	</div>
+</div>
+{/if}
+
 <style>
+.compact-label { font-size: 0.5rem; }
+.compact-input { padding-top: 0.05rem; padding-bottom: 0.05rem; height: 24px; font-size: 0.65rem; }
+.compact-input.form-select { padding-top: 0.05rem; padding-bottom: 0.05rem; height: 24px; font-size: 0.8rem; }
 	.action-btn {
 		border: none;
 		border-radius: 12px;
