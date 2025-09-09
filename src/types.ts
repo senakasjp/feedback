@@ -22,6 +22,7 @@ export interface Category {
 	name: string;
 	description?: string;
 	knowledgeArea?: string;
+	allocatedMarks?: number;
 }
 
 export interface Paragraph {

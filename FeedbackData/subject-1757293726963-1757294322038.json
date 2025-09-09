@@ -3,6 +3,10 @@
     {
       "text": "Executive Summary: The student provides a clear, concise, and well-structured summary covering all required elements. Demonstrates strong understanding of the project, highlighting key findings and recommendations with no factual errors.",
       "color": "green"
+    },
+    {
+      "text": "Technical Architecture Analysis: Test",
+      "color": "red"
     }
   ],
   "selectedParagraphs": [],
@@ -11,5 +15,5 @@
   "categoryMarks": {
     "Executive Summary": "66"
   },
-  "manualTotalMarks": ""
+  "manualTotalMarks": "30"
 }

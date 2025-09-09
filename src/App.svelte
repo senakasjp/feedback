@@ -34,6 +34,7 @@
 	let selectedColor = $state('red')
 	let newCategoryName = $state('')
 	let newCategoryKnowledgeArea = $state('')
+	let newCategoryAllocatedMarks = $state('')
 	let newKnowledgeAreaName = $state('')
 	let availableKnowledgeAreas = $state([])
 	let categoryMarks = $state({}) // Store marks for each category
@@ -390,12 +391,14 @@
 			const newCategory = {
 				id: Date.now().toString(),
 				name: newCategoryName.trim(),
-				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined
+				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined,
+				allocatedMarks: newCategoryAllocatedMarks ? parseFloat(newCategoryAllocatedMarks) : undefined
 			}
 			
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
 			newCategoryName = ''
 			newCategoryKnowledgeArea = ''
+			newCategoryAllocatedMarks = ''
 			
 			// Update the current subject's assessments
 			if (currentSubject) {
@@ -449,6 +452,27 @@
 		categoryMarks[category] = marks
 		categoryMarks = {...categoryMarks} // trigger reactivity
 		saveAssessmentData()
+	}
+
+	function updateCategoryAllocatedMarks(categoryName, allocatedMarks) {
+		if (currentAssessment && currentAssessment.categories) {
+			const categoryIndex = currentAssessment.categories.findIndex(cat => cat.name === categoryName)
+			if (categoryIndex !== -1) {
+				currentAssessment.categories[categoryIndex].allocatedMarks = allocatedMarks ? parseFloat(allocatedMarks) : undefined
+				
+				// Update the current subject's assessments
+				if (currentSubject) {
+					const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+					if (subjectIndex !== -1) {
+						const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+						if (assessmentIndex !== -1) {
+							subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+							saveSubjects()
+						}
+					}
+				}
+			}
+		}
 	}
 
 	function getTotalMarks() {
@@ -1344,7 +1368,7 @@
 													id="studentSelect" 
 													class="form-select flex-grow-1" 
 													bind:value={currentStudentId}
-													onchange={(e) => selectStudent(e.target.value)}
+													onchange={(e) => selectStudent(e.currentTarget.value)}
 												>
 													<option value="">Select a student...</option>
 													{#each students as student}
@@ -1521,28 +1545,44 @@
 										{#if showAddCategoryKnowledgeArea}
 											<!-- Add Category Form -->
 											<div class="mb-3">
-												<label for="categoryName" class="form-label">Category Name:</label>
-												<div class="input-group">
-													<input
-														id="categoryName"
-														type="text"
-														class="form-control"
-														placeholder="Enter category name..."
-														bind:value={newCategoryName}
-														onkeydown={(e) => {
-															if (e.key === 'Enter') {
-																e.preventDefault();
-																addCategory();
-															}
-														}}
-													>
-													<button 
-														class="btn btn-outline-primary"
-														onclick={addCategory}
-														disabled={!newCategoryName.trim()}
-													>
-														<i class="bi bi-plus-circle me-1"></i>Add
-													</button>
+												<div class="row g-2">
+													<div class="col-md-6">
+														<label for="categoryName" class="form-label">Category Name:</label>
+														<input
+															id="categoryName"
+															type="text"
+															class="form-control"
+															placeholder="Enter category name..."
+															bind:value={newCategoryName}
+															onkeydown={(e) => {
+																if (e.key === 'Enter') {
+																	e.preventDefault();
+																	addCategory();
+																}
+															}}
+														>
+													</div>
+													<div class="col-md-4">
+														<label for="categoryAllocatedMarks" class="form-label">Allocated Marks:</label>
+														<input
+															id="categoryAllocatedMarks"
+															type="number"
+															class="form-control"
+															placeholder="Marks"
+															bind:value={newCategoryAllocatedMarks}
+															min="0"
+															step="0.5"
+														>
+													</div>
+													<div class="col-md-2 d-flex align-items-end">
+														<button 
+															class="btn btn-outline-primary w-100"
+															onclick={addCategory}
+															disabled={!newCategoryName.trim()}
+														>
+															<i class="bi bi-plus-circle me-1"></i>Add
+														</button>
+													</div>
 												</div>
 											</div>
 										{/if}
@@ -1553,7 +1593,12 @@
 												<div class="d-flex flex-wrap gap-1">
 													{#each currentAssessment.categories as category}
 														<div class="d-flex align-items-center bg-light border rounded px-1 py-0" style="font-size: 0.6rem;">
-															<span class="text-muted me-1">{category.name}</span>
+															<span class="text-muted me-1">
+																{category.name}
+																{#if category.allocatedMarks}
+																	<span class="text-primary fw-bold">({category.allocatedMarks})</span>
+																{/if}
+															</span>
 																	<button 
 																class="btn btn-sm p-0 border-0 text-danger" 
 																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
@@ -1586,23 +1631,41 @@
 														</select>
 													</div>
 													<div class="col-12">
-														<label for="categorySelect" class="form-label fw-bold">Select Category:</label>
-														<select 
-															id="categorySelect" 
-															class="form-select" 
-															bind:value={selectedCategory}
-														>
-															<option value="">Choose a category...</option>
-															{#each currentAssessment.categories as category}
-																<option value={category.name}>{category.name}</option>
-															{/each}
-														</select>
-														{#if selectedKnowledgeArea}
-															<small class="text-muted">
-																<i class="bi bi-info-circle me-1"></i>
-																Selected: {selectedKnowledgeArea}
-															</small>
-														{/if}
+														<div class="d-flex align-items-end gap-3">
+															<div class="flex-grow-1">
+																<label for="categorySelect" class="form-label fw-bold mb-1">Select Category:</label>
+																<select 
+																	id="categorySelect" 
+																	class="form-select" 
+																	bind:value={selectedCategory}
+																>
+																	<option value="">Choose a category...</option>
+																	{#each currentAssessment.categories as category}
+																		<option value={category.name}>{category.name}</option>
+																	{/each}
+																</select>
+																{#if selectedKnowledgeArea}
+																	<small class="text-muted">
+																		<i class="bi bi-info-circle me-1"></i>
+																		Selected: {selectedKnowledgeArea}
+																	</small>
+																{/if}
+															</div>
+															<div class="flex-shrink-0">
+																<label for="allocatedMarksInput" class="form-label fw-bold mb-1">Allocated Marks:</label>
+																<input 
+																	type="number" 
+																	id="allocatedMarksInput" 
+																	class="form-control" 
+																	placeholder="Marks"
+																	min="0"
+																	step="0.5"
+																	style="width: 80px;"
+																	value={currentAssessment.categories.find(cat => cat.name === selectedCategory)?.allocatedMarks || ''}
+																	oninput={(e) => updateCategoryAllocatedMarks(selectedCategory, e.currentTarget.value)}
+																>
+															</div>
+														</div>
 													</div>
 												</div>
 											</div>
@@ -1665,7 +1728,7 @@
 												style="width: 80px;"
 												placeholder="0"
 												value={manualTotalMarks || ''}
-												oninput={(e) => updateTotalMarks(e.target.value)}
+												oninput={(e) => updateTotalMarks(e.currentTarget.value)}
 												min="0"
 												step="0.5"
 											>
@@ -1704,10 +1767,15 @@
 																		style="width: 80px;"
 																		placeholder="0"
 																		value={categoryMarks[group.category] || ''}
-																		oninput={(e) => updateCategoryMarks(group.category, e.target.value)}
+																		oninput={(e) => updateCategoryMarks(group.category, e.currentTarget.value)}
 																		min="0"
 																		step="0.5"
 																	>
+																	{#if currentAssessment.categories.find(cat => cat.name === group.category)?.allocatedMarks}
+																		<span class="text-white fw-bold" style="font-size: 0.9rem;">
+																			{currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
+																		</span>
+																	{/if}
 																</div>
 															{/if}
 														</div>

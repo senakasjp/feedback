@@ -1,10 +1,11 @@
 <script lang="ts">
-    // Types
-    type Category = {
-        id: string;
-        name: string;
-        description?: string;
-    }
+	// Types
+		type Category = {
+		id: string;
+		name: string;
+		description?: string;
+		allocatedMarks?: number;
+	}
 
     // Props
     let { 
@@ -18,6 +19,7 @@
     // Local state
     let newCategoryName = $state('');
     let newCategoryDescription = $state('');
+    let newCategoryAllocatedMarks = $state('');
 
     // Functions
     function addCategory() {
@@ -25,11 +27,13 @@
             categories = [...categories, {
                 id: Date.now().toString(),
                 name: newCategoryName.trim(),
-                description: newCategoryDescription.trim() || undefined
+                description: newCategoryDescription.trim() || undefined,
+                allocatedMarks: newCategoryAllocatedMarks ? parseFloat(newCategoryAllocatedMarks) : undefined
             }];
             
             newCategoryName = '';
             newCategoryDescription = '';
+            newCategoryAllocatedMarks = '';
             
             // Notify parent that categories have changed
             if (onUpdateCategories) {
@@ -94,6 +98,20 @@
                 >
             </div>
             
+            <div class="form-group mb-3">
+                <label for="category-allocated-marks" class="form-label">Allocated Marks (Optional)</label>
+                <input
+                    id="category-allocated-marks"
+                    type="number"
+                    class="form-control"
+                    placeholder="Enter allocated marks for this category"
+                    bind:value={newCategoryAllocatedMarks}
+                    onkeydown={handleKeydown}
+                    min="0"
+                    step="0.5"
+                >
+            </div>
+            
             <div class="form-actions">
                 <button 
                     class="btn btn-primary"
@@ -120,6 +138,11 @@
                                 <div class="category-name">{category.name}</div>
                                 {#if category.description}
                                     <div class="category-description">{category.description}</div>
+                                {/if}
+                                {#if category.allocatedMarks}
+                                    <div class="category-allocated-marks text-muted small">
+                                        <i class="bi bi-award me-1"></i>Allocated: {category.allocatedMarks} marks
+                                    </div>
                                 {/if}
                             </div>
                             <button 
