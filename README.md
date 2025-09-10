@@ -289,6 +289,62 @@ The application stores data in JSON format with hierarchical structure:
 }
 ```
 
+## Data Structure Relationships
+
+The application follows a **many-to-many relationship model** where students can be enrolled in multiple subjects, and each subject contains multiple assessments:
+
+### 📊 Entity Relationships
+
+```
+Students (1 or more)
+├── Can be enrolled in multiple Subjects
+└── Can have evaluations across different Assessments
+
+Subjects (1 or more per student)
+├── Contains multiple Assessments (1 or more)
+└── Each Assessment belongs to exactly one Subject
+
+Assessments (1 or more per subject)
+├── Belongs to exactly one Subject
+├── Contains multiple Topics and Categories
+└── Can have multiple Student evaluations
+```
+
+### 🔗 Key Relationships
+
+- **Student ↔ Subject**: **Many-to-Many** - A student can take multiple subjects, and a subject can have multiple students
+- **Subject ↔ Assessment**: **One-to-Many** - Each subject contains multiple assessments, each assessment belongs to one subject
+- **Student ↔ Assessment**: **Many-to-Many** - A student can be evaluated on multiple assessments across different subjects
+
+### 💾 Data Storage Structure
+
+#### Global Data (`feedback-data.json`)
+- **Subjects**: Array of all subjects with their assessments
+- **Students**: Array of all registered students
+- **Knowledge Areas**: Global knowledge area definitions
+- **Categories**: Global category templates
+- **Percentage Ranges**: Universal percentage range definitions
+
+#### Subject-Specific Data (`subject-{subjectId}-{assessmentId}.json`)
+- **Assessment Details**: Topics, categories, and configuration
+- **Feedback Paragraphs**: All available feedback content
+- **Selected Paragraphs**: Indices of currently selected content
+
+#### Student Evaluation Data (`student-evaluation-{studentId}-{assessmentId}.json`)
+- **Student-Specific Content**: Individual evaluation data per student-assessment combination
+- **Selected Paragraphs**: Student-specific paragraph selections
+- **Marks**: Category marks and total marks for the student
+- **Student Information**: Name, photo, and metadata
+
+### 🎯 Practical Implications
+
+This structure allows for:
+- **Multi-Subject Support**: Students can be evaluated across different academic subjects
+- **Flexible Assessment Management**: Each subject can have its own set of assessments
+- **Individual Student Tracking**: Each student's progress is tracked separately per assessment
+- **Data Isolation**: Student evaluations are stored independently, preventing data conflicts
+- **Scalable Organization**: Easy to add new subjects, assessments, and students without affecting existing data
+
 ### Assessment Data Format
 Each assessment stores student-specific data:
 

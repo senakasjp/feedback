@@ -1416,6 +1416,8 @@
 							</div>
 							<AssessmentManager 
 								assessments={currentSubject?.assessments || []}
+								students={students}
+								subjectName={currentSubject?.name || 'Unknown Subject'}
 								onSelectAssessment={(assessment) => {
 									currentAssessment = assessment
 									currentAssessmentId = assessment.id
