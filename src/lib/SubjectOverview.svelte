@@ -117,7 +117,7 @@
 										<div class="add-topic-form input-group input-group-sm mt-2">
 											<input
 												type="text"
-												class="form-control"
+												class="form-control form-control-sm"
 												placeholder="Enter topic name"
 												bind:value={newTopic}
 												onkeydown={(e) => e.key === 'Enter' && addTopic(assessment)}

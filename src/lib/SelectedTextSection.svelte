@@ -30,7 +30,7 @@
 							</button>
 						</div>
 						<textarea 
-							class="form-control" 
+							class="form-control form-control-sm" 
 							rows="10" 
 							readonly 
 							value={onGetSelectedText()}

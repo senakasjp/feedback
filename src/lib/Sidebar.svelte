@@ -1,4 +1,6 @@
 <script>
+	import { onMount, onDestroy } from 'svelte'
+	
 	// Props
 	let { 
 		subjects = [],
@@ -35,6 +37,38 @@
 	let newColor = $state('red')
 	let newLowerPercentage = $state('')
 	let newUpperPercentage = $state('')
+	
+	// Floating sidebar state
+	let sidebarElement = $state(null)
+	let isFloating = $state(false)
+	let originalTop = $state(0)
+	let scrollHandler = null
+	
+	// Floating percentage calculator state
+	let percentageElement = $state(null)
+	let isPercentageFloating = $state(false)
+	let isPercentageLocked = $state(false)
+	let percentageOriginalTop = $state(0)
+	let percentageScrollHandler = null
+	
+	// State for toggling between navigator and calculator
+	let showCalculator = $state(false)
+	
+	// Reactive statement to check when percentage element becomes available
+	$effect(() => {
+		if (percentageElement && currentView === 'feedback') {
+			// Reset floating state when element becomes available
+			isPercentageFloating = false
+		}
+	})
+	
+	// Reactive effect to monitor lock state
+	$effect(() => {
+		if (isPercentageLocked) {
+			// Force stop floating when locked
+			isPercentageFloating = false
+		}
+	})
 
 	const colorOptions = [
 		{ value: 'red', label: 'Red', class: 'bg-danger' },
@@ -64,6 +98,11 @@
 	function deletePercentageRange(id) {
 		onDeletePercentageRange(id)
 	}
+	
+	// Toggle floating function
+	function toggleFloating() {
+		isPercentageFloating = !isPercentageFloating
+	}
 
 	function getColorClass(color) {
 		const colorMap = {
@@ -86,25 +125,121 @@
 		}
 		return colorMap[color] || 'background-color: #6c757d !important;'
 	}
+	
+	// Scroll handler for floating sidebar - disabled for now to prevent layout issues
+	function handleScroll() {
+		// Disabled floating behavior to prevent layout issues
+		// if (!sidebarElement) return
+		
+		// const rect = sidebarElement.getBoundingClientRect()
+		// const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+		
+		// // Check if sidebar has reached the top of viewport
+		// if (rect.top <= 20 && !isFloating) {
+		// 	isFloating = true
+		// 	originalTop = scrollTop
+		// } else if (scrollTop <= originalTop - 50 && isFloating) {
+		// 	isFloating = false
+		// }
+	}
+	
+	// Scroll handler for floating percentage calculator
+	function handlePercentageScroll() {
+		// Only run if we're on feedback page and element exists
+		if (currentView !== 'feedback' || !percentageElement) {
+			return
+		}
+		
+		// If locked, completely ignore scroll events
+		if (isPercentageLocked) {
+			return
+		}
+		
+		const rect = percentageElement.getBoundingClientRect()
+		
+		// Check if percentage calculator has reached the top of viewport
+		if (rect.top <= 20 && !isPercentageFloating) {
+			isPercentageFloating = true
+		} else if (rect.top > 20 && isPercentageFloating) {
+			isPercentageFloating = false
+		}
+	}
+	
+	// Toggle lock function
+	function togglePercentageLock() {
+		isPercentageLocked = !isPercentageLocked
+		// If locking, stop floating immediately
+		if (isPercentageLocked) {
+			isPercentageFloating = false
+		}
+	}
+	
+	
+	// Toggle between navigator and calculator
+	function toggleView() {
+		showCalculator = !showCalculator
+	}
+	
+	// Lifecycle functions
+	onMount(() => {
+		scrollHandler = handleScroll
+		percentageScrollHandler = handlePercentageScroll
+		window.addEventListener('scroll', scrollHandler)
+		window.addEventListener('scroll', percentageScrollHandler)
+		window.addEventListener('resize', scrollHandler)
+		window.addEventListener('resize', percentageScrollHandler)
+	})
+	
+	// Reactive effect to manage scroll listeners based on lock state
+	$effect(() => {
+		// Always keep the scroll listener active, just check lock state inside
+	})
+	
+	onDestroy(() => {
+		if (scrollHandler) {
+			window.removeEventListener('scroll', scrollHandler)
+			window.removeEventListener('resize', scrollHandler)
+		}
+		if (percentageScrollHandler) {
+			window.removeEventListener('scroll', percentageScrollHandler)
+			window.removeEventListener('resize', percentageScrollHandler)
+		}
+	})
 </script>
 
-<div class="card position-sticky d-lg-block" style="top: 20px; margin: 0; width: 100%; box-sizing: border-box;">
+<div 
+	class="card position-sticky d-lg-block" 
+	style="top: 20px; margin: 0; width: 100%; box-sizing: border-box;"
+	bind:this={sidebarElement}
+>
 	<div class="card-header bg-primary text-white">
-		<h5 class="card-title mb-0">
-			<i class="bi bi-list me-2"></i>Navigation
-		</h5>
+		<div class="d-flex justify-content-between align-items-center">
+			<h5 class="card-title mb-0">
+				<i class="bi bi-{showCalculator ? 'calculator' : 'list'} me-2"></i>
+				{showCalculator ? 'Calculator' : 'Navigation'}
+			</h5>
+			<button 
+				class="btn btn-outline-light btn-sm" 
+				onclick={toggleView}
+				title={showCalculator ? 'Show Navigator' : 'Show Calculator'}
+				aria-label={showCalculator ? 'Show Navigator' : 'Show Calculator'}
+			>
+				<i class="bi bi-{showCalculator ? 'list' : 'calculator'}"></i>
+			</button>
+		</div>
 	</div>
 	
 	<div class="card-body">
-		<!-- Mobile toggle button -->
-		<div class="d-lg-none mb-3">
-			<button class="btn btn-outline-primary w-100" onclick={() => onToggleMobileSidebar()}>
-				<i class="bi bi-chevron-down me-2"></i>
-				{showMobileSidebar ? 'Hide Navigation' : 'Show Navigation'}
-			</button>
-		</div>
-		
-		<div class="{showMobileSidebar ? 'd-block' : 'd-none'} d-lg-block">
+		{#if !showCalculator}
+			<!-- Mobile toggle button -->
+			<div class="d-lg-none mb-3">
+				<button class="btn btn-outline-primary w-100" onclick={() => onToggleMobileSidebar()}>
+					<i class="bi bi-chevron-down me-2"></i>
+					{showMobileSidebar ? 'Hide Navigation' : 'Show Navigation'}
+				</button>
+			</div>
+			
+			<div class="{showMobileSidebar ? 'd-block' : 'd-none'} d-lg-block">
 		
 		{#if !currentSubject}
 			<!-- Subject List -->
@@ -208,30 +343,32 @@
 				<!-- Current Session Info - Only show in feedback page (3rd level) -->
 				{#if currentView === 'feedback' && currentAssessment}
 					<div class="mt-4 mb-4">
-						<div class="session-info">
-							<h6 class="session-title mb-3">
-								<i class="bi bi-info-circle me-2"></i>Current Session
-							</h6>
-							<div class="session-details">
-								{#if currentSubject}
-									<div class="session-item">
-										<strong>Subject:</strong> {currentSubject.name}
-									</div>
-								{/if}
-								{#if currentAssessment}
-									<div class="session-item">
-										<strong>Assessment:</strong> {currentAssessment.name}
-									</div>
-								{/if}
-								{#if currentStudentId && studentName}
-									<div class="session-item">
-										<strong>Student:</strong> {studentName}
-									</div>
-								{:else if currentStudentId}
-									<div class="session-item text-muted">
-										<strong>Student:</strong> Loading...
-									</div>
-								{/if}
+						<div class="card bg-light">
+							<div class="card-body p-3">
+								<h6 class="card-title text-primary mb-3">
+									<i class="bi bi-info-circle me-2"></i>Current Session
+								</h6>
+								<div class="small">
+									{#if currentSubject}
+										<div class="mb-2">
+											<strong>Subject:</strong> {currentSubject.name}
+										</div>
+									{/if}
+									{#if currentAssessment}
+										<div class="mb-2">
+											<strong>Assessment:</strong> {currentAssessment.name}
+										</div>
+									{/if}
+									{#if currentStudentId && studentName}
+										<div class="mb-2">
+											<strong>Student:</strong> {studentName}
+										</div>
+									{:else if currentStudentId}
+										<div class="mb-2 text-muted">
+											<strong>Student:</strong> Loading...
+										</div>
+									{/if}
+								</div>
 							</div>
 						</div>
 					</div>
@@ -242,17 +379,17 @@
 					<div class="mt-3">
 						<div class="d-grid gap-3">
 							{#if currentStudentId}
-								<button class="action-btn save-btn" onclick={onSaveStudentEvaluation}>
+								<button class="btn btn-success btn-sm w-100 mb-2" onclick={onSaveStudentEvaluation}>
 									<i class="bi bi-save me-2"></i>Save Student Data
 								</button>
-								<button class="action-btn load-btn" onclick={onLoadStudentEvaluation}>
+								<button class="btn btn-primary btn-sm w-100 mb-2" onclick={onLoadStudentEvaluation}>
 									<i class="bi bi-upload me-2"></i>Load Student Data
 								</button>
 							{/if}
-							<button class="action-btn copy-btn" onclick={onCopyToClipboard}>
+							<button class="btn btn-outline-success btn-sm w-100 mb-2" onclick={onCopyToClipboard}>
 								<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
 							</button>
-							<button class="action-btn download-btn" onclick={onGeneratePDF}>
+							<button class="btn btn-outline-danger btn-sm w-100 mb-2" onclick={onGeneratePDF}>
 								<i class="bi bi-download me-2"></i>Print to Download
 							</button>
 						</div>
@@ -261,15 +398,33 @@
 			</div>
 		{/if}
 		</div>
+		{/if}
 	</div>
 </div>
 
-<!-- Percentage Range Card - Universal across all views -->
-<div class="card mt-3" style="margin: 0; width: 100%; box-sizing: border-box;">
+{#if showCalculator}
+<!-- Percentage Range Card - Only show on feedback page -->
+{#if currentView === 'feedback'}
+<div 
+	class="card mt-3" 
+	class:floating-percentage={isPercentageFloating}
+	class:locked={isPercentageLocked}
+	style="margin: 0; width: 100%; box-sizing: border-box;"
+	bind:this={percentageElement}
+>
 	<div class="card-header bg-info text-white">
-		<h5 class="card-title mb-0">
-			<i class="bi bi-percent me-2"></i>Percentage Ranges
-		</h5>
+		<div class="d-flex justify-content-between align-items-center">
+			<h5 class="card-title mb-0">
+				<i class="bi bi-percent me-2"></i>Percentage Ranges
+			</h5>
+			<button 
+				class="btn btn-sm btn-outline-light" 
+				onclick={togglePercentageLock}
+				title={isPercentageLocked ? 'Unlock floating' : 'Lock floating'}
+			>
+				{isPercentageLocked ? '🔒' : '🔓'}
+			</button>
+		</div>
 	</div>
 	
 	<div class="card-body py-2">
@@ -278,33 +433,33 @@
 			<!-- First row: Value and Percentage inputs -->
 			<div class="d-flex align-items-end gap-1 mb-2 justify-content-center">
 				<div class="flex-shrink-0" style="width: 60px;">
-					<label for="newValue" class="form-label small fw-bold mb-1 compact-label">Value:</label>
+					<label for="newValue" class="form-label small fw-bold mb-1">Value:</label>
 					<input 
 						type="text" 
 						id="newValue"
-						class="form-control form-control-sm compact-input" 
+						class="form-control form-control-sm" 
 						placeholder="Value"
 						bind:value={newValue}
 						inputmode="decimal"
 					>
 				</div>
 				<div class="flex-shrink-0" style="width: 60px;">
-					<label for="newLowerPercentage" class="form-label small fw-bold mb-1 compact-label">Lower %:</label>
+					<label for="newLowerPercentage" class="form-label small fw-bold mb-1">Lower %:</label>
 					<input 
 						type="text" 
 						id="newLowerPercentage"
-						class="form-control form-control-sm compact-input" 
+						class="form-control form-control-sm" 
 						placeholder="0"
 						bind:value={newLowerPercentage}
 						inputmode="decimal"
 					>
 				</div>
 				<div class="flex-shrink-0" style="width: 60px;">
-					<label for="newUpperPercentage" class="form-label small fw-bold mb-1 compact-label">Upper %:</label>
+					<label for="newUpperPercentage" class="form-label small fw-bold mb-1">Upper %:</label>
 					<input 
 						type="text" 
 						id="newUpperPercentage"
-						class="form-control form-control-sm compact-input" 
+						class="form-control form-control-sm" 
 						placeholder="100"
 						bind:value={newUpperPercentage}
 						inputmode="decimal"
@@ -314,8 +469,8 @@
 			<!-- Second row: Color dropdown and Add button -->
 			<div class="d-flex align-items-end gap-2 mb-2 justify-content-center">
 				<div class="flex-shrink-0" style="width: 80px;">
-					<label for="newColor" class="form-label small fw-bold mb-1 compact-label">Color:</label>
-					<select id="newColor" class="form-select form-select-sm compact-input" bind:value={newColor}>
+					<label for="newColor" class="form-label small fw-bold mb-1">Color:</label>
+					<select id="newColor" class="form-select form-select-sm" bind:value={newColor}>
 						{#each colorOptions as option}
 							<option value={option.value}>{option.label}</option>
 						{/each}
@@ -374,139 +529,165 @@
 	</div>
 </div>
 
+
+<!-- Floating Percentage Calculator Overlay -->
+{#if currentView === 'feedback' && isPercentageFloating && !isPercentageLocked}
+<div class="position-fixed top-0 start-0 p-3" style="z-index: 1051; width: 300px; max-height: calc(100vh - 40px); overflow-y: auto;">
+	<div class="card shadow-lg border-info">
+		<div class="card-header bg-info text-white">
+			<div class="d-flex justify-content-between align-items-center">
+				<h5 class="card-title mb-0">
+					<i class="bi bi-percent me-2"></i>Percentage Ranges
+				</h5>
+				<button 
+					class="btn btn-sm btn-outline-light" 
+					onclick={togglePercentageLock}
+					title={isPercentageLocked ? 'Unlock floating' : 'Lock floating'}
+				>
+					{isPercentageLocked ? '🔒' : '🔓'}
+				</button>
+			</div>
+		</div>
+		
+		<div class="card-body py-2">
+			<!-- Add new range form -->
+			<div class="mb-2">
+				<!-- First row: Value and Percentage inputs -->
+				<div class="d-flex align-items-end gap-1 mb-2 justify-content-center">
+					<div class="flex-shrink-0" style="width: 60px;">
+						<label for="newValueFloat" class="form-label small fw-bold mb-1">Value:</label>
+						<input 
+							type="text" 
+							id="newValueFloat"
+							class="form-control form-control-sm" 
+							placeholder="Value"
+							bind:value={newValue}
+							inputmode="decimal"
+						>
+					</div>
+					<div class="flex-shrink-0" style="width: 60px;">
+						<label for="newLowerPercentageFloat" class="form-label small fw-bold mb-1">Lower %:</label>
+						<input 
+							type="text" 
+							id="newLowerPercentageFloat"
+							class="form-control form-control-sm" 
+							placeholder="0"
+							bind:value={newLowerPercentage}
+							inputmode="decimal"
+						>
+					</div>
+					<div class="flex-shrink-0" style="width: 60px;">
+						<label for="newUpperPercentageFloat" class="form-label small fw-bold mb-1">Upper %:</label>
+						<input 
+							type="text" 
+							id="newUpperPercentageFloat"
+							class="form-control form-control-sm" 
+							placeholder="100"
+							bind:value={newUpperPercentage}
+							inputmode="decimal"
+						>
+					</div>
+				</div>
+				<!-- Second row: Color dropdown and Add button -->
+				<div class="d-flex align-items-end gap-2 mb-2 justify-content-center">
+					<div class="flex-shrink-0" style="width: 80px;">
+						<label for="newColorFloat" class="form-label small fw-bold mb-1">Color:</label>
+						<select id="newColorFloat" class="form-select form-select-sm" bind:value={newColor}>
+							{#each colorOptions as option}
+								<option value={option.value}>{option.label}</option>
+							{/each}
+						</select>
+					</div>
+					<button 
+						class="btn btn-primary btn-sm" 
+						onclick={addPercentageRange}
+						disabled={newValue === '' || newLowerPercentage === '' || newUpperPercentage === ''}
+					>
+						<i class="bi bi-plus-circle me-1"></i>Add Range
+					</button>
+				</div>
+			</div>
+
+			<!-- Display existing ranges -->
+			{#if percentageRanges.length > 0}
+				<div class="mt-2">
+					<h6 class="small fw-bold text-muted mb-1">Calculated Ranges:</h6>
+					<div class="list-group list-group-flush">
+						{#each percentageRanges as range}
+							<div class="list-group-item px-0 py-1 border-0">
+								<div class="d-flex align-items-center justify-content-between">
+									<div class="d-flex align-items-center">
+										<div class="badge me-2 d-flex align-items-center justify-content-center" style="width: 20px; height: 20px; border-radius: 4px; font-size: 0.7rem; {getColorStyle(range.color)}">
+											{range.color.charAt(0).toUpperCase()}
+										</div>
+										<div class="d-flex align-items-center gap-2">
+											<span class="small fw-bold">{range.value}</span>
+											<span class="small text-muted">
+												{range.calculatedLower} - {range.calculatedUpper}
+											</span>
+										</div>
+									</div>
+									<i 
+										class="bi bi-trash text-danger" 
+										onclick={() => deletePercentageRange(range.id)}
+										onkeydown={(e) => e.key === 'Enter' && deletePercentageRange(range.id)}
+										title="Delete range"
+										aria-label="Delete percentage range"
+										style="cursor: pointer; font-size: 0.8rem;"
+										role="button"
+										tabindex="0"
+									></i>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{:else}
+				<div class="text-center py-3">
+					<i class="bi bi-percent text-muted me-2" style="font-size: 1.2rem;"></i>
+					<span class="text-muted small">No percentage ranges yet. Add your first range above.</span>
+				</div>
+			{/if}
+		</div>
+	</div>
+</div>
+{/if}
+{/if}
+{/if}
+
 <style>
-.compact-label { font-size: 0.5rem; }
-.compact-input { padding-top: 0.05rem; padding-bottom: 0.05rem; height: 24px; font-size: 0.65rem; }
-.compact-input.form-select { padding-top: 0.05rem; padding-bottom: 0.05rem; height: 24px; font-size: 0.8rem; }
-	.action-btn {
-		border: none;
-		border-radius: 12px;
-		padding: 12px 16px;
-		font-weight: 600;
-		font-size: 14px;
-		color: white;
-		cursor: pointer;
-		transition: all 0.3s ease;
-		position: relative;
-		overflow: hidden;
-		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-		text-align: left;
-		display: flex;
-		align-items: center;
-		width: 100%;
+	
+	
+	
+	
+	
+	
+	/* Hide original percentage calculator when floating */
+	.floating-percentage {
+		opacity: 0.3 !important;
+		pointer-events: none !important;
+		background-color: rgba(255, 255, 255, 0.5) !important;
 	}
 	
-	.action-btn:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+	/* Locked state styling */
+	.locked {
+		border: 2px solid #dc3545 !important;
+		background-color: #fff5f5 !important;
 	}
 	
-	.action-btn:active {
-		transform: translateY(0);
-		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+	.locked .card-header {
+		background-color: #dc3545 !important;
 	}
 	
-	.copy-btn {
-		background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-	}
-	
-	.copy-btn:hover {
-		background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
-		box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
-	}
-	
-	.download-btn {
-		background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);
-	}
-	
-	.download-btn:hover {
-		background: linear-gradient(135deg, #c82333 0%, #d63384 100%);
-		box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
-	}
-	
-	.save-btn {
-		background: linear-gradient(135deg, #198754 0%, #146c43 100%);
-	}
-	
-	.save-btn:hover {
-		background: linear-gradient(135deg, #146c43 0%, #0f5132 100%);
-		box-shadow: 0 6px 20px rgba(25, 135, 84, 0.4);
-	}
-	
-	.load-btn {
-		background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
-	}
-	
-	.load-btn:hover {
-		background: linear-gradient(135deg, #0b5ed7 0%, #0a58ca 100%);
-		box-shadow: 0 6px 20px rgba(13, 110, 253, 0.4);
-	}
-	
-	.action-btn i {
-		font-size: 16px;
-	}
-	
-	/* Sidebar button styles */
-	.btn-outline-primary,
-	.btn-outline-success {
-		background-color: transparent !important;
-		border: 1px solid currentColor !important;
-		text-align: left !important;
-		color: #333 !important;
-		justify-content: flex-start !important;
-	}
-	
-	.btn-outline-primary:hover,
-	.btn-outline-success:hover {
-		background-color: rgba(0, 0, 0, 0.05) !important;
-		color: #333 !important;
-	}
-	
-	.btn-outline-primary strong,
-	.btn-outline-success strong {
-		color: #333 !important;
-		text-align: left !important;
-	}
-	
-	.btn-outline-primary .d-flex,
-	.btn-outline-success .d-flex {
-		justify-content: flex-start !important;
-		text-align: left !important;
-	}
-	
-	/* Spacing between buttons in groups */
-	.btn-group .btn + .btn {
-		margin-left: 0.25rem !important;
-	}
-	
-	/* Session Info Styles */
-	.session-info {
-		padding: 0;
-	}
-	
-	.session-title {
-		color: #495057;
-		font-size: 1rem;
-		font-weight: 600;
-		margin-bottom: 0.75rem;
-	}
-	
-	.session-details {
-		font-size: 0.9rem;
-		line-height: 1.5;
-	}
-	
-	.session-item {
-		margin-bottom: 0.4rem;
-		color: #6c757d;
-	}
-	
-	.session-item:last-child {
-		margin-bottom: 0;
-	}
-	
-	.session-item strong {
-		color: #495057;
-		font-weight: 600;
+	/* Ensure floating percentage calculator doesn't interfere with mobile layout */
+	@media (max-width: 991.98px) {
+		.floating-percentage {
+			opacity: 1 !important;
+			pointer-events: auto !important;
+		}
+		
+		.position-fixed {
+			display: none !important;
+		}
 	}
 </style>

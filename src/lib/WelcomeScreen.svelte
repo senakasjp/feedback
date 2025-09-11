@@ -7,7 +7,7 @@
 	} = $props()
 </script>
 
-<div class="p-3 border bg-light content-area" style="border-radius: 8px; margin-top: 20px; margin-bottom: 20px;">
+<div class="p-3 border bg-light rounded" style="margin-top: 20px; margin-bottom: 20px;">
 	<h2>Welcome to Feedback Manager</h2>
 	<p>Select a subject from the sidebar to get started, or create a new subject.</p>
 	
@@ -15,7 +15,7 @@
 		<div class="row">
 			{#each subjects as subject}
 				<div class="col-xl-3 col-lg-4 col-md-6 col-sm-12 mb-4">
-					<div class="card h-100 shadow-sm border-0 subject-card">
+					<div class="card h-100 shadow-sm border-0">
 						<div class="card-body d-flex flex-column text-center p-4 position-relative">
 							<!-- Delete button in top-right corner -->
 							<button 

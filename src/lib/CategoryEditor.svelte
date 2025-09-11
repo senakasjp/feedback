@@ -79,7 +79,7 @@
                 <input
                     id="category-name"
                     type="text"
-                    class="form-control"
+                    class="form-control form-control-sm"
                     placeholder="e.g., Writing Skills, Math Concepts"
                     bind:value={newCategoryName}
                     onkeydown={handleKeydown}
@@ -91,7 +91,7 @@
                 <input
                     id="category-description"
                     type="text"
-                    class="form-control"
+                    class="form-control form-control-sm"
                     placeholder="Brief description of this category"
                     bind:value={newCategoryDescription}
                     onkeydown={handleKeydown}
@@ -103,7 +103,7 @@
                 <input
                     id="category-allocated-marks"
                     type="number"
-                    class="form-control"
+                    class="form-control form-control-sm"
                     placeholder="Enter allocated marks for this category"
                     bind:value={newCategoryAllocatedMarks}
                     onkeydown={handleKeydown}

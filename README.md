@@ -31,6 +31,19 @@ Subject (1 or more)
 - **Category Management**: Add, edit, and remove categories for each assessment
 - **Topic Management**: Organize feedback with topics and categories
 - **Reusable Categories**: Categories created for an assessment can be used for all students
+- **Assessment Weighting**: Set percentage weights for each assessment
+- **Student Marks Table**: View all students with their marks for each assessment
+- **Weighted Calculations**: Automatic calculation of weighted marks (marks × weight percentage)
+- **Final Grade Calculation**: Calculate overall grades based on weighted assessments
+- **CSV Export**: Export student marks table to Excel-compatible CSV format
+
+### 🎯 Grading System
+- **Letter Grades**: Automatic grade calculation (A+ to E) based on percentage scores
+- **Grading Scale**: Professional grading scale with 10 grade levels
+- **Final Grade Calculation**: Overall grade based on weighted assessment scores
+- **Visual Indicators**: Color-coded progress bars showing student performance
+- **Performance Spectrum**: Red-to-green color gradient for easy performance comparison
+- **Grade Display**: Clear grade badges in student marks table
 
 ### 🏷️ Universal Category System
 - **Universal Support**: Works with any assessment type, not just PDR assessments
@@ -63,6 +76,8 @@ Subject (1 or more)
 - **Real-time Display**: Shows calculated ranges with color indicators
 - **Easy Management**: Add and delete ranges with simple form interface
 - **Cross-Session Persistence**: Data automatically loads when app reopens
+- **Floating Calculator**: Percentage calculator floats on the right side when scrolling on feedback page
+- **Smart Detection**: Automatically detects when calculator reaches top of viewport
 
 ### 👤 Student Information
 - **Student Name**: Enter and store student names
@@ -74,8 +89,10 @@ Subject (1 or more)
 - **Professional Reports**: Generate PDF reports with selected feedback
 - **Full-Width Header**: Student photos span the entire page width (edge-to-edge)
 - **Aspect Ratio Preserved**: Images maintain proportions while filling page width
-- **Dynamic Filename**: PDFs named automatically (e.g., `feedback-report-John-Doe.pdf`)
+- **Dynamic Filename**: PDFs named automatically (e.g., `Feedback Report - Subject - Assessment - Student.pdf`)
 - **Clean Layout**: Professional formatting with proper spacing and typography
+- **Organized Storage**: PDFs saved to `Feedback_PDFs` folder in Downloads directory
+- **Clean Filenames**: No unnecessary hyphens, professional naming convention
 
 ### 💾 Data Persistence
 - **Portable Storage**: Data stored in local `FeedbackData` folder next to executable
@@ -162,7 +179,7 @@ npm run tauri build
 1. Run `npm run tauri build`
 2. Find the executable in `src-tauri/target/release/`
 3. Copy the entire app folder to any computer
-4. Data is stored in `FeedbackData/feedback.txt` alongside the executable
+4. Data is stored in `FeedbackData/feedback-data.json` alongside the executable
 
 ## Usage
 
@@ -225,7 +242,9 @@ feedback-app/
 │   ├── tauri.conf.json    # Tauri configuration
 │   └── capabilities/      # Permission definitions
 ├── FeedbackData/          # Data storage (created at runtime)
-│   └── feedback.txt       # JSON data file
+│   ├── feedback-data.json # Main data file
+│   ├── subject-*.json     # Individual assessment files
+│   └── student-evaluation-*.json # Student evaluation data
 └── package.json           # Node.js dependencies
 ```
 
@@ -802,3 +821,16 @@ read_student_evaluation(student_id, assessment_id)
   - Cross-platform data persistence with Tauri backend
   - Backward compatibility with existing data
   - Professional workflow for student evaluation management
+- **v2.3.0** - **ASSESSMENT WEIGHTING & GRADING SYSTEM**
+  - Assessment weighting system with percentage-based weights
+  - Student marks table with all students and their assessment scores
+  - Weighted marks calculation (marks × weight percentage)
+  - Final grade calculation based on weighted assessments
+  - Letter grading system (A+ to E) with professional grading scale
+  - Visual performance indicators with color-coded progress bars
+  - CSV export functionality for student marks table
+  - Inline weight editing in table headers
+  - Proportional performance bars with red-to-green color spectrum
+  - Clean PDF filename format and organized storage in Downloads/Feedback_PDFs
+  - Floating percentage calculator on feedback page
+  - Smart scroll detection for floating elements

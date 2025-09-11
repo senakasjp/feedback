@@ -1368,7 +1368,7 @@
 									<p class="lead text-muted">Manage your subjects and assessments</p>
 			</div>
 								<button 
-									class="btn btn-primary btn-lg"
+									class="btn btn-primary btn-sm"
 									onclick={() => showAddSubject = true}
 								>
 									<i class="bi bi-plus-circle me-2"></i>Add Subject
@@ -1447,7 +1447,7 @@
 										<p class="lead text-muted">Subject: {currentSubject?.name}</p>
 									</div>
 									<button 
-										class="btn btn-outline-secondary btn-lg"
+										class="btn btn-outline-secondary btn-sm"
 										onclick={() => updateView('assessments')}
 									>
 										<i class="bi bi-arrow-left me-2"></i>Back to Assessments
@@ -1510,11 +1510,11 @@
 										</div>
 										<div class="col-12">
 											<label for="studentImageInput" class="form-label fw-bold">Student Photo:</label>
-											<div class="input-group input-group-lg">
+											<div class="input-group input-group-sm">
 												<input 
 													id="studentImageInput" 
 													type="file" 
-													class="form-control" 
+													class="form-control form-control-sm" 
 													accept="image/*"
 													onchange={handleImageUpload}
 												>
@@ -1523,8 +1523,7 @@
 														<img 
 															src={studentImage} 
 															alt="Student" 
-															class="rounded"
-															style="width: 40px; height: 40px; object-fit: cover;"
+															class="rounded" style="width: 40px; height: 40px; object-fit: cover;"
 														>
 													</span>
 												{/if}
@@ -1548,15 +1547,15 @@
 								<div class="card-body">
 									<div class="mb-3">
 										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
-										<div class="input-group input-group-lg">
+										<div class="input-group input-group-sm">
 											<textarea 
 												id="paragraphInput" 
-												class="form-control" 
+												class="form-control form-control-sm" 
 												rows="4" 
 												bind:value={newParagraph} 
 												placeholder="Type your paragraph here..."
 											></textarea>
-											<button class="btn btn-primary btn-lg" type="button" onclick={addParagraph}>
+											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph}>
 												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
 											</button>
 										</div>
@@ -1599,7 +1598,7 @@
 													<input
 														id="knowledgeAreaName"
 														type="text"
-														class="form-control"
+														class="form-control form-control-sm"
 														placeholder="Enter knowledge area name..."
 														bind:value={newKnowledgeAreaName}
 														onkeydown={(e) => {
@@ -1625,11 +1624,10 @@
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
 													{#each availableKnowledgeAreas as area}
-														<div class="d-flex align-items-center bg-light border rounded px-1 py-0" style="font-size: 0.6rem;">
+														<div class="d-flex align-items-center bg-light border rounded px-1 py-0 small">
 															<span class="text-muted me-1">{area}</span>
 																<button 
-																class="btn btn-sm p-0 border-0 text-danger" 
-																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
+																class="btn btn-sm p-0 border-0 text-danger" style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
 																	onclick={() => removeKnowledgeArea(area)}
 																	title="Delete knowledge area"
 																>
@@ -1656,7 +1654,7 @@
 													<input
 														id="categoryName"
 														type="text"
-														class="form-control"
+														class="form-control form-control-sm"
 														placeholder="Enter category name..."
 														bind:value={newCategoryName}
 														onkeydown={(e) => {
@@ -1682,7 +1680,7 @@
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
 													{#each currentAssessment.categories as category}
-														<div class="d-flex align-items-center bg-light border rounded px-1 py-0" style="font-size: 0.6rem;">
+														<div class="d-flex align-items-center bg-light border rounded px-1 py-0 small">
 															<span class="text-muted me-1">
 																{category.name}
 																{#if category.allocatedMarks}
@@ -1690,8 +1688,7 @@
 																{/if}
 															</span>
 																	<button 
-																class="btn btn-sm p-0 border-0 text-danger" 
-																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
+																class="btn btn-sm p-0 border-0 text-danger" style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
 																		onclick={() => removeCategory(category.id)}
 																		title="Delete category"
 																	>
@@ -1746,11 +1743,11 @@
 																<input 
 																	type="number" 
 																	id="allocatedMarksInput" 
-																	class="form-control" 
+																	class="form-control form-control-sm" 
 																	placeholder="Marks"
 																	min="0"
 																	step="0.5"
-																	style="width: 80px;"
+																	class="w-auto" style="width: 80px;"
 																	value={currentAssessment.categories.find(cat => cat.name === selectedCategory)?.allocatedMarks || ''}
 																	oninput={(e) => updateCategoryAllocatedMarks(selectedCategory, e.currentTarget.value)}
 																>
@@ -1788,8 +1785,7 @@
 											<img 
 												src={studentImage} 
 												alt="Student" 
-												class="rounded-bottom"
-												style="width: 100%; max-height: 600px; object-fit: contain;"
+												class="rounded-bottom w-100" style="max-height: 600px; object-fit: contain;"
 											>
 										</div>
 									</div>
@@ -1810,7 +1806,7 @@
 									</h5>
 										</div>
 										<div class="d-flex align-items-center gap-2">
-											<label for="total-marks-input" class="form-label text-white mb-0 fw-bold" style="color: white !important; font-weight: bold !important;">Total Marks:</label>
+											<label for="total-marks-input" class="form-label text-white mb-0 fw-bold">Total Marks:</label>
 											<input
 												type="number"
 												class="form-control form-control-sm"
@@ -1851,7 +1847,7 @@
 																		type="number" 
 																		class="form-control form-control-sm" 
 																		id="marks-{group.category}"
-																		style="width: 80px;"
+																		class="w-auto" style="width: 80px;"
 																		placeholder="0"
 																		value={categoryMarks[group.category] || ''}
 																		oninput={(e) => updateCategoryMarks(group.category, e.currentTarget.value)}
@@ -1903,11 +1899,11 @@
 																		<!-- Color indicator between checkbox and text -->
 																		{#if color}
 																			<div class="me-3 d-flex align-items-center">
-																				<div class="color-indicator" style="width: 16px; height: 16px; background-color: {getColorHex(color)}; border-radius: 3px; border: 1px solid #dee2e6;" title="Color: {color} ({getColorHex(color)})"></div>
+																				<div class="rounded border" style="width: 16px; height: 16px; background-color: {getColorHex(color)};" title="Color: {color} ({getColorHex(color)})"></div>
 																			</div>
 																		{:else}
 																			<div class="me-3 d-flex align-items-center">
-																				<div class="color-indicator" style="width: 16px; height: 16px; background-color: #f8f9fa; border-radius: 3px; border: 1px solid #dee2e6;" title="No Color"></div>
+																				<div class="rounded border bg-light" style="width: 16px; height: 16px;" title="No Color"></div>
 																			</div>
 																		{/if}
 																		<div class="flex-grow-1 me-3">
@@ -1972,7 +1968,7 @@
 							</div>
 						{/if}
 						<textarea 
-							class="form-control" 
+							class="form-control form-control-sm" 
 							rows="10" 
 							readonly 
 							value={getSelectedText()}
@@ -2103,7 +2099,7 @@
 						<input 
 							id="newStudentName"
 							type="text" 
-							class="form-control" 
+							class="form-control form-control-sm" 
 							bind:value={newStudentName}
 							placeholder="Enter student name"
 						>
@@ -2113,7 +2109,7 @@
 						<input 
 							id="newStudentId"
 							type="text" 
-							class="form-control" 
+							class="form-control form-control-sm" 
 							bind:value={newStudentId}
 							placeholder="Enter student ID"
 						>

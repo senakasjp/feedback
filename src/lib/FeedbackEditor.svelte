@@ -103,7 +103,7 @@
 			<input 
 				id="studentNameInput" 
 				type="text" 
-				class="form-control" 
+				class="form-control form-control-sm" 
 				bind:value={studentName} 
 				placeholder="Enter student name"
 				onchange={onUpdateStudentName}
@@ -115,7 +115,7 @@
 				<input 
 					id="studentImageInput" 
 					type="file" 
-					class="form-control flex-grow-1" 
+					class="form-control form-control-sm flex-grow-1" 
 					accept="image/*"
 					onchange={onHandleImageUpload}
 				>
@@ -139,7 +139,7 @@
 			<!-- Category selector -->
 			<div class="col-md-6">
 				<label for="categorySelect" class="form-label">Select category:</label>
-				<select id="categorySelect" class="form-select form-control" bind:value={selectedCategory}>
+				<select id="categorySelect" class="form-select form-control-sm" bind:value={selectedCategory}>
 					<option value="">No category (optional)</option>
 					{#each availableCategories as category}
 						<option value={category.id}>{category.name}</option>
@@ -153,7 +153,7 @@
 			<!-- Topic selector -->
 			<div class="col-md-6">
 				<label for="topicSelect" class="form-label">Select topic:</label>
-				<select id="topicSelect" class="form-select form-control" bind:value={selectedTopic}>
+				<select id="topicSelect" class="form-select form-control-sm" bind:value={selectedTopic}>
 					<option value="">No topic (optional)</option>
 					{#each availableTopics as topic}
 						<option value={topic.id}>{topic.name}</option>
@@ -173,7 +173,7 @@
 	<div class="add-paragraph-form">
 		<label for="paragraphInput" class="form-label">New paragraph:</label>
 		<div class="input-group flex-column flex-sm-row">
-			<textarea id="paragraphInput" class="form-control mb-2 mb-sm-0" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
+			<textarea id="paragraphInput" class="form-control form-control-sm mb-2 mb-sm-0" rows="3" bind:value={newParagraph} placeholder="Type your paragraph here..."></textarea>
 			<button class="btn btn-primary" type="button" onclick={onAddParagraph}>Add</button>
 		</div>
 	</div>

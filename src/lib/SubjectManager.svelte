@@ -153,7 +153,7 @@
 							<input
 								id="subjectName"
 								type="text"
-								class="form-control"
+								class="form-control form-control-sm"
 								placeholder="Enter subject name..."
 								bind:value={localNewSubjectName}
 								onkeydown={handleKeydown}
@@ -178,7 +178,7 @@
 				<div class="card border-0 shadow-sm d-flex flex-column" style="min-width: 300px; max-width: 350px; aspect-ratio: 1; height: 300px;">
 					<div class="card-header bg-white border-0 d-flex justify-content-between align-items-center flex-shrink-0">
 						<div class="d-flex align-items-center">
-							<i class="bi bi-book text-primary me-2" style="font-size: 1.5rem;"></i>
+							<i class="bi bi-book text-primary me-2 fs-4"></i>
 							<span class="fw-bold text-dark">{subject.name}</span>
 						</div>
 						<button 
@@ -229,7 +229,7 @@
 
 <!-- Custom Delete Confirmation Dialog -->
 {#if showDeleteConfirm && subjectToDelete}
-	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+	<div class="modal show d-block bg-dark bg-opacity-50" tabindex="-1">
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header bg-danger text-white">
@@ -239,7 +239,7 @@
 				</div>
 				<div class="modal-body">
 					<div class="d-flex align-items-center mb-3">
-						<i class="bi bi-book text-danger me-3" style="font-size: 2rem;"></i>
+						<i class="bi bi-book text-danger me-3 fs-2"></i>
 						<div>
 							<h6 class="mb-1">Subject: <strong>{subjectToDelete.name}</strong></h6>
 							<p class="text-muted mb-0">{subjectToDelete.assessments.length} assessment{subjectToDelete.assessments.length !== 1 ? 's' : ''}</p>

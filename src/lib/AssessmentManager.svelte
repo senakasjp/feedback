@@ -421,7 +421,7 @@
 								<input
 									id="assessmentName"
 									type="text"
-									class="form-control"
+									class="form-control form-control-sm"
 									placeholder="Enter assessment name..."
 									bind:value={localNewAssessmentName}
 									onkeydown={handleKeydown}
