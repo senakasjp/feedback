@@ -56,6 +56,7 @@
 	let newStudentName = $state('')
 	let newStudentId = $state('')
 	let showMobileSidebar = $state(false)
+	let showCalculator = $state(false) // Calculator toggle state
 	let currentView = $state('subjects') // 'subjects', 'assessments', 'feedback'
 	
 	// Force reactivity for debugging
@@ -78,6 +79,11 @@
 	// Function to update view
 	function updateView(newView) {
 		currentView = newView
+	}
+
+	// Function to toggle calculator view
+	function toggleCalculatorView() {
+		showCalculator = !showCalculator
 	}
 
 	// Breadcrumb navigation handler
@@ -1323,21 +1329,17 @@
 					{currentSubject}
 					{currentAssessment}
 					{currentView}
-					{showAddSubject}
-					{showAddAssessment}
-					{newSubjectName}
-					{newAssessmentName}
 					{showMobileSidebar}
+					{showCalculator}
 					{percentageRanges}
 					onSelectSubject={selectSubject}
 					onSelectAssessment={selectAssessment}
-					onAddSubject={addSubject}
-					onAddAssessment={addAssessment}
 					onGoBackToSubjects={goBackToSubjects}
 					onGoBackToAssessments={goBackToAssessments}
 					onToggleMobileSidebar={() => showMobileSidebar = !showMobileSidebar}
 					onToggleShowAddSubject={() => showAddSubject = !showAddSubject}
 					onToggleShowAddAssessment={() => showAddAssessment = !showAddAssessment}
+					onToggleView={toggleCalculatorView}
 					onCopyToClipboard={copyToClipboard}
 					onGeneratePDF={generatePDF}
 					onSaveStudentEvaluation={saveStudentEvaluation}
