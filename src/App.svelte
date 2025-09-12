@@ -941,7 +941,8 @@
 	// Edit paragraph functions
 	function startEditParagraph(index) {
 		editingParagraphIndex = index
-		editingParagraphText = paragraphs[index].text
+		// Extract only the main text content (without category and knowledge area prefixes)
+		editingParagraphText = extractMainTextFromParagraph(paragraphs[index].text)
 	}
 
 	function cancelEditParagraph() {
@@ -951,7 +952,10 @@
 
 	function saveEditParagraph() {
 		if (editingParagraphIndex !== null && editingParagraphText.trim()) {
-			paragraphs[editingParagraphIndex].text = editingParagraphText.trim()
+			// Reconstruct the paragraph text with original prefixes
+			const originalText = paragraphs[editingParagraphIndex].text
+			const newText = reconstructParagraphText(originalText, editingParagraphText.trim())
+			paragraphs[editingParagraphIndex].text = newText
 			editingParagraphIndex = null
 			editingParagraphText = ''
 			
@@ -961,6 +965,62 @@
 				saveStudentParagraphs()
 			}
 		}
+	}
+
+	// Helper function to extract main text from paragraph (without prefixes)
+	function extractMainTextFromParagraph(paragraphText) {
+		let text = paragraphText
+		
+		// Remove category prefix (format: "Category: text")
+		if (text.includes(': ')) {
+			const parts = text.split(': ')
+			if (parts.length >= 2) {
+				text = parts.slice(1).join(': ')
+			}
+		}
+		
+		// Remove knowledge area suffix (format: "text - Knowledge Area")
+		if (text.includes(' - ')) {
+			const parts = text.split(' - ')
+			if (parts.length >= 2) {
+				// Check if the last part looks like a knowledge area (not a category)
+				const lastPart = parts[parts.length - 1]
+				if (!lastPart.includes(':')) {
+					text = parts.slice(0, -1).join(' - ')
+				}
+			}
+		}
+		
+		return text
+	}
+
+	// Helper function to reconstruct paragraph text with original prefixes
+	function reconstructParagraphText(originalText, newMainText) {
+		let categoryPrefix = ''
+		let knowledgeAreaSuffix = ''
+		
+		// Extract category prefix from original text
+		if (originalText.includes(': ')) {
+			const parts = originalText.split(': ')
+			if (parts.length >= 2) {
+				categoryPrefix = parts[0] + ': '
+			}
+		}
+		
+		// Extract knowledge area suffix from original text
+		if (originalText.includes(' - ')) {
+			const parts = originalText.split(' - ')
+			if (parts.length >= 2) {
+				// Check if the last part looks like a knowledge area (not a category)
+				const lastPart = parts[parts.length - 1]
+				if (!lastPart.includes(':')) {
+					knowledgeAreaSuffix = ' - ' + lastPart
+				}
+			}
+		}
+		
+		// Reconstruct: Category: MainText - KnowledgeArea
+		return categoryPrefix + newMainText + knowledgeAreaSuffix
 	}
 
 	function getSectionOrder(paragraph) {

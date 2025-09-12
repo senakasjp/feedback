@@ -1,0 +1,166 @@
+{
+  "studentId": "mfcxuiqng00igp1c3pq",
+  "paragraphs": [
+    {
+      "text": "Executive Summary [10]: Student provides a clear, concise, and well-structured summary covering all required elements. Demonstrates strong understanding of the project, highlighting key findings and recommendations with no factual errors.",
+      "color": "green"
+    },
+    {
+      "text": "Executive Summary [10]: The student covers all major points but may lack some depth in one or two areas. Mostly clear and logically organised. Minor omissions or small inaccuracies.",
+      "color": "lightgreen"
+    },
+    {
+      "text": "Executive Summary [10]: The student summarises main ideas but misses several important details. Some sentences lack clarity or coherence.",
+      "color": "yellow"
+    },
+    {
+      "text": "Executive Summary [10]: The executive summary is brief and incomplete; it lacks logical flow, and multiple key points are missing.",
+      "color": "orange"
+    },
+    {
+      "text": "Executive Summary [10]: The summary is very short, unclear, or irrelevant to the project.",
+      "color": "red"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: The student provides a comprehensive, technically accurate evaluation covering all subcomponents (cloud model, data flow, protocols, security, scalability). Well-illustrated with original diagrams, code/config snippets, and precise explanations. Shows deep technical insight.",
+      "color": "green"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Strong analysis covering most subcomponents with good accuracy and detail. Diagrams support explanation. May lack some precision or depth in one area.",
+      "color": "lightgreen"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: The student provides adequate coverage, but some gaps in key areas. Diagrams are present but simplistic. Analysis is descriptive rather than critical.",
+      "color": "yellow"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Limited detail and accuracy. Diagrams unclear or missing. Explanations are vague and lack technical depth.",
+      "color": "orange"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Very limited or missing technical discussion; inaccurate or irrelevant content.",
+      "color": "red"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Thorough, well-researched discussion of all key theoretical aspects (sensor science, algorithms, topology, edge computing, real-time analytics). Links concepts directly to project with strong academic references and clear technical reasoning.",
+      "color": "green"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Good coverage of most theoretical aspects with relevant examples. Links to project are present but may lack detail in places.",
+      "color": "lightgreen"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Covers basic theory but with limited connection to the project. Some technical terms are used incorrectly or without explanation.",
+      "color": "yellow"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Minimal theoretical discussion; weak or missing links to project; lacks technical accuracy.",
+      "color": "orange"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Missing or incorrect theoretical content; no relevance to project.",
+      "color": "red"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Detailed, accurate, and critical analysis of all required subcomponents. Explains how chosen services and standards support scalability, maintainability, and performance. Includes concrete examples from the project and industry best practice.",
+      "color": "green"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Good coverage with accurate explanations for most areas. Some critical discussion present. Examples are relevant but not always detailed.",
+      "color": "lightgreen"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Adequate description of standards but mostly descriptive. Limited examples or critical evaluation.",
+      "color": "yellow"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Minimal coverage; inaccurate or incomplete descriptions; weak or no examples.",
+      "color": "orange"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Missing or irrelevant discussion of standards and methodologies.",
+      "color": "red"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Comprehensive identification of technical, security, scalability, privacy, and reliability challenges. Strong evidence-based evaluation, supported with real-world parallels and possible mitigation strategies.",
+      "color": "green"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Good coverage of most key challenges and risks with relevant examples. May lack depth in analysis or proposed mitigation.",
+      "color": "lightgreen"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Adequate list of challenges and risks, but mostly descriptive. Limited discussion of impact or mitigation.",
+      "color": "yellow"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Minimal coverage; misses several major risks; no meaningful analysis.",
+      "color": "orange"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Missing or irrelevant section.",
+      "color": "red"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Highly innovative and practical recommendations addressing technical, security, scalability, and industry application aspects. Shows awareness of emerging technologies and trends. Clearly justified and feasible.",
+      "color": "green"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Good recommendations with some innovation and relevance. Justification provided but may lack depth in one or two areas.",
+      "color": "lightgreen"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Adequate recommendations but limited originality or justification. Some are generic rather than project-specific.",
+      "color": "yellow"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Minimal recommendations with little relevance or feasibility.",
+      "color": "orange"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: No recommendations given or irrelevant content.",
+      "color": "red"
+    },
+    {
+      "text": "Some images are not properly explained in the main text.",
+      "color": "red"
+    },
+    {
+      "text": "An adequate number of diagrams to support the explanations are not provided.",
+      "color": "red"
+    },
+    {
+      "text": "The references are listed but not cited within the main text.",
+      "color": "red"
+    },
+    {
+      "text": "The grammar and spelling mistakes have not been corrected properly.",
+      "color": "red"
+    },
+    {
+      "text": "The report is too short and lacks explanations.",
+      "color": "red"
+    },
+    {
+      "text": "The reference list is missing.",
+      "color": "red"
+    },
+    {
+      "text": "The referencing does not follow APA 7 guidelines.",
+      "color": "red"
+    },
+    {
+      "text": "An adequate amount of literature has not been referred to, as expected in this assessment.",
+      "color": "red"
+    },
+    {
+      "text": "All or most of the references are from websites. The student has not used other resources, such as research papers or technical documents.",
+      "color": "red"
+    },
+    {
+      "text": "A specific comment for Senaka Amarakeerthi editing --",
+      "color": "red"
+    }
+  ],
+  "savedAt": "2025-09-12T23:35:56.797Z"
+}
