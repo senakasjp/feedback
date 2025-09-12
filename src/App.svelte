@@ -197,17 +197,21 @@
 			if (data) {
 				const parsed = JSON.parse(data)
 				paragraphs = parsed.paragraphs || []
-				selectedParagraphs = new Set(parsed.selectedParagraphs || [])
+				// Load all paragraphs but don't select any by default
+				selectedParagraphs = new Set()
 				studentName = parsed.studentName || ''
 				studentImage = parsed.studentImage || ''
-				categoryMarks = parsed.categoryMarks || {}
-				manualTotalMarks = parsed.manualTotalMarks || ''
+				// Reset all marks to zero
+				categoryMarks = {}
+				manualTotalMarks = ''
 			} else {
 				// Initialize empty data
 				paragraphs = []
 				selectedParagraphs = new Set()
 				studentName = ''
 				studentImage = ''
+				categoryMarks = {}
+				manualTotalMarks = ''
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -218,15 +222,21 @@
 				if (data) {
 					const parsed = JSON.parse(data)
 					paragraphs = parsed.paragraphs || []
-					selectedParagraphs = new Set(parsed.selectedParagraphs || [])
+					// Load all paragraphs but don't select any by default
+					selectedParagraphs = new Set()
 					studentName = parsed.studentName || ''
 					studentImage = parsed.studentImage || ''
+					// Reset all marks to zero
+					categoryMarks = {}
+					manualTotalMarks = ''
 				} else {
 					// Initialize empty data
 					paragraphs = []
 					selectedParagraphs = new Set()
 					studentName = ''
 					studentImage = ''
+					categoryMarks = {}
+					manualTotalMarks = ''
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
@@ -387,7 +397,12 @@
 			})
 			newParagraph = ''
 			selectedKnowledgeArea = '' // Reset knowledge area selection
+			
+			// Save to both assignment and student
 			saveAssessmentData()
+			if (currentStudentId) {
+				saveStudentParagraphs()
+			}
 		}
 	}
 
@@ -665,6 +680,9 @@
 	async function loadStudentEvaluation() {
 		if (!currentStudentId || !currentAssessmentId) return
 
+		// First, load ALL student paragraphs
+		await loadStudentParagraphs()
+
 		try {
 			const data = await invoke('read_student_evaluation', { 
 				studentId: currentStudentId,
@@ -672,14 +690,20 @@
 			})
 			if (data) {
 				const evaluationData = JSON.parse(data)
-				paragraphs = evaluationData.paragraphs || []
+				// Don't overwrite paragraphs - keep the student paragraphs loaded above
+				// Only load marks and selections from the evaluation data
 				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
 				studentName = evaluationData.studentName || ''
 				studentImage = evaluationData.studentImage || ''
 				categoryMarks = evaluationData.categoryMarks || {}
 				manualTotalMarks = evaluationData.manualTotalMarks || ''
+				
 				showSuccessNotification('Student evaluation data loaded successfully!')
 			} else {
+				// If no evaluation data, reset marks and selections but keep student paragraphs
+				selectedParagraphs = new Set()
+				categoryMarks = {}
+				manualTotalMarks = ''
 				showSuccessNotification('No saved data found for this student and assessment.')
 			}
 		} catch (error) {
@@ -688,15 +712,103 @@
 			const data = localStorage.getItem(key)
 			if (data) {
 				const evaluationData = JSON.parse(data)
-				paragraphs = evaluationData.paragraphs || []
+				// Don't overwrite paragraphs - keep the student paragraphs loaded above
+				// Only load marks and selections from the evaluation data
 				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
 				studentName = evaluationData.studentName || ''
 				studentImage = evaluationData.studentImage || ''
 				categoryMarks = evaluationData.categoryMarks || {}
 				manualTotalMarks = evaluationData.manualTotalMarks || ''
+				
 				showSuccessNotification('Student evaluation data loaded successfully!')
 			} else {
+				// If no evaluation data, reset marks and selections but keep student paragraphs
+				selectedParagraphs = new Set()
+				categoryMarks = {}
+				manualTotalMarks = ''
 				showSuccessNotification('No saved data found for this student and assessment.')
+			}
+		}
+	}
+
+	// Save student paragraphs (separate from assessment data)
+	async function saveStudentParagraphs() {
+		if (!currentStudentId) return
+
+		// Get existing student paragraphs
+		let existingStudentParagraphs = []
+		try {
+			const data = await invoke('read_student_paragraphs', { 
+				studentId: currentStudentId
+			})
+			if (data) {
+				const studentData = JSON.parse(data)
+				existingStudentParagraphs = studentData.paragraphs || []
+			}
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-paragraphs-${currentStudentId}`
+			const data = localStorage.getItem(key)
+			if (data) {
+				const studentData = JSON.parse(data)
+				existingStudentParagraphs = studentData.paragraphs || []
+			}
+		}
+
+		// Add current paragraphs to student paragraphs (avoid duplicates)
+		const currentParagraphs = [...paragraphs]
+		const combinedParagraphs = [...existingStudentParagraphs]
+		
+		// Add new paragraphs that don't already exist in student storage
+		currentParagraphs.forEach(para => {
+			const exists = combinedParagraphs.some(existing => 
+				existing.text === para.text && existing.color === para.color
+			)
+			if (!exists) {
+				combinedParagraphs.push(para)
+			}
+		})
+
+		const studentParagraphData = {
+			studentId: currentStudentId,
+			paragraphs: combinedParagraphs,
+			savedAt: new Date().toISOString()
+		}
+
+		try {
+			await invoke('write_student_paragraphs', { 
+				studentId: currentStudentId,
+				data: JSON.stringify(studentParagraphData, null, 2)
+			})
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-paragraphs-${currentStudentId}`
+			localStorage.setItem(key, JSON.stringify(studentParagraphData))
+		}
+	}
+
+	// Load student paragraphs
+	async function loadStudentParagraphs() {
+		if (!currentStudentId) return
+
+		try {
+			const data = await invoke('read_student_paragraphs', { 
+				studentId: currentStudentId
+			})
+			if (data) {
+				const studentData = JSON.parse(data)
+				// Load ALL student paragraphs (replace current paragraphs)
+				const studentParagraphs = studentData.paragraphs || []
+				paragraphs = [...studentParagraphs]
+			}
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-paragraphs-${currentStudentId}`
+			const data = localStorage.getItem(key)
+			if (data) {
+				const studentData = JSON.parse(data)
+				const studentParagraphs = studentData.paragraphs || []
+				paragraphs = [...studentParagraphs]
 			}
 		}
 	}
@@ -791,7 +903,7 @@
 	}
 
 	function deleteParagraph(index) {
-		// Remove from paragraphs array
+		// Remove from paragraphs array (assignment level only)
 		paragraphs.splice(index, 1)
 		
 		// Update selected paragraphs indices (shift down for indices after deleted one)
@@ -817,7 +929,11 @@
 		})
 		categoryWarnings = {...categoryWarnings} // trigger reactivity
 		
+		// Save assignment data (without the deleted paragraph)
 		saveAssessmentData()
+		
+		// Note: Student paragraphs are kept separate and are not affected by deletion
+		// The deleted paragraph remains in the student's paragraph collection
 	}
 
 	function getSectionOrder(paragraph) {
