@@ -36,31 +36,25 @@
 	let newValue = '';
 	let newLowerPercentage = '';
 	let newUpperPercentage = '';
-	let newColor = 'blue';
+	let newColor = 'green';
 	
 	const colorOptions = [
-		{ value: 'blue', label: 'Blue' },
 		{ value: 'green', label: 'Green' },
+		{ value: 'lightgreen', label: 'Light Green' },
 		{ value: 'yellow', label: 'Yellow' },
 		{ value: 'orange', label: 'Orange' },
-		{ value: 'red', label: 'Red' },
-		{ value: 'purple', label: 'Purple' },
-		{ value: 'pink', label: 'Pink' },
-		{ value: 'gray', label: 'Gray' }
+		{ value: 'red', label: 'Red' }
 	];
 	
 	function getColorStyle(color) {
 		const colors = {
-			blue: 'background-color: #0d6efd; color: white;',
 			green: 'background-color: #198754; color: white;',
+			lightgreen: 'background-color: #20c997; color: white;',
 			yellow: 'background-color: #ffc107; color: black;',
 			orange: 'background-color: #fd7e14; color: white;',
-			red: 'background-color: #dc3545; color: white;',
-			purple: 'background-color: #6f42c1; color: white;',
-			pink: 'background-color: #d63384; color: white;',
-			gray: 'background-color: #6c757d; color: white;'
+			red: 'background-color: #dc3545; color: white;'
 		};
-		return colors[color] || colors.blue;
+		return colors[color] || colors.green;
 	}
 	
 	function addPercentageRange() {

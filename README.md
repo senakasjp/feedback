@@ -1,166 +1,28 @@
-# Feedback Manager
+# Feedback Manager - Complete Development Guide
 
-A portable desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization and PDF generation capabilities.
+A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, PDF generation, and advanced assessment management capabilities.
 
-## Application Structure
+## Table of Contents
 
-The application follows a hierarchical structure:
+1. [Quick Start](#quick-start)
+2. [Architecture Overview](#architecture-overview)
+3. [Component Structure](#component-structure)
+4. [Data Management](#data-management)
+5. [Technology Stack](#technology-stack)
+6. [Development Setup](#development-setup)
+7. [API Reference](#api-reference)
+8. [Build & Distribution](#build--distribution)
+9. [Troubleshooting](#troubleshooting)
+10. [Version History](#version-history)
 
-```
-Subject (1 or more)
-├── Assessment (0 or more)
-    ├── Category (0 or more)
-        └── Paragraph (0 or more)
-```
-
-### 🏗️ Hierarchical Organization
-- **Subjects**: Top-level containers (e.g., "Studio 6", "Mathematics")
-- **Assessments**: Specific evaluations within subjects (e.g., "Mid-PDR", "Final Exam")
-- **Categories**: Feedback classification within assessments (e.g., "Strengths", "Areas for Improvement")
-- **Paragraphs**: Individual feedback statements under categories
-
-## Features
-
-### 📚 Subject Management
-- **Add/Remove Subjects**: Create and delete subjects with confirmation
-- **Subject Overview**: View all subjects in a clean card layout
-- **Assessment Count**: See number of assessments per subject
-
-### 📝 Assessment Management
-- **Add/Remove Assessments**: Create and delete assessments within subjects
-- **Category Management**: Add, edit, and remove categories for each assessment
-- **Topic Management**: Organize feedback with topics and categories
-- **Reusable Categories**: Categories created for an assessment can be used for all students
-- **Assessment Weighting**: Set percentage weights for each assessment
-- **Student Marks Table**: View all students with their marks for each assessment
-- **Weighted Calculations**: Automatic calculation of weighted marks (marks × weight percentage)
-- **Final Grade Calculation**: Calculate overall grades based on weighted assessments
-- **CSV Export**: Export student marks table to Excel-compatible CSV format
-
-### 🎯 Grading System
-- **Letter Grades**: Automatic grade calculation (A+ to E) based on percentage scores
-- **Grading Scale**: Professional grading scale with 10 grade levels
-- **Final Grade Calculation**: Overall grade based on weighted assessment scores
-- **Visual Indicators**: Color-coded progress bars showing student performance
-- **Performance Spectrum**: Red-to-green color gradient for easy performance comparison
-- **Grade Display**: Clear grade badges in student marks table
-
-### 🏷️ Universal Category System
-- **Universal Support**: Works with any assessment type, not just PDR assessments
-- **Custom Categories**: Create categories specific to each assessment
-- **Dynamic Detection**: Automatically enables category selection when categories are defined
-- **Category Grouping**: Paragraphs grouped by category with headers and marks input
-- **Fallback Handling**: Legacy paragraphs grouped under "General Feedback"
-- **Visual Indicators**: Categories displayed as blue headers in feedback sections
-
-### 📝 Feedback Management
-- **Add Paragraphs**: Create feedback paragraphs with category and topic selection
-- **Checkbox Selection**: Select specific paragraphs for inclusion in reports
-- **Live Preview**: See selected paragraphs in a dedicated section
-- **Auto-save**: All data is automatically saved as you work
-
-### 🎯 Marks Management System
-- **Individual Category Marks**: Enter marks for each category at first appearance
-- **Total Marks Input**: Right-aligned input box in "Paragraphs" header
-- **PDF Integration**: Displays marks in professional slash format (calculated/manual)
-- **Warning System**: Popup alert when marks are incomplete
-- **Real-time Calculation**: Automatic total marks calculation from individual categories
-- **Persistent Storage**: Marks saved with assessment data
-
-### 📊 Universal Percentage Ranges
-- **Universal Access**: Available across all views (subjects, assessments, feedback)
-- **Custom Ranges**: Create percentage ranges with value, color, and percentage bounds
-- **Color Coding**: Visual indicators with 5 color options (red, orange, yellow, light green, green)
-- **Automatic Calculation**: Calculates actual value ranges based on percentage inputs
-- **Persistent Storage**: Ranges saved globally and persist across app sessions
-- **Real-time Display**: Shows calculated ranges with color indicators
-- **Easy Management**: Add and delete ranges with simple form interface
-- **Cross-Session Persistence**: Data automatically loads when app reopens
-- **Floating Calculator**: Percentage calculator floats on the right side when scrolling on feedback page
-- **Smart Detection**: Automatically detects when calculator reaches top of viewport
-
-### 👤 Student Information
-- **Student Name**: Enter and store student names
-- **Photo Upload**: Upload and display student photos
-- **Image Preview**: 60x60px thumbnail preview in the interface
-- **Persistent Storage**: Photos are saved as base64 data
-
-### 📄 PDF Generation
-- **Professional Reports**: Generate PDF reports with selected feedback
-- **Full-Width Header**: Student photos span the entire page width (edge-to-edge)
-- **Aspect Ratio Preserved**: Images maintain proportions while filling page width
-- **Dynamic Filename**: PDFs named automatically (e.g., `Feedback Report - Subject - Assessment - Student.pdf`)
-- **Clean Layout**: Professional formatting with proper spacing and typography
-- **Organized Storage**: PDFs saved to `Feedback_PDFs` folder in Downloads directory
-- **Clean Filenames**: No unnecessary hyphens, professional naming convention
-
-### 💾 Data Persistence
-- **Portable Storage**: Data stored in local `FeedbackData` folder next to executable
-- **Cross-Platform**: Copy entire app folder between computers with data intact
-- **JSON Format**: Human-readable data storage with hierarchical structure
-- **Auto-backup**: No manual save required - all changes saved automatically
-- **Tauri File System API**: Uses Rust-based file operations for reliability
-- **Base64 Image Storage**: Student photos stored as base64-encoded strings in JSON
-- **Individual Assessment Files**: Each assessment gets its own JSON file for better organization
-
-## Technology Stack
-
-- **Frontend**: Svelte 5 with modern reactivity (`$state`)
-- **Desktop Framework**: Tauri (Rust backend)
-- **UI Framework**: Bootstrap 5 with Sveltestrap components
-- **PDF Generation**: jsPDF library
-- **Build Tool**: Vite
-- **File System**: Tauri filesystem plugins
-
-## Data Storage Technology
-
-### 🗄️ Storage Architecture
-The application uses a **file-based storage system** built on Tauri's Rust file system API:
-
-#### **Core Storage Components:**
-- **Main Data File**: `FeedbackData/feedback-data.json` - Contains subjects, assessments, categories, and knowledge areas
-- **Individual Assessment Files**: `FeedbackData/subject-{id}-{timestamp}.json` - Student-specific data for each assessment
-- **Portable Structure**: All data stored relative to executable location for easy distribution
-
-#### **Technical Implementation:**
-- **Rust Backend**: File operations handled by Tauri's Rust backend for performance and reliability
-- **JSON Serialization**: Data serialized to/from JSON format for human readability
-- **Base64 Encoding**: Images converted to base64 strings for embedded storage
-- **Atomic Writes**: File operations use proper locking to prevent data corruption
-- **Cross-Platform Paths**: Tauri handles Windows (`\`), macOS/Linux (`/`) path differences automatically
-
-#### **Data Flow:**
-1. **Frontend Changes** → Svelte state updates
-2. **State Change Detection** → Automatic save triggers
-3. **Tauri Invoke** → Frontend calls Rust backend functions
-4. **Rust File Operations** → Write to JSON files
-5. **Error Handling** → Graceful failure with user feedback
-
-#### **File Structure:**
-```
-FeedbackData/
-├── feedback-data.json              # Main configuration data
-├── subject-abc123-1234567890.json  # Assessment 1 data
-├── subject-def456-1234567891.json  # Assessment 2 data
-└── subject-ghi789-1234567892.json  # Assessment 3 data
-```
-
-#### **Data Persistence Features:**
-- **Auto-Save**: Every state change automatically triggers save
-- **No Manual Save**: Users never need to manually save data
-- **Crash Recovery**: Data persists even if application crashes
-- **Version Control Friendly**: JSON format works well with Git
-- **Backup Simple**: Copy entire folder to backup all data
-- **Migration Easy**: JSON files can be edited or migrated programmatically
-
-## Installation & Setup
+## Quick Start
 
 ### Prerequisites
-- Node.js (v16 or higher)
+- Node.js (v16+)
 - Rust (latest stable)
 - npm or yarn
 
-### Development Setup
+### Installation
 ```bash
 # Clone or extract the project
 cd feedback-app
@@ -175,83 +37,358 @@ npm run dev -- --host
 npm run tauri build
 ```
 
-### Production Use
-1. Run `npm run tauri build`
-2. Find the executable in `src-tauri/target/release/`
-3. Copy the entire app folder to any computer
-4. Data is stored in `FeedbackData/feedback-data.json` alongside the executable
+### First Run
+1. Launch the application
+2. Create your first subject (e.g., "Studio 6")
+3. Add an assessment (e.g., "Mid-PDR")
+4. Create categories for the assessment
+5. Add students and begin creating feedback
 
-## Usage
+## Architecture Overview
 
-### Getting Started
-1. **Launch the app** - Open the executable or run `npm run dev`
-2. **Create Subjects** - Add subjects to organize your feedback (e.g., "Studio 6", "Mathematics")
-3. **Create Assessments** - Add assessments within subjects (e.g., "Mid-PDR", "Final Exam")
-4. **Set up Categories** - Create categories for each assessment to organize feedback
-
-### Workflow
-1. **Subject Management** - Start by creating subjects
-2. **Assessment Management** - Add assessments to subjects
-3. **Category Setup** - Create categories for each assessment
-4. **Feedback Creation** - Add paragraphs with category and topic selection
-5. **Report Generation** - Select paragraphs and generate PDFs
-
-### Creating Feedback
-1. **Select Assessment** - Choose an assessment to work with
-2. **Enter student name** - Fill in the student name field
-3. **Upload photo** - Click "Choose File" to select a student photo
-4. **Choose category** - Select from assessment's predefined categories
-5. **Choose topic** - Select from assessment's topics (optional)
-6. **Add feedback** - Type feedback paragraphs and click "Add"
-
-### Creating Reports
-1. **Select paragraphs** - Check the boxes next to desired feedback
-2. **Preview selection** - View selected text in the bottom panel
-3. **Generate PDF** - Click "📄 Generate PDF" button
-4. **Copy text** - Use "📋 Copy to Clipboard" for other uses
-
-### Managing Percentage Ranges
-1. **Access Ranges** - Navigate to any view (subjects, assessments, or feedback)
-2. **Add New Range** - Fill in the percentage range form in the sidebar:
-   - **Value**: Enter the base value (e.g., 100 for 100 points)
-   - **Lower %**: Enter lower percentage (0-100)
-   - **Upper %**: Enter upper percentage (0-100)
-   - **Color**: Select from 5 color options (red, orange, yellow, light green, green)
-3. **View Ranges** - See calculated ranges with color indicators
-4. **Delete Ranges** - Click the trash icon to remove unwanted ranges
-5. **Universal Access** - Ranges are available across all views and persist between sessions
-
-### PDF Output
-- **Header Image**: Student photo spans full page width at the top
-- **Title**: "Feedback Report"
-- **Student Info**: Student name displayed prominently
-- **Content**: Selected feedback paragraphs with proper formatting
-- **Multi-page**: Automatically handles long content across pages
-
-## File Structure
-
+### Application Structure
 ```
-feedback-app/
-├── src/                    # Svelte frontend source
-│   ├── App.svelte         # Main application component
-│   ├── main.js            # Application entry point
-│   └── app.css            # Global styles
-├── src-tauri/             # Tauri backend
-│   ├── src/
-│   │   └── lib.rs         # Rust backend with file system commands
-│   ├── tauri.conf.json    # Tauri configuration
-│   └── capabilities/      # Permission definitions
-├── FeedbackData/          # Data storage (created at runtime)
-│   ├── feedback-data.json # Main data file
-│   ├── subject-*.json     # Individual assessment files
-│   └── student-evaluation-*.json # Student evaluation data
-└── package.json           # Node.js dependencies
+Subject (1 or more)
+├── Assessment (0 or more)
+    ├── Category (0 or more)
+        └── Paragraph (0 or more)
 ```
 
-## Data Format
+### Core Components
+- **App.svelte**: Main application orchestrator
+- **Sidebar.svelte**: Navigation and percentage calculator
+- **SubjectManager.svelte**: Subject management interface
+- **AssessmentManager.svelte**: Assessment and grading interface
+- **FeedbackEditor.svelte**: Paragraph creation and editing
+- **SelectedTextSection.svelte**: PDF generation and text export
 
-The application stores data in JSON format with hierarchical structure:
+## Component Structure
 
+### 📱 Main Application (`App.svelte`)
+
+**Purpose**: Central orchestrator managing global state and component coordination.
+
+**Key Responsibilities**:
+- Global state management (`$state` variables)
+- Data persistence and loading
+- Component event handling
+- PDF generation orchestration
+- Student management coordination
+
+**Core State Variables**:
+```javascript
+let subjects = $state([])                    // All subjects
+let currentSubjectId = $state(null)         // Currently selected subject
+let currentAssessmentId = $state(null)      // Currently selected assessment
+let currentStudentId = $state(null)         // Currently selected student
+let paragraphs = $state([])                 // Feedback paragraphs
+let selectedParagraphs = $state(new Set())  // Selected paragraph indices
+let students = $state([])                   // Student database
+let percentageRanges = $state([])           // Universal percentage ranges
+let showCalculator = $state(false)          // Calculator/navigation toggle
+```
+
+**Key Functions**:
+- `saveData()`: Persist all data to JSON files
+- `loadData()`: Load data from storage
+- `generatePDF()`: Create PDF with selected content
+- `addStudent()`: Add new student to database
+- `selectStudent()`: Set current student context
+
+### 🧭 Sidebar Navigation (`Sidebar.svelte`)
+
+**Purpose**: Primary navigation interface with integrated percentage calculator.
+
+**Features**:
+- Subject and assessment navigation
+- Student selection dropdown
+- Percentage calculator toggle
+- Session information display
+- Sticky positioning (top of viewport)
+
+**Toggle System**:
+```svelte
+{#if !showCalculator}
+  <!-- Navigation View -->
+  <!-- Subject/Assessment navigation -->
+{:else}
+  <!-- Calculator View -->
+  <!-- Percentage ranges management -->
+{/if}
+```
+
+**Sticky Implementation**:
+```css
+.card {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  max-height: 100vh;
+}
+.card-body {
+  overflow-y: auto;
+  padding-top: 1rem;
+}
+```
+
+### 📚 Subject Management (`SubjectManager.svelte`)
+
+**Purpose**: Interface for creating and managing subjects.
+
+**Features**:
+- Subject creation and deletion
+- Subject overview cards
+- Assessment count display
+- Confirmation dialogs for deletions
+
+**Subject Card Structure**:
+```svelte
+<div class="subject-card">
+  <div class="subject-header">
+    <h5 class="subject-title">{subject.name}</h5>
+    <button class="delete-btn" onclick={deleteSubject}>
+      <i class="bi bi-trash"></i>
+    </button>
+  </div>
+  <div class="subject-meta">
+    <span class="assessment-count">{subject.assessments.length} assessments</span>
+  </div>
+</div>
+```
+
+### 📝 Assessment Management (`AssessmentManager.svelte`)
+
+**Purpose**: Comprehensive assessment interface with grading system.
+
+**Features**:
+- Assessment creation and management
+- Category and topic management
+- Student marks table with weighting
+- CSV export functionality
+- Grade calculation system
+
+**Assessment Card Layout**:
+```svelte
+<div class="assessment-card">
+  <div class="assessment-header">
+    <h5 class="assessment-title fw-normal">{assessment.name}</h5>
+    <button class="delete-btn" onclick={removeAssessment}>
+      <i class="bi bi-x"></i>
+    </button>
+  </div>
+  <div class="assessment-meta">
+    <span class="badge bg-info">{topics.length} topics</span>
+    <span class="badge bg-success">{categories.length} categories</span>
+  </div>
+  <button class="btn btn-success" onclick={openFeedback}>
+    Open Feedback
+  </button>
+</div>
+```
+
+**Student Marks Table**:
+```svelte
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Student</th>
+      {#each assessments as assessment}
+        <th>
+          {assessment.name}
+          <input type="number" value={assessment.weight} 
+                 onchange={updateWeight} class="form-control form-control-sm">
+        </th>
+      {/each}
+      <th>Final Grade</th>
+    </tr>
+  </thead>
+  <tbody>
+    {#each students as student}
+      <tr>
+        <td>{student.name}</td>
+        <!-- Assessment marks -->
+        <td class="final-grade">
+          <span class="badge bg-{getGradeColor(finalGrade)}">{finalGrade}</span>
+        </td>
+      </tr>
+    {/each}
+  </tbody>
+</table>
+```
+
+### ✏️ Feedback Editor (`FeedbackEditor.svelte`)
+
+**Purpose**: Interface for creating and managing feedback paragraphs.
+
+**Features**:
+- Paragraph creation with category/topic selection
+- Checkbox selection system
+- Category grouping with marks input
+- Student information management
+
+**Paragraph Creation Form**:
+```svelte
+<form onsubmit={addParagraph}>
+  <div class="mb-3">
+    <select class="form-select" bind:value={selectedCategory}>
+      {#each currentAssessment.categories as category}
+        <option value={category.name}>{category.name}</option>
+      {/each}
+    </select>
+  </div>
+  <div class="mb-3">
+    <textarea class="form-control" bind:value={newParagraph} 
+              placeholder="Enter feedback paragraph..."></textarea>
+  </div>
+  <button type="submit" class="btn btn-primary">Add Paragraph</button>
+</form>
+```
+
+**Category Grouping Display**:
+```svelte
+{#each getGroupedParagraphs() as group}
+  <div class="card mb-3">
+    <div class="card-header bg-info text-white">
+      <div class="d-flex justify-content-between">
+        <h6 class="mb-0">{group.category}</h6>
+        <input type="number" value={categoryMarks[group.category]} 
+               onchange={updateCategoryMarks} class="form-control form-control-sm">
+      </div>
+    </div>
+    <div class="card-body">
+      {#each group.paragraphs as paragraph, index}
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input" 
+                 checked={selectedParagraphs.has(index)} 
+                 onchange={toggleParagraph}>
+          <label class="form-check-label">{paragraph}</label>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/each}
+```
+
+### 📄 PDF Generation (`SelectedTextSection.svelte`)
+
+**Purpose**: Export selected feedback to PDF format.
+
+**Features**:
+- PDF generation with jsPDF
+- Student photo integration
+- Professional formatting
+- Copy to clipboard functionality
+
+**PDF Generation Logic**:
+```javascript
+async function generatePDF() {
+  const doc = new jsPDF();
+  
+  // Add student photo (full width)
+  if (studentImage) {
+    const img = new Image();
+    img.onload = () => {
+      const imgWidth = doc.internal.pageSize.getWidth();
+      const imgHeight = (img.height * imgWidth) / img.width;
+      doc.addImage(img, 'JPEG', 0, 0, imgWidth, imgHeight);
+      
+      // Add content below image
+      doc.setFontSize(10);
+      doc.text('Feedback Report', 20, imgHeight + 20);
+      doc.text(`Student: ${studentName}`, 20, imgHeight + 35);
+      
+      // Add selected paragraphs
+      let yPosition = imgHeight + 50;
+      getSelectedText().split('\n').forEach(line => {
+        doc.text(line, 20, yPosition);
+        yPosition += 6;
+      });
+      
+      // Save PDF
+      doc.save(`Feedback Report - ${currentSubject.name} - ${currentAssessment.name} - ${studentName}.pdf`);
+    };
+    img.src = studentImage;
+  }
+}
+```
+
+## Data Management
+
+### Data Flow Architecture
+
+#### 1. Global State Management
+```javascript
+// App.svelte - Central state
+let subjects = $state([])
+let students = $state([])
+let paragraphs = $state([])
+let selectedParagraphs = $state(new Set())
+
+// Reactive derivations
+let currentSubject = $derived(subjects.find(s => s.id === currentSubjectId))
+let currentAssessment = $derived(currentSubject?.assessments.find(a => a.id === currentAssessmentId))
+```
+
+#### 2. Data Persistence Strategy
+```javascript
+// Subject-level paragraph database
+async function saveSubjectParagraphs(subjectId) {
+  const data = {
+    paragraphs: paragraphs,
+    lastUpdated: new Date().toISOString()
+  };
+  await invoke('write_file', {
+    path: `FeedbackData/subject-paragraphs-${subjectId}.json`,
+    content: JSON.stringify(data, null, 2)
+  });
+}
+
+// Student-specific data
+async function saveStudentData(subjectId, assessmentId, studentId) {
+  const data = {
+    selectedParagraphs: Array.from(selectedParagraphs),
+    categoryMarks: categoryMarks,
+    totalMarks: totalMarks,
+    studentImage: studentImage,
+    studentName: studentName
+  };
+  await invoke('write_file', {
+    path: `FeedbackData/student-${studentId}-${subjectId}-${assessmentId}.json`,
+    content: JSON.stringify(data, null, 2)
+  });
+}
+```
+
+#### 3. File Storage Structure
+```
+FeedbackData/
+├── feedback-data.json                    # Main configuration
+├── subject-paragraphs-{subjectId}.json   # Subject paragraph database
+├── student-{studentId}-{subjectId}-{assessmentId}.json  # Student data
+└── percentage-ranges.json               # Universal percentage ranges
+```
+
+### Data Relationships
+
+#### Entity Relationship Model
+```
+Students (1 or more)
+├── Can be enrolled in multiple Subjects
+└── Can have evaluations across different Assessments
+
+Subjects (1 or more per student)
+├── Contains multiple Assessments (1 or more)
+└── Each Assessment belongs to exactly one Subject
+
+Assessments (1 or more per subject)
+├── Belongs to exactly one Subject
+├── Contains multiple Topics and Categories
+└── Can have multiple Student evaluations
+```
+
+#### Data Structure Examples
+
+**Main Configuration (`feedback-data.json`)**:
 ```json
 {
   "subjects": [
@@ -262,29 +399,16 @@ The application stores data in JSON format with hierarchical structure:
         {
           "id": "assessment-1",
           "name": "Mid-PDR",
-          "topics": [
-            {
-              "id": "topic-1",
-              "name": "Design Process"
-            }
-          ],
+          "topics": [{"id": "topic-1", "name": "Design Process"}],
           "categories": [
-            {
-              "id": "category-1",
-              "name": "Strengths",
-              "description": "Positive aspects of student work"
-            },
-            {
-              "id": "category-2",
-              "name": "Areas for Improvement",
-              "description": "Areas where student can improve"
-            }
-          ]
+            {"id": "cat-1", "name": "Strengths"},
+            {"id": "cat-2", "name": "Areas for Improvement"}
+          ],
+          "weight": 50
         }
       ]
     }
   ],
-  "knowledgeAreas": ["Prior Experience", "Student Specific Comments"],
   "students": [
     {
       "id": "student-1",
@@ -308,529 +432,505 @@ The application stores data in JSON format with hierarchical structure:
 }
 ```
 
-## Data Structure Relationships
-
-The application follows a **many-to-many relationship model** where students can be enrolled in multiple subjects, and each subject contains multiple assessments:
-
-### 📊 Entity Relationships
-
-```
-Students (1 or more)
-├── Can be enrolled in multiple Subjects
-└── Can have evaluations across different Assessments
-
-Subjects (1 or more per student)
-├── Contains multiple Assessments (1 or more)
-└── Each Assessment belongs to exactly one Subject
-
-Assessments (1 or more per subject)
-├── Belongs to exactly one Subject
-├── Contains multiple Topics and Categories
-└── Can have multiple Student evaluations
-```
-
-### 🔗 Key Relationships
-
-- **Student ↔ Subject**: **Many-to-Many** - A student can take multiple subjects, and a subject can have multiple students
-- **Subject ↔ Assessment**: **One-to-Many** - Each subject contains multiple assessments, each assessment belongs to one subject
-- **Student ↔ Assessment**: **Many-to-Many** - A student can be evaluated on multiple assessments across different subjects
-
-### 💾 Data Storage Structure
-
-#### Global Data (`feedback-data.json`)
-- **Subjects**: Array of all subjects with their assessments
-- **Students**: Array of all registered students
-- **Knowledge Areas**: Global knowledge area definitions
-- **Categories**: Global category templates
-- **Percentage Ranges**: Universal percentage range definitions
-
-#### Subject-Specific Data (`subject-{subjectId}-{assessmentId}.json`)
-- **Assessment Details**: Topics, categories, and configuration
-- **Feedback Paragraphs**: All available feedback content
-- **Selected Paragraphs**: Indices of currently selected content
-
-#### Student Evaluation Data (`student-evaluation-{studentId}-{assessmentId}.json`)
-- **Student-Specific Content**: Individual evaluation data per student-assessment combination
-- **Selected Paragraphs**: Student-specific paragraph selections
-- **Marks**: Category marks and total marks for the student
-- **Student Information**: Name, photo, and metadata
-
-### 🎯 Practical Implications
-
-This structure allows for:
-- **Multi-Subject Support**: Students can be evaluated across different academic subjects
-- **Flexible Assessment Management**: Each subject can have its own set of assessments
-- **Individual Student Tracking**: Each student's progress is tracked separately per assessment
-- **Data Isolation**: Student evaluations are stored independently, preventing data conflicts
-- **Scalable Organization**: Easy to add new subjects, assessments, and students without affecting existing data
-
-### Assessment Data Format
-Each assessment stores student-specific data:
-
+**Subject Paragraph Database**:
 ```json
 {
   "paragraphs": [
-    "Student shows excellent understanding...",
-    "Areas for improvement include..."
+    "Student shows excellent understanding of design principles.",
+    "Areas for improvement include technical implementation."
   ],
-  "selectedParagraphs": [0, 1],
-  "studentName": "John Doe",
-  "studentImage": "data:image/jpeg;base64,..."
+  "lastUpdated": "2024-01-01T00:00:00.000Z"
 }
 ```
 
-## Key Features Detail
+**Student Evaluation Data**:
+```json
+{
+  "selectedParagraphs": [0, 1],
+  "categoryMarks": {
+    "Strengths": "10",
+    "Areas for Improvement": "15"
+  },
+  "totalMarks": "25",
+  "studentImage": "data:image/jpeg;base64...",
+  "studentName": "John Doe (12345)",
+  "savedAt": "2024-01-01T00:00:00.000Z"
+}
+```
 
-### Portable Data Storage
-- **Tauri File System API**: Uses Rust-based file operations for cross-platform compatibility
-- **Relative Path Storage**: Data stored relative to executable location (`./FeedbackData/`)
-- **No External Dependencies**: No database server or external files required
-- **JSON-Based Architecture**: Human-readable data format for easy debugging and migration
-- **Individual File Strategy**: Each assessment stored in separate JSON file for better organization
-- **Base64 Image Encoding**: Student photos embedded directly in JSON files
-- **Automatic File Creation**: Creates necessary directories and files on first run
-- **Cross-Platform Path Handling**: Tauri handles Windows/macOS/Linux path differences
-- **Atomic Write Operations**: Data integrity ensured through proper file locking
-- **Easy Backup**: Simply copy the entire app folder to preserve all data
+## Technology Stack
 
-### Image Handling
-- Accepts all common image formats (JPEG, PNG, GIF, WebP)
-- Converts to base64 for storage
-- Maintains aspect ratio in PDF output
-- Full-width presentation for maximum impact
+### Frontend Technologies
+- **Svelte 5**: Modern reactive framework with `$state` and `$derived`
+- **Bootstrap 5**: UI framework with utility classes
+- **Bootstrap Icons**: Icon library for consistent UI elements
+- **Vite**: Build tool and development server
 
-### PDF Generation
-- Client-side generation (no server required)
-- Professional formatting
-- Automatic page breaks
-- Edge-to-edge image headers
-- Responsive text wrapping
+### Backend Technologies
+- **Tauri**: Rust-based desktop application framework
+- **Rust**: System programming language for file operations
+- **Tauri Filesystem API**: Cross-platform file system access
 
-## Browser Support (Development)
+### Additional Libraries
+- **jsPDF**: Client-side PDF generation
+- **html2canvas**: HTML to canvas conversion (for PDF)
 
-- Chrome/Chromium 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
+### Build Tools
+- **Vite**: Frontend bundling and development
+- **Tauri CLI**: Desktop application building
+- **Rust Toolchain**: Backend compilation
 
-## Building for Distribution
+## Development Setup
 
-### Desktop App
+### Environment Requirements
 ```bash
+# Node.js (v16 or higher)
+node --version
+
+# Rust (latest stable)
+rustc --version
+
+# Tauri CLI
+cargo install tauri-cli
+```
+
+### Project Structure
+```
+feedback-app/
+├── src/                          # Frontend source code
+│   ├── App.svelte               # Main application component
+│   ├── main.js                  # Application entry point
+│   ├── app.css                  # Global styles
+│   ├── types.ts                 # TypeScript type definitions
+│   └── lib/                     # Component library
+│       ├── Sidebar.svelte       # Navigation component
+│       ├── SubjectManager.svelte # Subject management
+│       ├── AssessmentManager.svelte # Assessment interface
+│       ├── FeedbackEditor.svelte # Feedback creation
+│       ├── SelectedTextSection.svelte # PDF generation
+│       ├── Breadcrumb.svelte    # Navigation breadcrumbs
+│       ├── CategoryEditor.svelte # Category management
+│       └── WelcomeScreen.svelte # Landing page
+├── src-tauri/                   # Backend Rust code
+│   ├── src/
+│   │   ├── main.rs             # Rust entry point
+│   │   └── lib.rs              # File system operations
+│   ├── tauri.conf.json         # Tauri configuration
+│   └── capabilities/           # Permission definitions
+├── FeedbackData/               # Runtime data storage
+├── dist/                       # Production build output
+├── package.json               # Node.js dependencies
+├── vite.config.js             # Vite configuration
+├── svelte.config.js           # Svelte configuration
+└── Cargo.toml                 # Rust dependencies
+```
+
+### Development Commands
+```bash
+# Install dependencies
+npm install
+
+# Start web development server
+npm run dev
+
+# Start desktop development (with hot reload)
+npm run tauri dev
+
+# Build for production
+npm run tauri build
+
+# Build web version only
+npm run build
+```
+
+### Configuration Files
+
+**`package.json`**:
+```json
+{
+  "name": "feedback-app",
+  "version": "2.5.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "svelte": "^5.0.0",
+    "bootstrap": "^5.3.0",
+    "bootstrap-icons": "^1.11.0",
+    "jspdf": "^2.5.1",
+    "html2canvas": "^1.4.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.0",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-svelte": "^5.0.0"
+  }
+}
+```
+
+**`tauri.conf.json`**:
+```json
+{
+  "package": {
+    "productName": "Feedback Manager",
+    "version": "2.5.0"
+  },
+  "build": {
+    "distDir": "../dist",
+    "devPath": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "tauri": {
+    "allowlist": {
+      "fs": {
+        "all": true,
+        "readFile": true,
+        "writeFile": true,
+        "createDir": true,
+        "removeDir": true,
+        "removeFile": true,
+        "exists": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.feedback.manager"
+    }
+  }
+}
+```
+
+## API Reference
+
+### Tauri Backend Commands
+
+#### File System Operations
+```rust
+// Read file content
+#[tauri::command]
+async fn read_file(path: String) -> Result<String, String>
+
+// Write file content
+#[tauri::command]
+async fn write_file(path: String, content: String) -> Result<(), String>
+
+// Check if file exists
+#[tauri::command]
+async fn file_exists(path: String) -> Result<bool, String>
+
+// Create directory
+#[tauri::command]
+async fn create_dir(path: String) -> Result<(), String>
+```
+
+#### Usage in Frontend
+```javascript
+import { invoke } from '@tauri-apps/api/tauri';
+
+// Read data file
+const data = await invoke('read_file', {
+  path: 'FeedbackData/feedback-data.json'
+});
+
+// Save data file
+await invoke('write_file', {
+  path: 'FeedbackData/feedback-data.json',
+  content: JSON.stringify(data, null, 2)
+});
+```
+
+### Frontend API Functions
+
+#### Data Management
+```javascript
+// Save all application data
+async function saveData() {
+  const data = {
+    subjects,
+    students,
+    percentageRanges,
+    lastSaved: new Date().toISOString()
+  };
+  await invoke('write_file', {
+    path: 'FeedbackData/feedback-data.json',
+    content: JSON.stringify(data, null, 2)
+  });
+}
+
+// Load all application data
+async function loadData() {
+  try {
+    const content = await invoke('read_file', {
+      path: 'FeedbackData/feedback-data.json'
+    });
+    const data = JSON.parse(content);
+    subjects = data.subjects || [];
+    students = data.students || [];
+    percentageRanges = data.percentageRanges || [];
+  } catch (error) {
+    console.error('Failed to load data:', error);
+  }
+}
+```
+
+#### Student Management
+```javascript
+// Add new student
+function addStudent() {
+  if (!newStudentName || !newStudentId) return;
+  
+  const student = {
+    id: generateId(),
+    name: newStudentName,
+    studentId: newStudentId,
+    displayName: `${newStudentName} (${newStudentId})`,
+    createdAt: new Date().toISOString()
+  };
+  
+  students = [...students, student];
+  saveStudents();
+}
+
+// Select student
+async function selectStudent(studentId) {
+  currentStudentId = studentId;
+  const student = students.find(s => s.id === studentId);
+  studentName = student ? student.displayName : '';
+  
+  // Load student-specific data if available
+  if (currentAssessmentId && currentSubjectId) {
+    await loadStudentData(currentSubjectId, currentAssessmentId, studentId);
+  }
+}
+```
+
+#### Assessment Management
+```javascript
+// Add assessment to subject
+function addAssessment() {
+  if (!newAssessmentName || !currentSubjectId) return;
+  
+  const assessment = {
+    id: generateId(),
+    name: newAssessmentName,
+    topics: [],
+    categories: [],
+    weight: 100
+  };
+  
+  const subject = subjects.find(s => s.id === currentSubjectId);
+  if (subject) {
+    subject.assessments = [...(subject.assessments || []), assessment];
+    saveData();
+  }
+}
+
+// Update assessment weight
+function updateAssessmentWeight(assessmentId, weight) {
+  const subject = subjects.find(s => s.assessments?.some(a => a.id === assessmentId));
+  if (subject) {
+    const assessment = subject.assessments.find(a => a.id === assessmentId);
+    if (assessment) {
+      assessment.weight = parseFloat(weight) || 0;
+      saveData();
+    }
+  }
+}
+```
+
+#### PDF Generation
+```javascript
+// Generate PDF with selected content
+async function generatePDF() {
+  const doc = new jsPDF();
+  let yPosition = 20;
+  
+  // Add header
+  doc.setFontSize(16);
+  doc.text('Feedback Report', 20, yPosition);
+  yPosition += 20;
+  
+  // Add student information
+  doc.setFontSize(12);
+  doc.text(`Student: ${studentName}`, 20, yPosition);
+  yPosition += 15;
+  doc.text(`Subject: ${currentSubject?.name}`, 20, yPosition);
+  yPosition += 15;
+  doc.text(`Assessment: ${currentAssessment?.name}`, 20, yPosition);
+  yPosition += 25;
+  
+  // Add selected paragraphs
+  const selectedText = getSelectedText();
+  doc.setFontSize(10);
+  selectedText.split('\n').forEach(line => {
+    if (yPosition > 280) {
+      doc.addPage();
+      yPosition = 20;
+    }
+    doc.text(line, 20, yPosition);
+    yPosition += 6;
+  });
+  
+  // Save PDF
+  const filename = `Feedback Report - ${currentSubject?.name} - ${currentAssessment?.name} - ${studentName}.pdf`;
+  doc.save(filename);
+  
+  // Auto-save student data
+  if (currentStudentId) {
+    await saveStudentData(currentSubjectId, currentAssessmentId, currentStudentId);
+  }
+}
+```
+
+## Build & Distribution
+
+### Production Build
+```bash
+# Build desktop application
 npm run tauri build
 ```
 
-Produces platform-specific executables:
-- Windows: `.exe` installer and portable
-- macOS: `.app` bundle and `.dmg`
-- Linux: `.deb`, `.rpm`, and `.AppImage`
+### Build Outputs
+- **Windows**: `.exe` installer and portable executable
+- **macOS**: `.app` bundle and `.dmg` installer
+- **Linux**: `.deb`, `.rpm`, and `.AppImage` packages
 
-### Development
-```bash
-npm run dev        # Web development
-npm run tauri dev  # Desktop development with hot reload
-```
+### Distribution Strategy
+1. Build platform-specific executables
+2. Test on target platforms
+3. Package with data folder structure
+4. Distribute entire application folder
+5. Users can run executable directly
+
+### Portable Installation
+The application is designed to be portable:
+- All data stored in `FeedbackData/` folder next to executable
+- No registry entries or system dependencies
+- Copy entire folder to any computer
+- Data persists across installations
 
 ## Troubleshooting
 
-### Common Issues
+### Common Development Issues
 
-**"Permission denied" errors**
-- Ensure proper file system permissions in `capabilities/default.json`
+#### 1. Build Failures
+```bash
+# Ensure Rust toolchain is installed
+rustup update
 
-**Images not displaying in PDF**
-- Check image format compatibility
-- Verify image size (very large images may cause issues)
+# Clean build cache
+cargo clean
 
-**Data not persisting**
-- Check if `FeedbackData` folder has write permissions
-- Verify Tauri file system plugin is properly configured
+# Reinstall Tauri CLI
+cargo install tauri-cli --force
+```
 
-**Confirmation dialogs not appearing (Tauri on Mac/Windows)**
-- Browser `alert()` and `confirm()` dialogs often don't work in Tauri apps
-- Solution: Use custom Bootstrap 5 modals instead of native browser dialogs
-- Example implementation:
+#### 2. File System Permissions
+Ensure `capabilities/default.json` includes:
+```json
+{
+  "fs": {
+    "all": true,
+    "readFile": true,
+    "writeFile": true,
+    "createDir": true,
+    "removeDir": true,
+    "removeFile": true,
+    "exists": true
+  }
+}
+```
 
+#### 3. Svelte Compilation Errors
+- Check for duplicate attributes in templates
+- Ensure proper closing of HTML tags
+- Verify Svelte block structure (`{#if}`, `{:else}`, `{/if}`)
+
+#### 4. TypeScript Errors in Svelte Files
+Add JSDoc type comments:
 ```svelte
-<!-- Custom confirmation dialog -->
-{#if showDeleteConfirm && subjectToDelete}
-  <div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header bg-danger text-white">
-          <h5 class="modal-title">
-            <i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
-          </h5>
-        </div>
-        <div class="modal-body">
-          <div class="alert alert-warning">
-            <i class="bi bi-warning me-2"></i>
-            <strong>Warning:</strong> This action cannot be undone.
-          </div>
-          <p class="mb-0">Are you sure you want to delete this item?</p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" onclick={cancelAction}>
-            <i class="bi bi-x-circle me-2"></i>Cancel
-          </button>
-          <button type="button" class="btn btn-danger" onclick={confirmAction}>
-            <i class="bi bi-trash me-2"></i>Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
+<script>
+  /** @type {any} */
+  let { prop1, prop2 } = $props();
+</script>
 ```
 
-**State management for custom dialogs:**
+### Runtime Issues
+
+#### 1. Data Not Persisting
+- Check file system permissions
+- Verify `FeedbackData` folder exists
+- Ensure Tauri file system plugin is configured
+
+#### 2. PDF Generation Fails
+- Check image format compatibility
+- Verify jsPDF library is loaded
+- Ensure sufficient memory for large images
+
+#### 3. Student Data Not Loading
+- Check file naming convention
+- Verify JSON format validity
+- Ensure proper student ID matching
+
+### Performance Optimization
+
+#### 1. Large Dataset Handling
 ```javascript
-// Add to component state
-let showDeleteConfirm = $state(false);
-let itemToDelete = $state(null);
-
-// Show dialog function
-function showConfirmDialog(item) {
-  itemToDelete = item;
-  showDeleteConfirm = true;
-}
-
-// Confirm action
-function confirmAction() {
-  // Perform deletion
-  deleteItem(itemToDelete);
-  // Close dialog
-  showDeleteConfirm = false;
-  itemToDelete = null;
-}
-
-// Cancel action
-function cancelAction() {
-  showDeleteConfirm = false;
-  itemToDelete = null;
+// Implement pagination for large student lists
+function getPaginatedStudents(page = 0, pageSize = 50) {
+  const start = page * pageSize;
+  const end = start + pageSize;
+  return students.slice(start, end);
 }
 ```
 
-### Development Issues
-
-**Sveltestrap warnings**
-- Use `--legacy-peer-deps` flag for npm install
-- Warnings about Svelte 5 compatibility are expected
-
-**Build failures**
-- Ensure Rust toolchain is properly installed
-- Check Tauri CLI version compatibility
-
-## License
-
-This project is open source. See the LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## PDF Font Standardization
-
-### 🎯 PDF Typography Optimization (v1.4.0)
-
-The PDF output now uses **10px as the standard font size** for consistent, compact formatting:
-
-#### **PDF Output Font Sizes:**
-- **Headers**: 10px bold (Subject, Assessment, Student)
-- **Category headers**: 10px bold (Sub Objectives, Sub Learning Objectives, Report, Decision)
-- **Content text**: 10px normal weight
-- **All elements**: Uniform 10px sizing throughout PDF
-
-#### **Interface Font Sizes (Unchanged):**
-- **Base font**: 14px for body text
-- **Forms/Labels**: 13px for optimal readability
-- **Buttons**: 13px regular, 12px for small buttons
-- **Headers**: H1: 28px, H2: 24px, H3: 20px, H4: 18px, H5: 16px, H6: 14px
-- **Cards**: 13px content, 16px titles
-- **Special elements**: Subject cards (22px titles), Assessment cards (20px titles)
-
-#### **Benefits:**
-- ✅ **Compact PDF output** with maximum information density
-- ✅ **Professional PDF appearance** with uniform typography
-- ✅ **Readable interface** with comfortable font sizes
-- ✅ **Optimized for different contexts** - screen vs. print
-- ✅ **Small PDF file sizes** due to consistent formatting
-
-This approach optimizes PDF output for print density while maintaining comfortable screen readability.
-
-## Universal Category System & Marks Management
-
-### 🏷️ Universal Category Support (v2.1.0)
-
-The application now supports **universal category management** for any assessment type, not just specific PDR assessments:
-
-#### **Category System Features:**
-- **Universal Detection**: Any assessment with categories defined will automatically enable category selection
-- **Dynamic Category Lists**: Uses assessment-specific categories instead of hardcoded lists
-- **Fallback Support**: Existing PDR assessments continue to work with their predefined categories
-- **Default Grouping**: Paragraphs without categories are grouped under "General Feedback"
-
-#### **Marks Management System:**
-- **Individual Category Marks**: Enter marks for each category at its first appearance
-- **Total Marks Input**: Right-aligned input box in the "Paragraphs" header
-- **PDF Integration**: Displays marks in slash format (calculated/manual total)
-- **Warning System**: Popup alert when individual marks are entered but total marks field is empty
-
-#### **Category Workflow:**
-1. **Create Assessment**: Add categories to any assessment
-2. **Select Category**: Choose from dropdown when adding paragraphs
-3. **Add Paragraphs**: Text is automatically prefixed with selected category
-4. **Enter Marks**: Assign marks to categories and total marks
-5. **Generate PDF**: Marks appear in professional format with slash notation
-
-#### **Marks Display Format:**
-- **Individual Categories**: `[X MARKS]` after category name in PDF
-- **Total Marks**: `Total Marks: 15/100` (calculated/manual total)
-- **GUI Display**: Shows total marks in red alert box above selected paragraphs
-
-#### **Backward Compatibility:**
-- **Legacy Paragraphs**: Automatically grouped under "General Feedback" if no category prefix
-- **PDR Assessments**: Continue to work with existing hardcoded categories
-- **Data Migration**: No data loss when upgrading to universal system
-
-### **Technical Implementation:**
-- **Dynamic Detection**: `needsCategorySelection()` checks for assessment categories
-- **Flexible Grouping**: `getGroupedParagraphs()` handles any category format
-- **State Management**: Marks stored per category and total marks separately
-- **PDF Generation**: Universal category detection with bold formatting
-
-## Student Management System
-
-### 👥 Comprehensive Student Management (v2.2.0)
-
-The application now includes a **complete student management system** that allows you to save and load student evaluation data, replacing manual student name entry with a structured database approach.
-
-#### **Core Student Management Features:**
-- **Student Database**: Centralized storage of all students with unique IDs
-- **Student Selection**: Dropdown-based student selection instead of manual name entry
-- **Data Persistence**: Individual student evaluation data saved per assessment
-- **Auto-Save Integration**: Automatic saving when generating PDFs
-- **Student Information Display**: Visual confirmation of selected student
-
-#### **Student Data Structure:**
+#### 2. Memory Management
 ```javascript
-{
-  id: "unique-student-id",
-  name: "Student Name",
-  studentId: "STU12345",
-  displayName: "Student Name (STU12345)",
-  createdAt: "2024-01-01T00:00:00.000Z"
+// Clear unused images from memory
+function clearUnusedImages() {
+  if (currentStudentId !== previousStudentId) {
+    previousStudentImage = null;
+  }
 }
 ```
 
-#### **Student Management UI Components:**
-
-##### **1. Student Selection Interface:**
-- **Dropdown Selection**: Choose from registered students
-- **Add Student Button**: Quick access to add new students (+ icon)
-- **Student Manager Button**: Full management interface (⚙️ icon)
-- **Selected Student Display**: Blue info box showing current selection
-
-##### **2. Student Management Modal:**
-- **Student List**: View all registered students with names and IDs
-- **Select Student**: Click to choose a student for current session
-- **Delete Student**: Remove students and their evaluation data
-- **Add New Student**: Direct access to student creation
-
-##### **3. Add Student Modal:**
-- **Student Name Field**: Enter the student's full name
-- **Student ID Field**: Enter unique identifier (e.g., student number)
-- **Auto-Generated Display Name**: Combines name and ID for uniqueness
-- **Validation**: Both fields required before adding
-
-#### **Student Evaluation Data Management:**
-
-##### **Data Storage Structure:**
+#### 3. Efficient State Updates
 ```javascript
-{
-  studentId: "student-unique-id",
-  assessmentId: "assessment-unique-id", 
-  paragraphs: [...], // All feedback paragraphs
-  selectedParagraphs: [...], // Indices of selected paragraphs
-  studentName: "Student Name (ID)",
-  studentImage: "data:image/jpeg;base64...", // Base64 encoded image
-  categoryMarks: { // Individual category marks
-    "Category 1": "10",
-    "Category 2": "15"
-  },
-  manualTotalMarks: "25", // Manually entered total
-  savedAt: "2024-01-01T00:00:00.000Z"
+// Use batch updates for multiple state changes
+function batchUpdateState() {
+  subjects = newSubjects;
+  students = newStudents;
+  percentageRanges = newRanges;
+  // Single save operation
+  saveData();
 }
 ```
-
-##### **Save/Load Functionality:**
-- **Save Student Data**: Manual save button in sidebar
-- **Load Student Data**: Restore previous evaluation work
-- **Auto-Save on PDF**: Automatically saves when generating PDF
-- **Individual Files**: Each student-assessment combination gets separate file
-- **Data Recovery**: Load any previous work for any student
-
-#### **File Storage System:**
-
-##### **Main Data Files:**
-- **`feedback-data.json`**: Contains subjects, assessments, and students list
-- **`student-evaluation-{studentId}-{assessmentId}.json`**: Individual evaluation data
-
-##### **Storage Locations:**
-- **Tauri Desktop**: `./FeedbackData/` folder next to executable
-- **Web Development**: Browser localStorage with prefixed keys
-- **Cross-Platform**: Automatic path handling for Windows/macOS/Linux
-
-#### **User Workflow:**
-
-##### **1. Student Registration:**
-1. Click "+" button next to student dropdown
-2. Enter student name and ID in modal
-3. Click "Add Student" to register
-4. Student appears in dropdown list
-
-##### **2. Student Selection:**
-1. Choose student from dropdown
-2. See confirmation in blue info box below
-3. Student name updates throughout interface
-4. All evaluation data tied to selected student
-
-##### **3. Evaluation Work:**
-1. Add paragraphs with categories and topics
-2. Enter marks for individual categories
-3. Select paragraphs for inclusion
-4. Use "Save Student Data" to store progress
-5. Use "Load Student Data" to restore work
-
-##### **4. Report Generation:**
-1. Generate PDF with selected content
-2. Data automatically saved during PDF creation
-3. Success notification confirms save operation
-4. Student name included in PDF filename
-
-#### **Technical Implementation Details:**
-
-##### **State Management:**
-```javascript
-// Student data
-let students = $state([]) // Array of student objects
-let currentStudentId = $state(null) // Currently selected student
-let studentName = $state('') // Display name for current student
-
-// Student management UI
-let showAddStudent = $state(false) // Add student modal
-let showStudentManager = $state(false) // Student manager modal
-let newStudentName = $state('') // New student name input
-let newStudentId = $state('') // New student ID input
-```
-
-##### **Key Functions:**
-```javascript
-// Student management
-addStudent() // Add new student to database
-deleteStudent(studentId) // Remove student and data
-selectStudent(studentId) // Set current student
-getCurrentStudent() // Get current student object
-
-// Data persistence
-saveStudentEvaluation() // Save current evaluation data
-loadStudentEvaluation() // Load saved evaluation data
-saveStudents() // Save students list to main data file
-```
-
-##### **Tauri Backend Functions:**
-```rust
-// New Tauri commands for student data
-write_student_evaluation(student_id, assessment_id, data)
-read_student_evaluation(student_id, assessment_id)
-```
-
-#### **UI/UX Enhancements:**
-
-##### **Student Selection Area:**
-- **Full-Width Layout**: Student dropdown and photo upload span full card width
-- **Action Buttons**: Add (+) and manage (⚙️) buttons integrated
-- **Visual Feedback**: Selected student clearly displayed below dropdown
-- **Responsive Design**: Works on all screen sizes
-
-##### **Notification System:**
-- **Success Toasts**: Professional notifications for all actions
-- **Auto-Hide**: Notifications disappear after 3 seconds
-- **Action Feedback**: Save, load, copy, and PDF operations confirmed
-- **Error Handling**: Clear messages for failed operations
-
-##### **Action Buttons:**
-- **Save Student Data**: Blue button with save icon
-- **Load Student Data**: Purple button with upload icon
-- **Copy to Clipboard**: Green button with clipboard icon
-- **Print to PDF**: Red button with download icon
-
-#### **Data Migration & Compatibility:**
-- **Backward Compatible**: Existing data continues to work
-- **Automatic Migration**: Students list added to main data file
-- **No Data Loss**: All existing evaluations preserved
-- **Seamless Upgrade**: New features work with existing assessments
-
-#### **Benefits of Student Management System:**
-- **Organized Data**: Each student's work saved separately
-- **Easy Recovery**: Load any previous evaluation work
-- **Unique Identification**: Student ID prevents name conflicts
-- **Professional Workflow**: Structured approach to student evaluation
-- **Data Integrity**: Automatic saving prevents work loss
-- **Scalable**: Handles unlimited students and assessments
-- **Portable**: Copy app folder to preserve all student data
 
 ## Version History
 
-- **v1.0.0** - Initial release with basic feedback management
-- **v1.1.0** - Added PDF generation capabilities
-- **v1.2.0** - Implemented student photo support
-- **v1.3.0** - Full-width PDF headers and improved UI
-- **v1.4.0** - PDF font standardization to 10px (interface fonts unchanged)
-- **v2.0.0** - **MAJOR UPDATE**: Hierarchical organization with subjects, assessments, and categories
-  - Added Subject Management (add/remove subjects)
-  - Added Assessment Management (add/remove assessments)
-  - Added Category Management (add/remove categories per assessment)
-  - Added Topic Management (organize feedback with topics)
-  - Redesigned UI with dedicated management screens
-  - Categories are reusable across all students for each assessment
-  - Improved data structure with hierarchical organization
-- **v2.1.0** - **UNIVERSAL CATEGORY SYSTEM & MARKS MANAGEMENT**
-  - Universal category support for any assessment type (not just PDR)
-  - Dynamic category detection and management
-  - Individual category marks input system
-  - Total marks input with slash format in PDF
-  - Warning system for incomplete marks entry
-  - Backward compatibility with legacy paragraphs
-  - Professional PDF formatting with bold category headers
-  - Right-aligned marks input in "Paragraphs" header
-- **v2.2.0** - **COMPREHENSIVE STUDENT MANAGEMENT SYSTEM**
-  - Complete student database with unique ID system
-  - Dropdown-based student selection replacing manual entry
-  - Individual student evaluation data storage per assessment
-  - Save/Load functionality for student evaluation work
-  - Auto-save integration with PDF generation
-  - Student management modals (add, view, select, delete)
-  - Visual student selection confirmation display
-  - Success notification system for all actions
-  - Full-width student information card layout
-  - Cross-platform data persistence with Tauri backend
-  - Backward compatibility with existing data
-  - Professional workflow for student evaluation management
-- **v2.3.0** - **ASSESSMENT WEIGHTING & GRADING SYSTEM**
-  - Assessment weighting system with percentage-based weights
-  - Student marks table with all students and their assessment scores
-  - Weighted marks calculation (marks × weight percentage)
-  - Final grade calculation based on weighted assessments
-  - Letter grading system (A+ to E) with professional grading scale
-  - Visual performance indicators with color-coded progress bars
-  - CSV export functionality for student marks table
-  - Inline weight editing in table headers
-  - Proportional performance bars with red-to-green color spectrum
-  - Clean PDF filename format and organized storage in Downloads/Feedback_PDFs
-  - Floating percentage calculator on feedback page
-  - Smart scroll detection for floating elements
+### v2.5.0 - Current Version
+- **Subject-Level Paragraph Database**: Centralized paragraph storage per subject
+- **Dual Paragraph Display**: Subject paragraphs + student-specific selections
+- **Deleted Paragraph Persistence**: Visual indicators for removed content
+- **Navigation Sidebar Toggle**: Calculator/navigation view switching
+- **Sticky Sidebar**: Full sidebar sticky to viewport top
+- **Bootstrap 5 Compatibility**: Complete UI framework integration
+- **Assessment Weighting**: Percentage-based assessment weights
+- **Student Management**: Comprehensive student database system
+- **PDF Generation**: Professional report generation with images
+- **CSV Export**: Student marks table export functionality
+
+### Key Architectural Decisions
+1. **File-based Storage**: JSON files for portability and simplicity
+2. **Component-based Architecture**: Modular Svelte components
+3. **Reactive State Management**: Svelte 5 `$state` and `$derived`
+4. **Cross-platform Desktop**: Tauri for native performance
+5. **Bootstrap 5 UI**: Consistent, responsive interface design
+
+This comprehensive guide provides everything needed to understand, develop, and maintain the Feedback Manager application.
