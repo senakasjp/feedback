@@ -1,0 +1,630 @@
+# API Reference
+
+## Tauri Backend Commands
+
+### File System Operations
+
+#### Read File
+```rust
+#[tauri::command]
+async fn read_file(path: String) -> Result<String, String>
+```
+Reads content from a file.
+
+**Parameters**:
+- `path`: String - File path relative to the data directory
+
+**Returns**:
+- `Result<String, String>` - File content or error message
+
+**Usage**:
+```javascript
+const content = await invoke('read_file', {
+  path: 'FeedbackData/feedback-data.json'
+});
+```
+
+#### Write File
+```rust
+#[tauri::command]
+async fn write_file(path: String, content: String) -> Result<(), String>
+```
+Writes content to a file.
+
+**Parameters**:
+- `path`: String - File path relative to the data directory
+- `content`: String - Content to write
+
+**Returns**:
+- `Result<(), String>` - Success or error message
+
+**Usage**:
+```javascript
+await invoke('write_file', {
+  path: 'FeedbackData/feedback-data.json',
+  content: JSON.stringify(data, null, 2)
+});
+```
+
+#### File Exists
+```rust
+#[tauri::command]
+async fn file_exists(path: String) -> Result<bool, String>
+```
+Checks if a file exists.
+
+**Parameters**:
+- `path`: String - File path relative to the data directory
+
+**Returns**:
+- `Result<bool, String>` - True if file exists, false otherwise
+
+**Usage**:
+```javascript
+const exists = await invoke('file_exists', {
+  path: 'FeedbackData/feedback-data.json'
+});
+```
+
+#### Create Directory
+```rust
+#[tauri::command]
+async fn create_dir(path: String) -> Result<(), String>
+```
+Creates a directory.
+
+**Parameters**:
+- `path`: String - Directory path relative to the data directory
+
+**Returns**:
+- `Result<(), String>` - Success or error message
+
+**Usage**:
+```javascript
+await invoke('create_dir', {
+  path: 'FeedbackData/backups'
+});
+```
+
+### Data Management Commands
+
+#### Read Portable Data
+```rust
+#[tauri::command]
+fn read_portable() -> Result<String, String>
+```
+Reads the main configuration file.
+
+**Returns**:
+- `Result<String, String>` - JSON configuration data
+
+**Usage**:
+```javascript
+const data = await invoke('read_portable');
+const config = JSON.parse(data);
+```
+
+#### Write Portable Data
+```rust
+#[tauri::command]
+fn write_portable(data: String) -> Result<(), String>
+```
+Writes the main configuration file.
+
+**Parameters**:
+- `data`: String - JSON configuration data
+
+**Returns**:
+- `Result<(), String>` - Success or error message
+
+**Usage**:
+```javascript
+await invoke('write_portable', {
+  data: JSON.stringify(config, null, 2)
+});
+```
+
+#### Read Subject Data
+```rust
+#[tauri::command]
+fn read_subject_data(subject_id: String) -> Result<String, String>
+```
+Reads assessment-specific data.
+
+**Parameters**:
+- `subject_id`: String - Subject and assessment ID (format: "subjectId-assessmentId")
+
+**Returns**:
+- `Result<String, String>` - JSON assessment data
+
+**Usage**:
+```javascript
+const data = await invoke('read_subject_data', {
+  subjectId: 'subject-123-assessment-456'
+});
+```
+
+#### Write Subject Data
+```rust
+#[tauri::command]
+fn write_subject_data(subject_id: String, data: String) -> Result<(), String>
+```
+Writes assessment-specific data.
+
+**Parameters**:
+- `subject_id`: String - Subject and assessment ID
+- `data`: String - JSON assessment data
+
+**Returns**:
+- `Result<(), String>` - Success or error message
+
+**Usage**:
+```javascript
+await invoke('write_subject_data', {
+  subjectId: 'subject-123-assessment-456',
+  data: JSON.stringify(assessmentData, null, 2)
+});
+```
+
+### Student Data Commands
+
+#### Read Student Evaluation
+```rust
+#[tauri::command]
+fn read_student_evaluation(student_id: String, assessment_id: String) -> Result<String, String>
+```
+Reads student evaluation data for a specific assessment.
+
+**Parameters**:
+- `student_id`: String - Student identifier
+- `assessment_id`: String - Assessment identifier
+
+**Returns**:
+- `Result<String, String>` - JSON evaluation data
+
+**Usage**:
+```javascript
+const data = await invoke('read_student_evaluation', {
+  studentId: 'student-123',
+  assessmentId: 'assessment-456'
+});
+```
+
+#### Write Student Evaluation
+```rust
+#[tauri::command]
+fn write_student_evaluation(student_id: String, assessment_id: String, data: String) -> Result<(), String>
+```
+Writes student evaluation data for a specific assessment.
+
+**Parameters**:
+- `student_id`: String - Student identifier
+- `assessment_id`: String - Assessment identifier
+- `data`: String - JSON evaluation data
+
+**Returns**:
+- `Result<(), String>` - Success or error message
+
+**Usage**:
+```javascript
+await invoke('write_student_evaluation', {
+  studentId: 'student-123',
+  assessmentId: 'assessment-456',
+  data: JSON.stringify(evaluationData, null, 2)
+});
+```
+
+#### Read Student Paragraphs
+```rust
+#[tauri::command]
+fn read_student_paragraphs(student_id: String) -> Result<String, String>
+```
+Reads all paragraphs associated with a student.
+
+**Parameters**:
+- `student_id`: String - Student identifier
+
+**Returns**:
+- `Result<String, String>` - JSON paragraph data
+
+**Usage**:
+```javascript
+const data = await invoke('read_student_paragraphs', {
+  studentId: 'student-123'
+});
+```
+
+#### Write Student Paragraphs
+```rust
+#[tauri::command]
+fn write_student_paragraphs(student_id: String, data: String) -> Result<(), String>
+```
+Writes all paragraphs associated with a student.
+
+**Parameters**:
+- `student_id`: String - Student identifier
+- `data`: String - JSON paragraph data
+
+**Returns**:
+- `Result<(), String>` - Success or error message
+
+**Usage**:
+```javascript
+await invoke('write_student_paragraphs', {
+  studentId: 'student-123',
+  data: JSON.stringify(paragraphData, null, 2)
+});
+```
+
+### PDF Generation
+
+#### Generate PDF File
+```rust
+#[tauri::command]
+fn generate_pdf_file(
+    content: String,
+    subject_name: Option<String>,
+    assessment_name: Option<String>,
+    student_name: Option<String>,
+) -> Result<String, String>
+```
+Generates a PDF file with the specified content.
+
+**Parameters**:
+- `content`: String - PDF content (text)
+- `subject_name`: Option<String> - Subject name for header
+- `assessment_name`: Option<String> - Assessment name for header
+- `student_name`: Option<String> - Student name for header
+
+**Returns**:
+- `Result<String, String>` - Path to generated PDF file
+
+**Usage**:
+```javascript
+const pdfPath = await invoke('generate_pdf_file', {
+  content: selectedText,
+  subjectName: 'Studio 6',
+  assessmentName: 'Mid-PDR',
+  studentName: 'John Doe'
+});
+```
+
+## Frontend API Functions
+
+### Data Management
+
+#### Save All Application Data
+```javascript
+async function saveData() {
+  const data = {
+    subjects,
+    students,
+    percentageRanges,
+    lastSaved: new Date().toISOString()
+  };
+  await invoke('write_file', {
+    path: 'FeedbackData/feedback-data.json',
+    content: JSON.stringify(data, null, 2)
+  });
+}
+```
+
+#### Load All Application Data
+```javascript
+async function loadData() {
+  try {
+    const content = await invoke('read_file', {
+      path: 'FeedbackData/feedback-data.json'
+    });
+    const data = JSON.parse(content);
+    subjects = data.subjects || [];
+    students = data.students || [];
+    percentageRanges = data.percentageRanges || [];
+  } catch (error) {
+    console.error('Failed to load data:', error);
+  }
+}
+```
+
+### Student Management
+
+#### Add New Student
+```javascript
+function addStudent() {
+  if (!newStudentName || !newStudentId) return;
+  
+  const student = {
+    id: generateId(),
+    name: newStudentName,
+    studentId: newStudentId,
+    displayName: `${newStudentName} (${newStudentId})`,
+    createdAt: new Date().toISOString()
+  };
+  
+  students = [...students, student];
+  saveStudents();
+}
+```
+
+#### Select Student
+```javascript
+async function selectStudent(studentId) {
+  currentStudentId = studentId;
+  const student = students.find(s => s.id === studentId);
+  studentName = student ? student.displayName : '';
+  
+  // Load student-specific data if available
+  if (currentAssessmentId && currentSubjectId) {
+    await loadStudentData(currentSubjectId, currentAssessmentId, studentId);
+  }
+}
+```
+
+### Assessment Management
+
+#### Add Assessment to Subject
+```javascript
+function addAssessment() {
+  if (!newAssessmentName || !currentSubjectId) return;
+  
+  const assessment = {
+    id: generateId(),
+    name: newAssessmentName,
+    topics: [],
+    categories: [],
+    weight: 100
+  };
+  
+  const subject = subjects.find(s => s.id === currentSubjectId);
+  if (subject) {
+    subject.assessments = [...(subject.assessments || []), assessment];
+    saveData();
+  }
+}
+```
+
+#### Update Assessment Weight
+```javascript
+function updateAssessmentWeight(assessmentId, weight) {
+  const subject = subjects.find(s => s.assessments?.some(a => a.id === assessmentId));
+  if (subject) {
+    const assessment = subject.assessments.find(a => a.id === assessmentId);
+    if (assessment) {
+      assessment.weight = parseFloat(weight) || 0;
+      saveData();
+    }
+  }
+}
+```
+
+### Paragraph Management
+
+#### Add Paragraph
+```javascript
+function addParagraph() {
+  if (newParagraph.trim()) {
+    let paragraphText = newParagraph.trim();
+    
+    // Add category prefix if selected
+    if (needsCategorySelection() && selectedCategory) {
+      paragraphText = `${selectedCategory}: ${paragraphText}`;
+    }
+    
+    // Add knowledge area prefix if selected
+    if (selectedKnowledgeArea) {
+      paragraphText = `${paragraphText} - ${selectedKnowledgeArea}`;
+    }
+    
+    paragraphs.push({
+      text: paragraphText,
+      color: selectedColor || undefined
+    });
+    
+    newParagraph = '';
+    selectedKnowledgeArea = '';
+    
+    // Save to both assignment and student storage
+    saveAssessmentData();
+    if (currentStudentId) {
+      saveStudentParagraphs();
+    }
+  }
+}
+```
+
+#### Delete Paragraph
+```javascript
+function deleteParagraph(index) {
+  // Remove from paragraphs array (assignment level only)
+  paragraphs.splice(index, 1);
+  
+  // Update selected paragraphs indices
+  const newSelectedParagraphs = new Set();
+  selectedParagraphs.forEach(selectedIndex => {
+    if (selectedIndex < index) {
+      newSelectedParagraphs.add(selectedIndex);
+    } else if (selectedIndex > index) {
+      newSelectedParagraphs.add(selectedIndex - 1);
+    }
+  });
+  selectedParagraphs = newSelectedParagraphs;
+  
+  // Save assignment data (without the deleted paragraph)
+  saveAssessmentData();
+}
+```
+
+### PDF Generation
+
+#### Generate PDF with Auto-Save
+```javascript
+async function generatePDF() {
+  const selectedText = getSelectedText();
+  if (!selectedText) {
+    showSuccessNotification('No paragraphs selected!');
+    return;
+  }
+
+  const doc = new jsPDF();
+  
+  // Add full-width student image if available
+  if (studentImage) {
+    const img = new Image();
+    img.onload = function() {
+      const aspectRatio = img.width / img.height;
+      let imageWidth = pageWidth - (margin * 2);
+      let imageHeight = imageWidth / aspectRatio;
+      
+      doc.addImage(studentImage, 'JPEG', margin, margin, imageWidth, imageHeight);
+      
+      // Continue with content below image
+      let currentY = margin + imageHeight + 15;
+      generateRestOfPDF(doc, currentY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name);
+    };
+    img.src = studentImage;
+    return;
+  }
+  
+  // Generate PDF content with professional formatting
+  generateRestOfPDF(doc, margin, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name);
+  
+  // Auto-save student evaluation data when generating PDF
+  if (currentStudentId) {
+    await saveStudentEvaluation();
+  }
+  
+  showSuccessNotification('PDF generated and downloaded successfully!');
+}
+```
+
+## Data Structures
+
+### Main Configuration
+```typescript
+interface MainConfig {
+  subjects: Subject[];
+  students: Student[];
+  percentageRanges: PercentageRange[];
+  lastSaved: string;
+}
+```
+
+### Subject
+```typescript
+interface Subject {
+  id: string;
+  name: string;
+  assessments: Assessment[];
+}
+```
+
+### Assessment
+```typescript
+interface Assessment {
+  id: string;
+  name: string;
+  topics?: Topic[];
+  categories?: Category[];
+  weight?: number;
+}
+```
+
+### Student
+```typescript
+interface Student {
+  id: string;
+  name: string;
+  studentId: string;
+  displayName: string;
+  createdAt: string;
+}
+```
+
+### Paragraph
+```typescript
+interface Paragraph {
+  text: string;
+  color?: string;
+}
+```
+
+### Student Evaluation Data
+```typescript
+interface StudentEvaluationData {
+  studentId: string;
+  assessmentId: string;
+  paragraphs: Paragraph[];
+  selectedParagraphs: number[];
+  studentName: string;
+  studentImage: string;
+  categoryMarks: Record<string, string>;
+  manualTotalMarks: string;
+  savedAt: string;
+}
+```
+
+### Student Paragraph Data
+```typescript
+interface StudentParagraphData {
+  studentId: string;
+  paragraphs: Paragraph[];
+  savedAt: string;
+}
+```
+
+## Error Handling
+
+### Common Error Patterns
+```javascript
+try {
+  const data = await invoke('read_file', { path: 'file.json' });
+  // Process data
+} catch (error) {
+  console.error('Failed to read file:', error);
+  // Handle error gracefully
+}
+```
+
+### Fallback Strategies
+```javascript
+// Try Tauri first, fallback to localStorage
+try {
+  await invoke('write_file', { path: 'data.json', content: data });
+} catch (error) {
+  console.log('Tauri not available, using browser storage');
+  localStorage.setItem('feedback-data', data);
+}
+```
+
+## Performance Considerations
+
+### Batch Operations
+```javascript
+// Batch multiple state updates
+function batchUpdateState() {
+  subjects = newSubjects;
+  students = newStudents;
+  percentageRanges = newRanges;
+  // Single save operation
+  saveData();
+}
+```
+
+### Memory Management
+```javascript
+// Clear unused images from memory
+function clearUnusedImages() {
+  if (currentStudentId !== previousStudentId) {
+    previousStudentImage = null;
+  }
+}
+```
+
+### Efficient Data Loading
+```javascript
+// Load data only when needed
+async function loadStudentData() {
+  if (!currentStudentId || !currentAssessmentId) return;
+  // Load data
+}
+```

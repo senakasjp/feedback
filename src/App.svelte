@@ -44,6 +44,8 @@
 	let categoryWarnings = $state({}) // Store warnings for each category
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
+	let editingParagraphIndex = $state(null) // Track which paragraph is being edited
+	let editingParagraphText = $state('') // Store text being edited
 
 	// UI state
 	let showAddSubject = $state(false)
@@ -934,6 +936,31 @@
 		
 		// Note: Student paragraphs are kept separate and are not affected by deletion
 		// The deleted paragraph remains in the student's paragraph collection
+	}
+
+	// Edit paragraph functions
+	function startEditParagraph(index) {
+		editingParagraphIndex = index
+		editingParagraphText = paragraphs[index].text
+	}
+
+	function cancelEditParagraph() {
+		editingParagraphIndex = null
+		editingParagraphText = ''
+	}
+
+	function saveEditParagraph() {
+		if (editingParagraphIndex !== null && editingParagraphText.trim()) {
+			paragraphs[editingParagraphIndex].text = editingParagraphText.trim()
+			editingParagraphIndex = null
+			editingParagraphText = ''
+			
+			// Save to both assignment and student storage
+			saveAssessmentData()
+			if (currentStudentId) {
+				saveStudentParagraphs()
+			}
+		}
 	}
 
 	function getSectionOrder(paragraph) {
@@ -2024,17 +2051,53 @@
 																			</div>
 																		{/if}
 																		<div class="flex-grow-1 me-3">
-																			<p class="mb-0 fs-6 lh-base">{text}</p>
+																			{#if editingParagraphIndex === originalIndex}
+																				<textarea 
+																					class="form-control form-control-sm" 
+																					bind:value={editingParagraphText}
+																					rows="3"
+																					style="resize: vertical;"
+																				></textarea>
+																			{:else}
+																				<p class="mb-0 fs-6 lh-base">{text}</p>
+																			{/if}
 																		</div>
 																		<div class="d-flex gap-1">
-																			<button 
-																				class="btn btn-outline-danger btn-sm" 
-																				onclick={() => deleteParagraph(originalIndex)}
-																				title="Delete paragraph"
-																				aria-label="Delete paragraph"
-																			>
-																				<i class="bi bi-trash"></i>
-																			</button>
+																			{#if editingParagraphIndex === originalIndex}
+																				<button 
+																					class="btn btn-success btn-sm" 
+																					onclick={saveEditParagraph}
+																					title="Save changes"
+																					aria-label="Save changes"
+																				>
+																					<i class="bi bi-check"></i>
+																				</button>
+																				<button 
+																					class="btn btn-outline-secondary btn-sm" 
+																					onclick={cancelEditParagraph}
+																					title="Cancel editing"
+																					aria-label="Cancel editing"
+																				>
+																					<i class="bi bi-x"></i>
+																				</button>
+																			{:else}
+																				<button 
+																					class="btn btn-outline-primary btn-sm" 
+																					onclick={() => startEditParagraph(originalIndex)}
+																					title="Edit paragraph"
+																					aria-label="Edit paragraph"
+																				>
+																					<i class="bi bi-pencil"></i>
+																				</button>
+																				<button 
+																					class="btn btn-outline-danger btn-sm" 
+																					onclick={() => deleteParagraph(originalIndex)}
+																					title="Delete paragraph"
+																					aria-label="Delete paragraph"
+																				>
+																					<i class="bi bi-trash"></i>
+																				</button>
+																			{/if}
 																		</div>
 																	</div>
 																</div>
