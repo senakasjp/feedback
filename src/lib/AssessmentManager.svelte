@@ -56,6 +56,9 @@
 	let studentsWithMarks = $state([]); // Students who have marks for this subject
 	let editingWeight = $state({}); // Track which weight is being edited
 	let tempWeightValue = $state(''); // Temporary value while editing
+	
+	// Student reordering state
+	let isReordering = $state(false);
 
 	// Functions
 	// Ensure all assessments have categories array initialized
@@ -492,8 +495,59 @@
 				color: getGradeColor(grade)
 			}));
 	}
+
+	// Student reordering functions
+	function moveStudentUp(index) {
+		if (index > 0) {
+			isReordering = true;
+			const newStudentsWithMarks = [...studentsWithMarks];
+			// Swap with previous student
+			[newStudentsWithMarks[index], newStudentsWithMarks[index - 1]] = 
+			[newStudentsWithMarks[index - 1], newStudentsWithMarks[index]];
+			studentsWithMarks = newStudentsWithMarks;
+			// Reset reordering flag after a brief delay for visual feedback
+			setTimeout(() => isReordering = false, 200);
+		}
+	}
+
+	function moveStudentDown(index) {
+		if (index < studentsWithMarks.length - 1) {
+			isReordering = true;
+			const newStudentsWithMarks = [...studentsWithMarks];
+			// Swap with next student
+			[newStudentsWithMarks[index], newStudentsWithMarks[index + 1]] = 
+			[newStudentsWithMarks[index + 1], newStudentsWithMarks[index]];
+			studentsWithMarks = newStudentsWithMarks;
+			// Reset reordering flag after a brief delay for visual feedback
+			setTimeout(() => isReordering = false, 200);
+		}
+	}
 </script>
 
+<style>
+	.drag-row {
+		transition: all 0.2s ease;
+	}
+	
+	.drag-row:hover {
+		background-color: rgba(0, 123, 255, 0.05);
+	}
+	
+	.bi-grip-vertical:hover {
+		color: #0d6efd !important;
+	}
+	
+	.btn-sm.btn-outline-secondary:hover {
+		background-color: #6c757d;
+		border-color: #6c757d;
+		color: white;
+	}
+	
+	.btn-sm.btn-outline-secondary:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
+	}
+</style>
 
 <div class="container-fluid">
 
@@ -694,14 +748,39 @@
 									</thead>
 									<tbody>
 										{#each studentsWithMarks as student, index}
-											<tr>
+											<tr class="drag-row" 
+												style="cursor: move;">
 												<td class="align-middle sticky-start bg-white" style="min-width: 200px;">
 													<div class="d-flex align-items-center">
 														<div class="me-3" style="width: 20px; font-weight: 600;">
 															{index + 1}.
 														</div>
-														<div>
-															<div>{student.name}</div>
+														<div class="flex-grow-1">
+															<div class="d-flex align-items-center justify-content-between">
+																<div class="d-flex align-items-center">
+																	<span>{student.name}</span>
+																</div>
+																<div class="d-flex flex-column gap-1">
+																	<button 
+																		class="btn btn-sm btn-outline-secondary p-1" 
+																		style="width: 24px; height: 20px; font-size: 0.7rem;"
+																		onclick={() => moveStudentUp(index)}
+																		disabled={index === 0}
+																		title="Move up"
+																		aria-label="Move student up">
+																		<i class="bi bi-chevron-up"></i>
+																	</button>
+																	<button 
+																		class="btn btn-sm btn-outline-secondary p-1" 
+																		style="width: 24px; height: 20px; font-size: 0.7rem;"
+																		onclick={() => moveStudentDown(index)}
+																		disabled={index === studentsWithMarks.length - 1}
+																		title="Move down"
+																		aria-label="Move student down">
+																		<i class="bi bi-chevron-down"></i>
+																	</button>
+																</div>
+															</div>
 															<small class="text-muted">{student.studentId}</small>
 														</div>
 													</div>
