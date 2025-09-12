@@ -449,10 +449,10 @@
 				<div class="border rounded p-3 shadow-sm d-flex flex-column" style="min-width: 300px; max-width: 350px; aspect-ratio: 1; height: 300px;">
 					<!-- Header Section -->
 					<div class="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">
-						<div class="d-flex align-items-center">
-							<i class="bi bi-clipboard-check text-primary me-2" style="font-size: 1.5rem;"></i>
-							<h6 class="mb-0 fw-bold">Assessment</h6>
-						</div>
+							<div class="d-flex align-items-center">
+								<i class="bi bi-clipboard-check text-primary me-2" style="font-size: 1.5rem;"></i>
+								<h6 class="mb-0">Assessment</h6>
+							</div>
 						<button 
 							class="btn btn-sm btn-outline-danger border-0"
 							onclick={() => removeAssessment(assessment.id)}
@@ -465,7 +465,7 @@
 					
 					<!-- Content Section -->
 					<div class="d-flex flex-column justify-content-center align-items-center flex-grow-1 text-center">
-						<h5 class="mb-3">{assessment.name}</h5>
+						<h5 class="mb-3 fw-normal">{assessment.name}</h5>
 						<div class="d-flex gap-2 mb-4">
 							<span class="badge bg-info">
 								<i class="bi bi-book me-1"></i>
@@ -524,7 +524,7 @@
 												<th scope="col" class="border-0 text-center sticky-top bg-light" colspan="2">
 													<div class="d-flex flex-column align-items-center">
 														<i class="bi bi-clipboard-check me-1"></i>
-														<span class="fw-semibold">{assessment.name}</span>
+														<span>{assessment.name}</span>
 													</div>
 												</th>
 											{/each}
@@ -606,7 +606,7 @@
 															{student.name.charAt(0).toUpperCase()}
 														</div>
 														<div>
-															<div class="fw-semibold">{student.name}</div>
+															<div>{student.name}</div>
 															<small class="text-muted">{student.studentId}</small>
 														</div>
 													</div>

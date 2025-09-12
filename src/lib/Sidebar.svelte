@@ -143,7 +143,7 @@
 								<div class="d-flex justify-content-between align-items-center">
 									<div>
 										<i class="bi bi-book me-2"></i>
-										<strong>{subject.name}</strong>
+										{subject.name}
 									</div>
 									<span class="badge bg-primary ms-2">{subject.assessments.length}</span>
 								</div>
@@ -181,7 +181,7 @@
 						<!-- Context Info -->
 						<div class="mb-3">
 							<small class="text-muted">
-								<i class="bi bi-book me-1"></i>Subject: <strong>{currentSubject?.name}</strong>
+								<i class="bi bi-book me-1"></i>Subject: {currentSubject?.name}
 							</small>
 						</div>
 						
@@ -192,7 +192,7 @@
 							>
 								<div class="d-flex align-items-center">
 									<i class="bi bi-clipboard-check me-2"></i>
-									<strong>{assessment.name}</strong>
+									{assessment.name}
 								</div>
 							</button>
 						{/each}
@@ -226,21 +226,21 @@
 										<div class="small">
 											{#if currentSubject}
 												<div class="mb-2">
-													<strong>Subject:</strong> {currentSubject.name}
+													Subject: {currentSubject.name}
 												</div>
 											{/if}
 											{#if currentAssessment}
 												<div class="mb-2">
-													<strong>Assessment:</strong> {currentAssessment.name}
+													Assessment: {currentAssessment.name}
 												</div>
 											{/if}
 											{#if currentStudentId && studentName}
 												<div class="mb-2">
-													<strong>Student:</strong> {studentName}
+													Student: {studentName}
 												</div>
 											{:else if currentStudentId}
 												<div class="mb-2 text-muted">
-													<strong>Student:</strong> Loading...
+													Student: Loading...
 												</div>
 											{/if}
 										</div>
