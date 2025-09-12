@@ -735,7 +735,7 @@
 						<div class="card-body py-5">
 							<i class="bi bi-clipboard-check text-muted mb-3" style="font-size: 4rem;"></i>
 							<h4 class="text-muted mb-3">No assessments created yet</h4>
-							<p class="text-muted mb-4 fs-5">Create your first assessment to start organizing feedback and categories.</p>
+							<p class="text-muted mb-4 fs-6">Create your first assessment to start organizing feedback and categories.</p>
 						</div>
 					</div>
 				</div>

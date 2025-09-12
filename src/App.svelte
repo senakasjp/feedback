@@ -1908,7 +1908,7 @@
 																			</div>
 																		{/if}
 																		<div class="flex-grow-1 me-3">
-																			<p class="mb-0 fs-5 lh-base">{text}</p>
+																			<p class="mb-0 fs-6 lh-base">{text}</p>
 																		</div>
 																		<div class="d-flex gap-1">
 																			<button 

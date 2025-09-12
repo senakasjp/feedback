@@ -218,7 +218,7 @@
 						<div class="card-body py-5">
 							<i class="bi bi-book text-muted mb-3" style="font-size: 4rem;"></i>
 							<h4 class="text-muted mb-3">No subjects created yet</h4>
-							<p class="text-muted mb-4 fs-5">Create your first subject to get started with managing assessments and feedback.</p>
+							<p class="text-muted mb-4 fs-6">Create your first subject to get started with managing assessments and feedback.</p>
 						</div>
 					</div>
 				</div>
