@@ -1743,11 +1743,11 @@
 																<input 
 																	type="number" 
 																	id="allocatedMarksInput" 
-																	class="form-control form-control-sm" 
+																	class="form-control form-control-sm w-auto" 
 																	placeholder="Marks"
 																	min="0"
 																	step="0.5"
-																	class="w-auto" style="width: 80px;"
+																	style="width: 80px;"
 																	value={currentAssessment.categories.find(cat => cat.name === selectedCategory)?.allocatedMarks || ''}
 																	oninput={(e) => updateCategoryAllocatedMarks(selectedCategory, e.currentTarget.value)}
 																>
@@ -1843,17 +1843,17 @@
 															</div>
 															{#if group.category}
 																<div class="d-flex align-items-center gap-2">
-																	<input 
-																		type="number" 
-																		class="form-control form-control-sm" 
-																		id="marks-{group.category}"
-																		class="w-auto" style="width: 80px;"
-																		placeholder="0"
-																		value={categoryMarks[group.category] || ''}
-																		oninput={(e) => updateCategoryMarks(group.category, e.currentTarget.value)}
-																		min="0"
-																		step="0.5"
-																	>
+									<input 
+										type="number" 
+										class="form-control form-control-sm w-auto" 
+										id="marks-{group.category}"
+										style="width: 80px;"
+										placeholder="0"
+										value={categoryMarks[group.category] || ''}
+										oninput={(e) => updateCategoryMarks(group.category, e.currentTarget.value)}
+										min="0"
+										step="0.5"
+									>
 																	{#if currentAssessment.categories.find(cat => cat.name === group.category)?.allocatedMarks}
 																		<span class="text-white fw-bold" style="font-size: 0.9rem;">
 																			{currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
