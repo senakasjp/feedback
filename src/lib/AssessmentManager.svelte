@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core'
+	import { getDynamicColor, getGradeColor } from './colorUtils.js'
 
 	// Types
 	type Assessment = {
@@ -182,9 +183,17 @@
 	function getMaxPossibleRawMarks(assessmentId: string): number {
 		const assessment = assessments.find(a => a.id === assessmentId);
 		if (!assessment || !assessment.categories) {
-			return 0;
+			return 100; // Default fallback
 		}
-		return assessment.categories.reduce((total, category) => total + ((category as any).allocatedMarks || 0), 0);
+		const totalMarks = assessment.categories.reduce((total, category) => total + ((category as any).allocatedMarks || 0), 0);
+		
+		
+		// If no allocated marks are set, use a default based on number of categories
+		if (totalMarks === 0 && assessment.categories.length > 0) {
+			return assessment.categories.length * 20; // 20 marks per category as default
+		}
+		
+		return totalMarks || 100; // Fallback to 100 if still 0
 	}
 
 	// Helper function to calculate grade based on percentage
@@ -400,7 +409,91 @@
 			addAssessment();
 		}
 	}
+
+	// Helper function to get performance highlights (top, medium, lowest)
+	function getPerformanceHighlights() {
+		if (studentsWithMarks.length === 0) {
+			return { topPerformer: null, mediumPerformer: null, lowestPerformer: null };
+		}
+
+		// Calculate final percentages for all students
+		const studentPerformances = studentsWithMarks.map(student => {
+			let totalWeightedMarks = 0;
+			let totalWeight = 0;
+			let hasAnyMarks = false;
+
+			for (const assessment of assessments) {
+				const weighted = getWeightedMarks(student.id, assessment.id);
+				if (weighted) {
+					totalWeightedMarks += weighted.weightedMarks;
+					hasAnyMarks = true;
+				}
+				
+				if (assessment.weight) {
+					totalWeight += assessment.weight;
+				}
+			}
+
+			const percentage = hasAnyMarks && totalWeight > 0 ? (totalWeightedMarks / totalWeight) * 100 : 0;
+			const finalGrade = getFinalGrade(student.id);
+
+			return {
+				student,
+				percentage,
+				finalGrade,
+				totalWeightedMarks,
+				totalWeight
+			};
+		}).filter(perf => perf.percentage > 0).sort((a, b) => b.percentage - a.percentage);
+
+		if (studentPerformances.length === 0) {
+			return { topPerformer: null, mediumPerformer: null, lowestPerformer: null };
+		}
+
+		const topPerformer = studentPerformances[0];
+		const lowestPerformer = studentPerformances[studentPerformances.length - 1];
+		const mediumIndex = Math.floor(studentPerformances.length / 2);
+		const mediumPerformer = studentPerformances[mediumIndex];
+
+		return { topPerformer, mediumPerformer, lowestPerformer };
+	}
+
+	// Helper function to get grade distribution
+	function getGradeDistribution() {
+		const gradeCounts = {};
+		
+		studentsWithMarks.forEach(student => {
+			const grade = getFinalGrade(student.id);
+			gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
+		});
+
+		const gradeOrder = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'E', 'N/A'];
+		const gradeLabels = {
+			'A+': 'A+ (90-100%)',
+			'A': 'A (85-89%)',
+			'A-': 'A- (80-84%)',
+			'B+': 'B+ (75-79%)',
+			'B': 'B (70-74%)',
+			'B-': 'B- (65-69%)',
+			'C+': 'C+ (60-64%)',
+			'C': 'C (55-59%)',
+			'C-': 'C- (50-54%)',
+			'D': 'D (40-49%)',
+			'E': 'E (0-39%)',
+			'N/A': 'N/A (No marks)'
+		};
+
+		return gradeOrder
+			.filter(grade => gradeCounts[grade] > 0)
+			.map(grade => ({
+				grade,
+				label: gradeLabels[grade] || grade,
+				count: gradeCounts[grade],
+				color: getGradeColor(grade)
+			}));
+	}
 </script>
+
 
 <div class="container-fluid">
 
@@ -495,51 +588,54 @@
 		{#if studentsWithMarks.length > 0 && assessments.length > 0}
 			<div class="row mt-5">
 				<div class="col-12">
-					<div class="card border-0 shadow-sm">
-					<div class="card-header bg-light border-0 d-flex justify-content-between align-items-center">
-						<div>
-							<h5 class="card-title mb-0">
-								<i class="bi bi-people me-2"></i>Students with Marks
-							</h5>
-							<p class="text-muted mb-0 small">Students who have marks for assessments in this subject</p>
+					<div class="card">
+						<div class="card-header d-flex justify-content-between align-items-center">
+							<div>
+								<h5 class="card-title mb-0">
+									<i class="bi bi-people me-2"></i>Students with Marks
+								</h5>
+								<p class="text-muted mb-0 small">Students who have marks for assessments in this subject</p>
+							</div>
+							<button 
+								class="btn btn-outline-success btn-sm"
+								onclick={exportToCSV}
+								disabled={studentsWithMarks.length === 0}
+								title="Export marks to CSV for Excel"
+							>
+								<i class="bi bi-download me-1"></i>Export CSV
+							</button>
 						</div>
-						<button 
-							class="btn btn-outline-success btn-sm"
-							onclick={exportToCSV}
-							disabled={studentsWithMarks.length === 0}
-							title="Export marks to CSV for Excel"
-						>
-							<i class="bi bi-download me-1"></i>Export CSV
-						</button>
-					</div>
 						<div class="card-body p-0">
 							<div class="table-responsive">
 								<table class="table table-hover mb-0">
 									<thead class="table-light">
 										<tr>
-											<th scope="col" class="border-0 sticky-top bg-light">
+											<th scope="col" class="sticky-top">
 												<i class="bi bi-person me-2"></i>Student
 											</th>
 											{#each assessments as assessment}
-												<th scope="col" class="border-0 text-center sticky-top bg-light" colspan="2">
+												<th scope="col" class="text-center sticky-top" colspan="2">
 													<div class="d-flex flex-column align-items-center">
 														<i class="bi bi-clipboard-check me-1"></i>
 														<span>{assessment.name}</span>
 													</div>
 												</th>
 											{/each}
+											<th scope="col" class="text-center sticky-top">
+												<i class="bi bi-award me-1"></i>Final Grade
+											</th>
 										</tr>
 										<tr>
-											<th scope="col" class="border-0 sticky-top bg-light">
+											<th scope="col" class="sticky-top">
 												<!-- Empty for student column -->
 											</th>
 											{#each assessments as assessment}
-												<th scope="col" class="border-0 text-center sticky-top bg-light">
+												<th scope="col" class="text-center sticky-top">
 													<small class="text-muted">Marks</small>
 												</th>
-												<th scope="col" class="border-0 text-center sticky-top bg-light">
+												<th scope="col" class="text-center sticky-top">
 													{#if editingWeight[assessment.id]}
-														<div class="d-flex align-items-center justify-content-center gap-1" style="background-color: #e3f2fd; padding: 2px; border-radius: 4px;">
+														<div class="d-flex align-items-center justify-content-center gap-1">
 															<input
 																type="number"
 																class="form-control form-control-sm"
@@ -577,7 +673,7 @@
 														</div>
 													{:else}
 														<div class="d-flex align-items-center justify-content-center gap-1">
-															<small class="text-muted">Weight %</small>
+															<small class="text-muted">{assessment.weight || 0}%</small>
 															<i 
 																class="bi bi-pencil text-muted"
 																onclick={() => startEditingWeight(assessment.id)}
@@ -591,19 +687,18 @@
 													{/if}
 												</th>
 											{/each}
-											<th scope="col" class="border-0 text-center sticky-top bg-light">
-												<small class="text-muted">Grades</small>
+											<th scope="col" class="text-center sticky-top">
+												<small class="text-muted">Grade</small>
 											</th>
 										</tr>
 									</thead>
 									<tbody>
-										{#each studentsWithMarks as student}
+										{#each studentsWithMarks as student, index}
 											<tr>
 												<td class="align-middle sticky-start bg-white" style="min-width: 200px;">
 													<div class="d-flex align-items-center">
-														<div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" 
-															 style="width: 40px; height: 40px; font-size: 0.9rem; font-weight: 600;">
-															{student.name.charAt(0).toUpperCase()}
+														<div class="me-3" style="width: 20px; font-weight: 600;">
+															{index + 1}.
 														</div>
 														<div>
 															<div>{student.name}</div>
@@ -639,45 +734,12 @@
 																	{@const fallbackMaxMarks = 100}
 																	{@const effectiveMaxMarks = maxRawMarks > 0 ? maxRawMarks : fallbackMaxMarks}
 																	{@const barPercentage = (marks.total / effectiveMaxMarks) * 100}
-																	{@const testPercentage = Math.random() * 100}
-																	{@const getBarColor = (percentage) => {
-																		const clampedPercentage = Math.max(0, Math.min(100, percentage));
-																		
-																		if (clampedPercentage <= 50) {
-																			const ratio = clampedPercentage / 50;
-																			const red = 255;
-																			const green = Math.round(255 * ratio);
-																			const blue = 0;
-																			return `rgb(${red}, ${green}, ${blue})`;
-																		} else {
-																			const ratio = (clampedPercentage - 50) / 50;
-																			const red = Math.round(255 * (1 - ratio));
-																			const green = 255;
-																			const blue = 0;
-																			return `rgb(${red}, ${green}, ${blue})`;
-																		}
-																	}}
-																	{@const barColor = getBarColor(testPercentage)}
-																	{@const testColor = getBarColor(25)}
-																	{console.log(`Bar calculation for ${student.name}, ${assessment.name}:`, {
-																		studentMarks: marks.total,
-																		maxRawMarks,
-																		effectiveMaxMarks,
-																		barPercentage: Math.round(barPercentage * 100) / 100,
-																		testPercentage: Math.round(testPercentage * 100) / 100,
-																		weightedMarks: weighted.weightedMarks,
-																		assessmentWeight: assessment.weight,
-																		barColor,
-																		testColor25: testColor,
-																		colorAt0: getBarColor(0),
-																		colorAt50: getBarColor(50),
-																		colorAt100: getBarColor(100)
-																	})}
+																	
 																	<div class="progress" style="height: 8px; background-color: #e9ecef;">
 																		<div 
 																			class="progress-bar" 
 																			role="progressbar" 
-																			style="width: {Math.max(barPercentage, 2)}%; min-width: 2px; background-color: {barColor};"
+																			style="width: {Math.max(barPercentage, 2)}%; min-width: 2px; background-color: {getDynamicColor(marks.total, effectiveMaxMarks)};"
 																			aria-valuenow={marks.total} 
 																			aria-valuemin="0" 
 																			aria-valuemax={effectiveMaxMarks}
@@ -698,7 +760,8 @@
 												<td class="align-middle text-center">
 													{#if getFinalGrade(student.id) !== "N/A"}
 														{@const finalGrade = getFinalGrade(student.id)}
-														<span class="badge bg-primary fs-6">
+														{@const gradeColor = getGradeColor(finalGrade)}
+														<span class="badge {gradeColor} fs-6">
 															{finalGrade}
 														</span>
 													{:else}
@@ -709,6 +772,91 @@
 										{/each}
 									</tbody>
 								</table>
+							</div>
+						</div>
+					</div>
+					
+					<!-- Summary Section -->
+					<div class="card mt-4 border-0 shadow-sm">
+						<div class="card-header bg-gradient text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+							<h6 class="card-title mb-0 fw-bold">
+								<i class="bi bi-graph-up me-2"></i>Performance Summary
+							</h6>
+						</div>
+						<div class="card-body p-4">
+							<div class="row g-4">
+								<!-- Top, Medium, Lowest Performers -->
+								<div class="col-lg-6">
+									<div class="border rounded p-3 h-100" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+										<h6 class="text-primary mb-3 fw-semibold">
+											<i class="bi bi-trophy me-2"></i>Performance Highlights
+										</h6>
+										{#if getPerformanceHighlights().topPerformer}
+											<div class="d-flex align-items-center mb-3 p-2 rounded" style="background: rgba(25, 135, 84, 0.1);">
+												<i class="bi bi-trophy-fill text-success me-2"></i>
+												<div class="flex-grow-1">
+													<strong class="text-success">Highest Performer</strong>
+													<div class="text-dark">{getPerformanceHighlights().topPerformer.student.name}</div>
+												</div>
+												<span class="badge bg-success fs-6 px-3 py-2">
+													{getPerformanceHighlights().topPerformer.finalGrade} ({getPerformanceHighlights().topPerformer.percentage.toFixed(1)}%)
+												</span>
+											</div>
+										{/if}
+										{#if getPerformanceHighlights().mediumPerformer}
+											<div class="d-flex align-items-center mb-3 p-2 rounded" style="background: rgba(255, 193, 7, 0.1);">
+												<i class="bi bi-award text-warning me-2"></i>
+												<div class="flex-grow-1">
+													<strong class="text-warning">Medium Performer</strong>
+													<div class="text-dark">{getPerformanceHighlights().mediumPerformer.student.name}</div>
+												</div>
+												<span class="badge bg-warning text-dark fs-6 px-3 py-2">
+													{getPerformanceHighlights().mediumPerformer.finalGrade} ({getPerformanceHighlights().mediumPerformer.percentage.toFixed(1)}%)
+												</span>
+											</div>
+										{/if}
+										{#if getPerformanceHighlights().lowestPerformer}
+											<div class="d-flex align-items-center mb-3 p-2 rounded" style="background: rgba(220, 53, 69, 0.1);">
+												<i class="bi bi-exclamation-triangle text-danger me-2"></i>
+												<div class="flex-grow-1">
+													<strong class="text-danger">Needs Support</strong>
+													<div class="text-dark">{getPerformanceHighlights().lowestPerformer.student.name}</div>
+												</div>
+												<span class="badge bg-danger fs-6 px-3 py-2">
+													{getPerformanceHighlights().lowestPerformer.finalGrade} ({getPerformanceHighlights().lowestPerformer.percentage.toFixed(1)}%)
+												</span>
+											</div>
+										{/if}
+									</div>
+								</div>
+								
+								<!-- Grade Distribution -->
+								<div class="col-lg-6">
+									<div class="border rounded p-3 h-100" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+										<h6 class="text-primary mb-3 fw-semibold">
+											<i class="bi bi-pie-chart me-2"></i>Grade Distribution
+										</h6>
+										<div class="row g-2">
+											{#each getGradeDistribution() as gradeInfo}
+												<div class="col-6">
+													<div class="d-flex justify-content-between align-items-center p-2 rounded" 
+														 style="background: white; border-left: 4px solid {gradeInfo.grade.startsWith('A') ? '#198754' : gradeInfo.grade.startsWith('B') ? '#0d6efd' : gradeInfo.grade.startsWith('C') ? '#ffc107' : gradeInfo.grade.startsWith('D') ? '#fd7e14' : '#6c757d'};">
+														<span class="fw-medium text-dark">{gradeInfo.grade}:</span>
+														<span class="badge fs-6 px-2 py-1 {gradeInfo.color}">
+															{gradeInfo.count}
+														</span>
+													</div>
+												</div>
+											{/each}
+										</div>
+										<div class="mt-3 pt-3 border-top">
+											<small class="text-muted">
+												<i class="bi bi-info-circle me-1"></i>
+												Total students with marks: <strong>{studentsWithMarks.length}</strong>
+											</small>
+										</div>
+									</div>
+								</div>
 							</div>
 						</div>
 					</div>

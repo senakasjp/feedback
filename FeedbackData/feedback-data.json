@@ -92,7 +92,7 @@
               "name": "Recommendations & Future Directions [10]"
             }
           ],
-          "weight": 30
+          "weight": 40
         },
         {
           "id": "1757543562075",
@@ -100,12 +100,6 @@
           "topics": [],
           "categories": [],
           "weight": 70
-        },
-        {
-          "id": "1757544163009",
-          "name": "Ass 3",
-          "topics": [],
-          "categories": []
         }
       ]
     }

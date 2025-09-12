@@ -70,10 +70,11 @@ Subject (1 or more)
 
 **Key Responsibilities**:
 - Global state management (`$state` variables)
-- Data persistence and loading
+- Data persistence and loading (subject-level and student-specific)
 - Component event handling
-- PDF generation orchestration
+- PDF generation orchestration with auto-save
 - Student management coordination
+- Paragraph database management
 
 **Core State Variables**:
 ```javascript
@@ -81,40 +82,67 @@ let subjects = $state([])                    // All subjects
 let currentSubjectId = $state(null)         // Currently selected subject
 let currentAssessmentId = $state(null)      // Currently selected assessment
 let currentStudentId = $state(null)         // Currently selected student
-let paragraphs = $state([])                 // Feedback paragraphs
-let selectedParagraphs = $state(new Set())  // Selected paragraph indices
+let paragraphs = $state([])                 // Subject-level paragraph database
+let selectedParagraphs = $state(new Set())  // Student-specific selected paragraphs
+let deletedParagraphs = $state(new Set())   // Student-specific deleted paragraphs
 let students = $state([])                   // Student database
 let percentageRanges = $state([])           // Universal percentage ranges
 let showCalculator = $state(false)          // Calculator/navigation toggle
+let categoryMarks = $state({})              // Student-specific category marks
+let manualTotalMarks = $state('')           // Student-specific total marks
+let studentImage = $state('')               // Student photo (base64)
+let studentName = $state('')                // Current student display name
 ```
 
 **Key Functions**:
-- `saveData()`: Persist all data to JSON files
-- `loadData()`: Load data from storage
-- `generatePDF()`: Create PDF with selected content
+- `saveSubjects()`: Persist main configuration data
+- `loadSubjects()`: Load main configuration from storage
+- `saveSubjectParagraphs(subjectId)`: Save subject-level paragraph database
+- `loadSubjectParagraphs(subjectId)`: Load subject-level paragraphs with fallback
+- `saveStudentData(subjectId, assessmentId, studentId)`: Save student-specific data
+- `loadStudentData(subjectId, assessmentId, studentId)`: Load student-specific data
+- `generatePDF()`: Create PDF with selected content + auto-save student data
 - `addStudent()`: Add new student to database
-- `selectStudent()`: Set current student context
+- `selectStudent(studentId)`: Set current student context and load data
+- `addParagraph()`: Add paragraph to subject database + update student selection
+- `deleteParagraph(index)`: Remove from subject + move to student deleted list
 
 ### 🧭 Sidebar Navigation (`Sidebar.svelte`)
 
-**Purpose**: Primary navigation interface with integrated percentage calculator.
+**Purpose**: Primary navigation interface with integrated percentage calculator and toggle functionality.
 
 **Features**:
-- Subject and assessment navigation
+- Subject and assessment navigation (non-bold fonts)
 - Student selection dropdown
-- Percentage calculator toggle
+- Percentage calculator toggle (green, light green, yellow, orange, red colors only)
 - Session information display
-- Sticky positioning (top of viewport)
+- Full sticky positioning (entire sidebar card)
+- Action buttons (Save/Load student data, Copy to clipboard, Print to download)
 
 **Toggle System**:
 ```svelte
 {#if !showCalculator}
   <!-- Navigation View -->
   <!-- Subject/Assessment navigation -->
+  <!-- Student selection -->
+  <!-- Action buttons -->
 {:else}
   <!-- Calculator View -->
   <!-- Percentage ranges management -->
+  <!-- Color-coded ranges -->
 {/if}
+```
+
+**Toggle Button Implementation**:
+```svelte
+<button 
+  class="btn btn-outline-light btn-sm" 
+  onclick={toggleView}
+  title={showCalculator ? 'Show Navigator' : 'Show Calculator'}
+  aria-label={showCalculator ? 'Show Navigator' : 'Show Calculator'}
+>
+  <i class="bi bi-{showCalculator ? 'list' : 'calculator'}"></i>
+</button>
 ```
 
 **Sticky Implementation**:
@@ -129,6 +157,17 @@ let showCalculator = $state(false)          // Calculator/navigation toggle
   overflow-y: auto;
   padding-top: 1rem;
 }
+```
+
+**Percentage Calculator Colors**:
+```javascript
+const colorOptions = [
+  { name: 'green', style: 'background-color: #198754; color: white;' },
+  { name: 'light-green', style: 'background-color: #20c997; color: white;' },
+  { name: 'yellow', style: 'background-color: #ffc107; color: black;' },
+  { name: 'orange', style: 'background-color: #fd7e14; color: white;' },
+  { name: 'red', style: 'background-color: #dc3545; color: white;' }
+]
 ```
 
 ### 📚 Subject Management (`SubjectManager.svelte`)
@@ -343,19 +382,31 @@ async function saveSubjectParagraphs(subjectId) {
   });
 }
 
-// Student-specific data
+// Student-specific data (selections, marks, image, deleted paragraphs)
 async function saveStudentData(subjectId, assessmentId, studentId) {
   const data = {
     selectedParagraphs: Array.from(selectedParagraphs),
+    deletedParagraphs: Array.from(deletedParagraphs),
     categoryMarks: categoryMarks,
-    totalMarks: totalMarks,
+    manualTotalMarks: manualTotalMarks,
     studentImage: studentImage,
-    studentName: studentName
+    studentName: studentName,
+    savedAt: new Date().toISOString()
   };
   await invoke('write_file', {
     path: `FeedbackData/student-${studentId}-${subjectId}-${assessmentId}.json`,
     content: JSON.stringify(data, null, 2)
   });
+}
+
+// Auto-save on PDF generation
+async function generatePDF() {
+  // ... PDF generation logic ...
+  
+  // Auto-save student evaluation data when generating PDF
+  if (currentStudentId) {
+    await saveStudentEvaluation(); // Saves complete student data
+  }
 }
 ```
 
@@ -447,11 +498,12 @@ Assessments (1 or more per subject)
 ```json
 {
   "selectedParagraphs": [0, 1],
+  "deletedParagraphs": [2, 3],
   "categoryMarks": {
     "Strengths": "10",
     "Areas for Improvement": "15"
   },
-  "totalMarks": "25",
+  "manualTotalMarks": "25",
   "studentImage": "data:image/jpeg;base64...",
   "studentName": "John Doe (12345)",
   "savedAt": "2024-01-01T00:00:00.000Z"
@@ -746,45 +798,50 @@ function updateAssessmentWeight(assessmentId, weight) {
 
 #### PDF Generation
 ```javascript
-// Generate PDF with selected content
+// Generate PDF with selected content + auto-save
 async function generatePDF() {
-  const doc = new jsPDF();
-  let yPosition = 20;
-  
-  // Add header
-  doc.setFontSize(16);
-  doc.text('Feedback Report', 20, yPosition);
-  yPosition += 20;
-  
-  // Add student information
-  doc.setFontSize(12);
-  doc.text(`Student: ${studentName}`, 20, yPosition);
-  yPosition += 15;
-  doc.text(`Subject: ${currentSubject?.name}`, 20, yPosition);
-  yPosition += 15;
-  doc.text(`Assessment: ${currentAssessment?.name}`, 20, yPosition);
-  yPosition += 25;
-  
-  // Add selected paragraphs
   const selectedText = getSelectedText();
-  doc.setFontSize(10);
-  selectedText.split('\n').forEach(line => {
-    if (yPosition > 280) {
-      doc.addPage();
-      yPosition = 20;
-    }
-    doc.text(line, 20, yPosition);
-    yPosition += 6;
-  });
-  
-  // Save PDF
-  const filename = `Feedback Report - ${currentSubject?.name} - ${currentAssessment?.name} - ${studentName}.pdf`;
-  doc.save(filename);
-  
-  // Auto-save student data
-  if (currentStudentId) {
-    await saveStudentData(currentSubjectId, currentAssessmentId, currentStudentId);
+  if (!selectedText) {
+    showSuccessNotification('No paragraphs selected!');
+    return;
   }
+
+  // Check for marks warning
+  const calculatedTotal = getTotalMarks();
+  if (calculatedTotal > 0 && (!manualTotalMarks || manualTotalMarks === '0' || manualTotalMarks === '')) {
+    showTotalMarksWarning = true;
+    return;
+  }
+
+  const doc = new jsPDF();
+  
+  // Add full-width student image if available
+  if (studentImage) {
+    const img = new Image();
+    img.onload = function() {
+      const aspectRatio = img.width / img.height;
+      let imageWidth = pageWidth - (margin * 2);
+      let imageHeight = imageWidth / aspectRatio;
+      
+      doc.addImage(studentImage, 'JPEG', margin, margin, imageWidth, imageHeight);
+      
+      // Continue with content below image
+      let currentY = margin + imageHeight + 15;
+      generateRestOfPDF(doc, currentY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name);
+    };
+    img.src = studentImage;
+    return;
+  }
+  
+  // Generate PDF content with professional formatting
+  generateRestOfPDF(doc, margin, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name);
+  
+  // Auto-save student evaluation data when generating PDF
+  if (currentStudentId) {
+    await saveStudentEvaluation(); // Saves complete student data automatically
+  }
+  
+  showSuccessNotification('PDF generated and downloaded successfully!');
 }
 ```
 
@@ -915,16 +972,19 @@ function batchUpdateState() {
 ## Version History
 
 ### v2.5.0 - Current Version
-- **Subject-Level Paragraph Database**: Centralized paragraph storage per subject
-- **Dual Paragraph Display**: Subject paragraphs + student-specific selections
-- **Deleted Paragraph Persistence**: Visual indicators for removed content
-- **Navigation Sidebar Toggle**: Calculator/navigation view switching
-- **Sticky Sidebar**: Full sidebar sticky to viewport top
-- **Bootstrap 5 Compatibility**: Complete UI framework integration
+- **Subject-Level Paragraph Database**: Centralized paragraph storage per subject (not assessment-level)
+- **Dual Paragraph Display**: Subject paragraphs + student-specific selections and deleted paragraphs
+- **Deleted Paragraph Persistence**: Visual indicators for removed content, stored in student data
+- **Navigation Sidebar Toggle**: Calculator/navigation view switching with color-coded percentage ranges
+- **Sticky Sidebar**: Full sidebar card sticky to viewport top with proper content scrolling
+- **Bootstrap 5 "sm" Theme**: Complete UI framework integration with fs-6 font sizes
 - **Assessment Weighting**: Percentage-based assessment weights
-- **Student Management**: Comprehensive student database system
-- **PDF Generation**: Professional report generation with images
+- **Student Management**: Comprehensive student database system with photo upload
+- **PDF Generation**: Professional report generation with images + automatic student data save
 - **CSV Export**: Student marks table export functionality
+- **Auto-Save on PDF**: Student data automatically saved when generating PDF reports
+- **Font Consistency**: Non-bold fonts for subject/assessment names in navigation
+- **Color-Restricted Calculator**: Only green, light green, yellow, orange, red colors allowed
 
 ### Key Architectural Decisions
 1. **File-based Storage**: JSON files for portability and simplicity
@@ -932,5 +992,30 @@ function batchUpdateState() {
 3. **Reactive State Management**: Svelte 5 `$state` and `$derived`
 4. **Cross-platform Desktop**: Tauri for native performance
 5. **Bootstrap 5 UI**: Consistent, responsive interface design
+
+## Critical Data Flow Patterns
+
+### Paragraph Management Flow
+1. **Paragraph Creation**: Added to subject-level database (`subject-paragraphs-{subjectId}.json`)
+2. **Student Selection**: Loads subject paragraphs + student-specific data (selections, deleted, marks)
+3. **Paragraph Deletion**: Removed from subject database + moved to student's deleted list
+4. **PDF Generation**: Automatically saves all current student data
+
+### Auto-Save Behavior
+- **Manual Save**: "Save Student Data" button saves current state
+- **Auto-Save on PDF**: PDF generation automatically saves complete student data
+- **No Auto-Save**: Regular paragraph operations don't auto-save (manual or PDF trigger required)
+
+### Data Loading Priority
+1. **Subject Selection**: Loads subject paragraphs from `subject-paragraphs-{subjectId}.json`
+2. **Assessment Selection**: Loads subject paragraphs + assessment context
+3. **Student Selection**: Loads subject paragraphs + student-specific data
+4. **Fallback Logic**: If subject paragraphs don't exist, tries legacy `subject-{subjectId}-{assessmentId}.json`
+
+### Bootstrap 5 "sm" Theme Compliance
+- **Font Sizes**: `fs-6` (16px) for paragraphs, consistent with Bootstrap 5 "sm" theme
+- **Non-Bold Navigation**: Subject and assessment names use `fw-normal` class
+- **Color Restrictions**: Percentage calculator limited to 5 specific colors
+- **Sticky Positioning**: Full sidebar card sticky with proper content scrolling
 
 This comprehensive guide provides everything needed to understand, develop, and maintain the Feedback Manager application.
