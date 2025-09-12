@@ -1512,22 +1512,21 @@
 										</div>
 										<div class="col-12">
 											<label for="studentImageInput" class="form-label fw-bold">Student Photo:</label>
-											<div class="input-group input-group-sm">
+											<div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3">
 												<input 
 													id="studentImageInput" 
 													type="file" 
-													class="form-control form-control-sm" 
+													class="form-control form-control-sm flex-grow-1" 
 													accept="image/*"
 													onchange={handleImageUpload}
 												>
 												{#if studentImage}
-													<span class="input-group-text">
-														<img 
-															src={studentImage} 
-															alt="Student" 
-															class="rounded" style="width: 40px; height: 40px; object-fit: cover;"
-														>
-													</span>
+													<img 
+														src={studentImage} 
+														alt="Student" 
+														class="rounded border"
+														style="width: 60px; height: 60px; object-fit: cover; flex-shrink: 0;"
+													>
 												{/if}
 											</div>
 										</div>
