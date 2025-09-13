@@ -440,12 +440,14 @@
 			const newCategory = {
 				id: Date.now().toString(),
 				name: newCategoryName.trim(),
-				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined
+				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined,
+				allocatedMarks: newCategoryAllocatedMarks ? parseFloat(newCategoryAllocatedMarks) : undefined
 			}
 			
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
 			newCategoryName = ''
 			newCategoryKnowledgeArea = ''
+			newCategoryAllocatedMarks = ''
 			
 			// Update the current subject's assessments
 			if (currentSubject) {
@@ -1973,6 +1975,22 @@
 															}
 														}}
 													>
+													<input
+														id="categoryAllocatedMarks"
+														type="number"
+														class="form-control form-control-sm"
+														placeholder="Marks"
+														bind:value={newCategoryAllocatedMarks}
+														min="0"
+														step="0.5"
+														style="width: 100px;"
+														onkeydown={(e) => {
+															if (e.key === 'Enter') {
+																e.preventDefault();
+																addCategory();
+															}
+														}}
+													>
 													<button 
 														class="btn btn-outline-primary"
 														onclick={addCategory}
@@ -2046,20 +2064,6 @@
 																		Selected: {selectedKnowledgeArea}
 																	</small>
 																{/if}
-															</div>
-															<div class="flex-shrink-0">
-																<label for="allocatedMarksInput" class="form-label fw-bold mb-1">Allocated Marks:</label>
-																<input 
-																	type="number" 
-																	id="allocatedMarksInput" 
-																	class="form-control form-control-sm w-auto" 
-																	placeholder="Marks"
-																	min="0"
-																	step="0.5"
-																	style="width: 80px;"
-																	value={currentAssessment.categories.find(cat => cat.name === selectedCategory)?.allocatedMarks || ''}
-																	oninput={(e) => updateCategoryAllocatedMarks(selectedCategory, e.currentTarget.value)}
-																>
 															</div>
 														</div>
 													</div>

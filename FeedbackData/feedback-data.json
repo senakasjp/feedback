@@ -66,32 +66,7 @@
           "id": "1757294322038",
           "name": "Case Study Analysis",
           "topics": [],
-          "categories": [
-            {
-              "id": "1757323341569",
-              "name": "Executive Summary [10]"
-            },
-            {
-              "id": "1757323900507",
-              "name": "Technical Architecture Analysis [25]"
-            },
-            {
-              "id": "1757324384563",
-              "name": "IoT Theory & Scientific Foundation [20]"
-            },
-            {
-              "id": "1757324732062",
-              "name": "Cloud Infrastructure Standards & Methodologies [20]"
-            },
-            {
-              "id": "1757324933896",
-              "name": "Challenges & Risk Analysis [15]"
-            },
-            {
-              "id": "1757325138442",
-              "name": "Recommendations & Future Directions [10]"
-            }
-          ],
+          "categories": [],
           "weight": 40
         },
         {

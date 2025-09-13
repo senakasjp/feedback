@@ -4,6 +4,7 @@
 		id: string;
 		name: string;
 		description?: string;
+		allocatedMarks?: number;
 	}
 
 	type Topic = {
@@ -25,7 +26,10 @@
 	}
 
 	type OrderedParagraph = {
-		paragraph: string;
+		paragraph: {
+			text: string;
+			color?: string;
+		} | string;
 		originalIndex: number;
 		topicId?: string;
 		categoryId?: string;
@@ -47,7 +51,8 @@
 		onAddParagraph,
 		onToggleParagraph,
 		onDeleteParagraph,
-		onHandleImageUpload
+		onHandleImageUpload,
+		onUpdateCategoryAllocatedMarks
 	}: {
 		currentSubject?: Subject | null;
 		currentAssessment?: Assessment | null;
@@ -63,6 +68,7 @@
 		onToggleParagraph: (index: number) => void;
 		onDeleteParagraph: (index: number) => void;
 		onHandleImageUpload: (event: Event) => void;
+		onUpdateCategoryAllocatedMarks?: (categoryName: string, allocatedMarks: string) => void;
 	} = $props()
 
 	// Color badge function
@@ -148,6 +154,9 @@
 				{#if availableCategories.length === 0}
 					<small class="text-warning">No categories available. Add categories in the assessment manager.</small>
 				{/if}
+				{#if selectedCategory}
+					<small class="text-muted">Selected category: <strong>{availableCategories.find(c => c.id === selectedCategory)?.name}</strong></small>
+				{/if}
 			</div>
 
 			<!-- Topic selector -->
@@ -167,6 +176,7 @@
 				{/if}
 			</div>
 		</div>
+		
 	</div>
 	
 	<!-- New paragraph section moved to very end of Add Paragraph section -->
@@ -231,13 +241,13 @@
 						</div>
 						<!-- Color indicator -->
 						<div class="mt-1">
-							<span class="badge {getColorBadgeClass(paragraph.color)}">
-								{paragraph.color || 'No Color'}
+							<span class="badge {getColorBadgeClass(typeof paragraph === 'string' ? '' : paragraph.color)}">
+								{typeof paragraph === 'string' ? 'No Color' : (paragraph.color || 'No Color')}
 							</span>
 						</div>
 					</div>
 					<div class="flex-grow-1">
-						<p class="mb-0">{paragraph}</p>
+						<p class="mb-0">{typeof paragraph === 'string' ? paragraph : paragraph.text}</p>
 					</div>
 					<button 
 						class="btn btn-outline-danger btn-sm ms-sm-2 mt-2 mt-sm-0 delete-btn align-self-start" 
