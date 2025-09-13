@@ -830,19 +830,34 @@
 			yPosition += 15;
 		}
 		
-		// Calculate grade distribution - include all grades even if N/A
+		// Calculate grade distribution - include all grades even if 0 students
 		const gradeDistribution = {};
-		const allPossibleGrades = ['A', 'B', 'C', 'D', 'F']; // Define all possible grades
+		const allPossibleGrades = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'E']; // Define all possible grades
+		
+		// Grade ranges mapping
+		const gradeRanges = {
+			'A+': '90-100%',
+			'A': '85-89%',
+			'A-': '80-84%',
+			'B+': '75-79%',
+			'B': '70-74%',
+			'B-': '65-69%',
+			'C+': '60-64%',
+			'C': '55-59%',
+			'C-': '50-54%',
+			'D': '40-49%',
+			'E': '0-39%'
+		};
 		
 		// Initialize all grades with 0
 		allPossibleGrades.forEach(grade => {
 			gradeDistribution[grade] = 0;
 		});
 		
-		// Count actual grades
+		// Count actual grades (exclude N/A)
 		studentsWithMarks.forEach(student => {
 			const finalGrade = getFinalGrade(student.id);
-			if (finalGrade && finalGrade !== 'N/A') {
+			if (finalGrade && finalGrade !== 'N/A' && allPossibleGrades.includes(finalGrade)) {
 				gradeDistribution[finalGrade] = (gradeDistribution[finalGrade] || 0) + 1;
 			}
 		});
@@ -862,17 +877,18 @@
 
 			// Grade distribution table background (match table size)
 			// Calculate actual table width based on column positioning
-			// Grade: margin+3, Count: margin+35, Percentage: margin+70
-			// Table ends after "Percentage %" text which is around margin+120
-			const gradeTableWidth = 125; // Width from margin to end of last column
+			// Grade: margin+3, Count: margin+35, Percentage: margin+70, Range: margin+105
+			// Table ends after "Range" text which is around margin+140
+			const gradeTableWidth = 145; // Width from margin to end of last column
 			
 			doc.setFillColor(248, 249, 250);
 			doc.rect(margin, yPosition - 1, gradeTableWidth, 4, 'F'); // Match table row height
 
-			// Headers (distributed positioning: left, middle, right)
+			// Headers (distributed positioning across 4 columns)
 			doc.text('Grade', margin + 3, yPosition + 1); // Left aligned
-			doc.text('Count', margin + gradeTableWidth/2 - 10, yPosition + 1); // Center aligned
-			doc.text('Percentage %', margin + gradeTableWidth - 35, yPosition + 1); // Right aligned
+			doc.text('Count', margin + 35, yPosition + 1); // Second column
+			doc.text('Percentage %', margin + 70, yPosition + 1); // Third column
+			doc.text('Range', margin + 115, yPosition + 1); // Fourth column (right aligned)
 
 			yPosition += 4; // Match table row spacing
 			
@@ -880,6 +896,7 @@
 			doc.setFont('helvetica', 'normal');
 			doc.setFontSize(9); // Smaller font for compactness
 
+			// Calculate total students with actual grades (exclude N/A)
 			const totalStudents = Object.values(gradeDistribution).reduce((sum, count) => sum + count, 0);
 
 			// Use predefined grade order for consistent display
@@ -888,10 +905,12 @@
 			sortedGrades.forEach(grade => {
 				const count = gradeDistribution[grade];
 				const percentage = totalStudents > 0 ? ((count / totalStudents) * 100).toFixed(1) : '0.0';
+				const range = gradeRanges[grade] || 'N/A';
 
 				doc.text(grade, margin + 3, yPosition + 1); // Left aligned
-				doc.text(count.toString(), margin + gradeTableWidth/2 - 5, yPosition + 1); // Center aligned
-				doc.text(`${percentage}%`, margin + gradeTableWidth - 25, yPosition + 1); // Right aligned
+				doc.text(count.toString(), margin + 35, yPosition + 1); // Second column
+				doc.text(`${percentage}%`, margin + 70, yPosition + 1); // Third column
+				doc.text(range, margin + 115, yPosition + 1); // Fourth column (right aligned)
 
 				yPosition += 4; // Reduced row spacing
 			});
@@ -1162,30 +1181,32 @@
 		const middleIndex = Math.floor(studentPerformances.length / 2);
 		const middlePercentage = studentPerformances[middleIndex]?.percentage || 0;
 		
+		// Find the lowest percentage achieved
+		const lowestPercentage = studentPerformances[studentPerformances.length - 1]?.percentage || 0;
+		
 		// Group students by their performance levels
 		studentPerformances.forEach(perf => {
 			if (perf.percentage === highestPercentage) {
 				// All students with the highest percentage
 				highestPerformers.push(perf);
-			} else if (perf.percentage === middlePercentage) {
-				// All students with the middle percentage (could be multiple)
+			} else if (perf.percentage === middlePercentage && perf.percentage !== highestPercentage) {
+				// All students with the middle percentage (but not if it's the same as highest)
 				mediumPerformers.push(perf);
-			} else if (perf.percentage < 50) {
-				// Students needing support (<50%)
+			} else if (perf.percentage === lowestPercentage) {
+				// All students with the lowest percentage (same lowest marks grouped together)
 				needsSupport.push(perf);
 			}
 		});
 
 		// If no medium performers found with exact middle percentage, find students around middle range
 		if (mediumPerformers.length === 0 && studentPerformances.length > 2) {
-			const lowerMiddle = Math.floor(studentPerformances.length * 0.3);
-			const upperMiddle = Math.floor(studentPerformances.length * 0.7);
+			// Find students that are not highest or lowest performers
+			const middleRangeStudents = studentPerformances.filter(perf => 
+				perf.percentage !== highestPercentage && perf.percentage !== lowestPercentage
+			);
 			
-			studentPerformances.slice(lowerMiddle, upperMiddle + 1).forEach(perf => {
-				if (perf.percentage !== highestPercentage && perf.percentage >= 50) {
-					mediumPerformers.push(perf);
-				}
-			});
+			// Add middle range students to medium performers
+			mediumPerformers.push(...middleRangeStudents);
 		}
 
 		return { highestPerformers, mediumPerformers, needsSupport };
@@ -1200,7 +1221,7 @@
 			gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
 		});
 
-		const gradeOrder = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'E', 'N/A'];
+		const gradeOrder = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'E'];
 		const gradeLabels = {
 			'A+': 'A+ (90-100%)',
 			'A': 'A (85-89%)',
@@ -1212,18 +1233,15 @@
 			'C': 'C (55-59%)',
 			'C-': 'C- (50-54%)',
 			'D': 'D (40-49%)',
-			'E': 'E (0-39%)',
-			'N/A': 'N/A (No marks)'
+			'E': 'E (0-39%)'
 		};
 
-		return gradeOrder
-			.filter(grade => gradeCounts[grade] > 0)
-			.map(grade => ({
-				grade,
-				label: gradeLabels[grade] || grade,
-				count: gradeCounts[grade],
-				color: getGradeColor(grade)
-			}));
+		return gradeOrder.map(grade => ({
+			grade,
+			label: gradeLabels[grade] || grade,
+			count: gradeCounts[grade] || 0,
+			color: getGradeColor(grade)
+		}));
 	}
 
 	// Student reordering functions
@@ -1665,12 +1683,12 @@
 			</div>
 			
 			<!-- Performance Highlights Cards for Each Assessment -->
-			<div class="row mt-4 d-flex flex-wrap justify-content-start">
+			<div class="row mt-4">
 				{#each assessments as assessment}
 					{@const highlights = getAssessmentPerformanceHighlights(assessment.id)}
 					{#if highlights.highestPerformers.length > 0 || highlights.mediumPerformers.length > 0 || highlights.needsSupport.length > 0}
 						<div class="col-12 col-md-6 col-lg-4 mb-4">
-							<div class="card h-100 shadow-sm" style="width: 100%; max-width: 400px;">
+							<div class="card h-100 shadow-sm">
 								<!-- Card Header -->
 								<div class="card-header bg-primary text-white">
 									<div class="d-flex align-items-center">
@@ -1746,6 +1764,74 @@
 						</div>
 					{/if}
 				{/each}
+			</div>
+			
+			<!-- Grade Distribution Table -->
+			<div class="row mt-4">
+				<div class="col-12">
+					<div class="card shadow-sm">
+						<div class="card-header bg-info text-white">
+							<div class="d-flex align-items-center">
+								<i class="bi bi-bar-chart me-2" style="font-size: 1.2rem;"></i>
+								<h6 class="mb-0 fw-bold">Grade Distribution</h6>
+							</div>
+							<small class="opacity-75">Overall performance breakdown</small>
+						</div>
+						<div class="card-body p-0">
+							<div class="table-responsive">
+								<table class="table table-hover mb-0">
+									<thead class="table-light">
+										<tr>
+											<th scope="col" class="fw-bold">
+												<i class="bi bi-award me-2"></i>Grade
+											</th>
+											<th scope="col" class="text-center fw-bold">
+												<i class="bi bi-people me-2"></i>Count
+											</th>
+											<th scope="col" class="text-center fw-bold">
+												<i class="bi bi-percent me-2"></i>Percentage
+											</th>
+											<th scope="col" class="text-center fw-bold">
+												<i class="bi bi-graph-up me-2"></i>Range
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each getGradeDistribution() as gradeData}
+											<tr>
+												<td class="align-middle">
+													<span class="badge {gradeData.color} fs-6 fw-bold">
+														{gradeData.grade}
+													</span>
+												</td>
+												<td class="align-middle text-center">
+													<span class="fw-bold">{gradeData.count}</span>
+												</td>
+												<td class="align-middle text-center">
+													<span class="fw-bold">
+														{studentsWithMarks.length > 0 ? ((gradeData.count / studentsWithMarks.length) * 100).toFixed(1) : '0.0'}%
+													</span>
+												</td>
+												<td class="align-middle text-center">
+													<small class="text-muted">
+														{gradeData.label.split('(')[1]?.replace(')', '') || 'N/A'}
+													</small>
+												</td>
+											</tr>
+										{:else}
+											<tr>
+												<td colspan="4" class="text-center text-muted py-4">
+													<i class="bi bi-info-circle me-2"></i>
+													No grades available yet
+												</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+				</div>
 			</div>
 		{:else if studentsWithMarks.length === 0 && students.length > 0}
 			<div class="row mt-5">

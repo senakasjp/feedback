@@ -2,7 +2,56 @@
 
 ## Version History
 
-### v2.6.0 - Current Version
+### v3.0.0 - Major Release - January 2025
+
+#### 🎉 Major New Features
+- **Comprehensive Grade Distribution Analysis**: Complete grade tracking system with professional UI table and PDF synchronization
+- **Enhanced Performance Analysis**: Improved categorization logic with proper lowest performer detection and side-by-side card layout
+- **Professional PDF Reports**: Synchronized PDF grade distribution with Range column matching UI table exactly
+- **Advanced Student Management**: Bootstrap 5 confirmation modals with comprehensive file cleanup and loading states
+
+#### 📊 Grade Distribution System
+- **Complete Grade Overview**: Shows all letter grades (A+ through E) even with zero students
+- **Professional UI Table**: Bootstrap 5 table with Grade, Count, Percentage, and Range columns
+- **Real-time Updates**: Automatic updates when student marks change
+- **PDF Synchronization**: Perfect consistency between UI and PDF grade distribution tables
+- **Grade Range Mapping**: Comprehensive percentage range display for each grade level
+
+#### 🎯 Performance Analysis Enhancements
+- **Fixed Categorization Logic**: Properly identifies lowest performers (students with same lowest marks grouped together)
+- **Same Marks Grouping**: Students with identical performance are grouped in appropriate categories
+- **Responsive Card Layout**: Side-by-side display using Bootstrap grid system (3/2/1 cards per row based on screen size)
+- **Complete Performance View**: All three categories (Highest, Medium, Needs Support) now properly displayed
+- **Enhanced Performance Cards**: Individual assessment performance cards with improved categorization
+
+#### 📄 PDF Report Improvements
+- **Range Column Addition**: PDF grade distribution now includes Range column matching UI table
+- **Perfect UI-PDF Consistency**: Identical data structure and formatting between UI and PDF reports
+- **Enhanced Table Layout**: Improved column spacing and professional academic formatting
+- **Grade Range Display**: Shows percentage ranges (e.g., "90-100%", "85-89%") for each grade
+
+#### 🔧 Technical Improvements
+- **Grade Distribution Engine**: Complete grade tracking system with range mapping and percentage calculations
+- **Performance Categorization Algorithm**: Improved logic for identifying highest, medium, and lowest performers
+- **Responsive Design System**: Bootstrap grid implementation for optimal card layout across screen sizes
+- **PDF-UI Synchronization**: Ensured perfect consistency between PDF reports and UI tables
+- **Enhanced Error Handling**: Better handling of edge cases in performance categorization
+
+#### 🎨 User Experience Enhancements
+- **Professional Academic Layout**: Clean, academic-style grade distribution table suitable for reporting
+- **Visual Analytics**: Side-by-side performance cards with professional design and proper spacing
+- **Comprehensive Data View**: Complete grade overview with all performance levels visible
+- **Easy Analysis**: Quick identification of grade distribution patterns and performance trends
+- **Responsive Design**: Optimal viewing experience across all device sizes
+
+#### 🛡️ Student Management Improvements
+- **Bootstrap 5 Confirmation Modal**: Professional confirmation dialog with detailed information and warning icons
+- **Enhanced Loading States**: Visual feedback during deletion process with spinner animations
+- **Comprehensive File Cleanup**: Complete removal of all student-related files and data
+- **Safety Features**: Multiple confirmation steps prevent accidental deletions
+- **Cross-Platform Support**: Works in both Tauri desktop and browser environments
+
+### v2.6.0 - Previous Version
 
 #### New Features
 - **Unique ID-Based Paragraph Management**: Robust paragraph selection system using unique IDs instead of array indices
@@ -19,6 +68,9 @@
 - **Notification System**: Bootstrap toast notifications for user feedback on PDF generation and CSV export operations
 - **Enhanced Student Deletion System**: Complete data cleanup with comprehensive file removal and user feedback
 - **Bootstrap 5 Confirmation Modal**: Professional confirmation dialog for student deletion with detailed information and loading states
+- **Enhanced Performance Highlights**: Fixed categorization logic to properly show lowest performers and improved side-by-side card layout
+- **Comprehensive Grade Distribution Table**: UI table showing all grades (A+ through E) with counts, percentages, and ranges
+- **Synchronized PDF Reports**: PDF grade distribution now matches UI table exactly with Range column included
 
 #### Technical Improvements
 - **ID Generation**: New `generateId()` function for creating unique string identifiers
@@ -45,6 +97,10 @@
 - **Enhanced User Experience**: Loading states, visual feedback, and comprehensive warning systems
 - **Dynamic Layout System**: Column-based PDF layout with precise width calculations and responsive text wrapping
 - **Multi-page PDF Support**: Automatic page breaks with header repetition and content flow management
+- **Performance Categorization Logic**: Improved algorithm for identifying highest, medium, and lowest performers
+- **Responsive Card Layout**: Bootstrap grid system for optimal performance card display across screen sizes
+- **Grade Distribution Engine**: Complete grade tracking system with range mapping and percentage calculations
+- **PDF-UI Synchronization**: Ensured perfect consistency between PDF reports and UI tables
 
 #### Data Architecture Changes
 - **Paragraph Objects**: All paragraphs now include a unique `id` field

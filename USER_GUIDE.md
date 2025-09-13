@@ -234,10 +234,11 @@
 #### PDF Report Features
 - **Dynamic Headers**: Word-wrapping headers that adjust to content
 - **Column-based Layout**: Precise column widths with responsive text wrapping
-- **Grade Analysis**: Comprehensive grade distribution with percentages
+- **Grade Analysis**: Comprehensive grade distribution with counts, percentages, and ranges
 - **Student Name Truncation**: Smart truncation of long names for clean layout
 - **Font Consistency**: Professional typography matching academic standards
 - **Header Shading**: Light gray backgrounds for better visual organization
+- **UI Synchronization**: PDF grade distribution table matches UI table exactly
 
 #### CSV Export
 1. Click the **"Export CSV"** button next to the Download PDF button
@@ -266,10 +267,41 @@ After viewing the students with marks table, you'll see individual performance h
    - **Assessment Names**: Clear identification of which assessment each card represents
 
 #### Understanding Performance Categories
-- **Highest Performers**: All students achieving the top percentage for that assessment
+- **Highest Performers**: All students achieving the top percentage for that assessment (same marks grouped together)
 - **Medium Performers**: Students performing at the median level (middle marks)
-- **Needs Support**: Students scoring below 50% who may need additional help
+- **Needs Support**: All students achieving the lowest percentage for that assessment (same lowest marks grouped together)
 - **Dynamic Labels**: Category names automatically adjust (e.g., "Performer" vs "Performers")
+- **Side-by-Side Layout**: Performance cards display in responsive grid layout for optimal viewing
+
+### Grade Distribution Analysis
+
+The Assessment Manager includes a comprehensive Grade Distribution table that provides an overview of student performance across all assessments.
+
+#### Grade Distribution Table Features
+- **Complete Grade Overview**: Shows all letter grades (A+ through E) even with zero students
+- **Count and Percentage**: Displays both raw counts and percentage distribution
+- **Grade Ranges**: Shows percentage ranges for each grade level
+- **Real-time Updates**: Automatically updates when student marks change
+- **Professional Layout**: Clean, academic-style table suitable for reporting
+
+#### Understanding the Grade Distribution
+- **A+ (90-100%)**: Exceptional performance
+- **A (85-89%)**: Excellent performance  
+- **A- (80-84%)**: Very good performance
+- **B+ (75-79%)**: Good performance
+- **B (70-74%)**: Above average performance
+- **B- (65-69%)**: Satisfactory performance
+- **C+ (60-64%)**: Average performance
+- **C (55-59%)**: Below average performance
+- **C- (50-54%)**: Marginal performance
+- **D (40-49%)**: Poor performance
+- **E (0-39%)**: Failing performance
+
+#### Using Grade Distribution Data
+- **Performance Analysis**: Quickly identify grade distribution patterns
+- **Report Generation**: Use data for academic reporting and analysis
+- **Student Support**: Identify students needing additional support
+- **Curriculum Assessment**: Evaluate assessment difficulty and student outcomes
 
 ### Notification System
 - **Success Notifications**: Green toast notifications for successful operations

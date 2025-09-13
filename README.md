@@ -1,6 +1,25 @@
-# Feedback Manager
+# Feedback Manager v3.0.0
 
-A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, PDF generation, and advanced assessment management capabilities.
+A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, and comprehensive grade distribution analysis.
+
+## 🎉 Version 3.0.0 - Major Release
+
+This major release introduces significant enhancements to the Feedback Manager application:
+
+### 🆕 Major New Features
+- **Comprehensive Grade Distribution Analysis**: Complete grade tracking system with professional UI table and PDF synchronization
+- **Enhanced Performance Analysis**: Improved categorization logic with proper lowest performer detection
+- **Professional PDF Reports**: Synchronized PDF grade distribution with Range column matching UI table exactly
+- **Advanced Student Management**: Bootstrap 5 confirmation modals with comprehensive file cleanup
+
+### 📊 Key Improvements
+- **Grade Distribution Table**: Shows all letter grades (A+ through E) with counts, percentages, and ranges
+- **Performance Highlights**: Side-by-side cards with responsive layout and improved categorization
+- **PDF-UI Synchronization**: Perfect consistency between PDF reports and UI tables
+- **Responsive Design**: Optimal viewing experience across all device sizes
+
+### 🚀 Ready for Production
+Version 3.0.0 represents a mature, feature-complete academic assessment and reporting solution suitable for professional educational environments.
 
 ## Quick Start
 
