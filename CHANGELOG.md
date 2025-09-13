@@ -11,6 +11,12 @@
 - **Improved Data Integrity**: Better handling of paragraph operations with ID-based tracking
 - **Subject-Specific Student Management**: Ability to remove students from specific subjects while preserving global student records
 - **Professional Delete Confirmations**: Bootstrap modal-based warning system for destructive actions
+- **Enhanced PDF Marks Display**: PDF reports now show marks in `[actual/allocated Marks]` format for better clarity
+- **Allocated Marks Integration**: Categories can now have allocated marks that appear in PDF output alongside actual marks
+- **Advanced PDF Report Generation**: Professional PDF reports with multi-page support, dynamic headers, and comprehensive formatting
+- **Performance Highlights Cards**: Individual assessment performance cards showing highest, medium, and needs support students
+- **Smart Performance Analysis**: Intelligent grouping of students with same marks and median-based performance categorization
+- **Notification System**: Bootstrap toast notifications for user feedback on PDF generation and CSV export operations
 
 #### Technical Improvements
 - **ID Generation**: New `generateId()` function for creating unique string identifiers
@@ -22,12 +28,44 @@
 - **Student Deletion Functions**: New `deleteStudentFromSubject()`, `confirmStudentDelete()`, and `cancelStudentDelete()` functions
 - **Modal State Management**: Added `showStudentDeleteConfirm` and `studentToDelete` state variables
 - **Enhanced Warning System**: Professional Bootstrap modal confirmations with comprehensive information
+- **PDF Generation Enhancement**: Updated `generateRestOfPDF()` function to display allocated marks alongside actual marks
+- **Category Marks Display**: Enhanced PDF output to show `[15/30 Marks]` format for better academic reporting
+- **Advanced PDF Engine**: Complete PDF generation system using jsPDF with dynamic layouts, word wrapping, and multi-page support
+- **Performance Analysis Engine**: New `getAssessmentPerformanceHighlights()` function for individual assessment performance analysis
+- **Smart Categorization**: Median-based performance grouping with same-marks handling for accurate student categorization
+- **Notification Infrastructure**: Bootstrap toast system with success/error feedback for user operations
+- **Modular CSV Export**: Extracted CSV generation into reusable utility functions with proper error handling
+- **Dynamic Layout System**: Column-based PDF layout with precise width calculations and responsive text wrapping
+- **Multi-page PDF Support**: Automatic page breaks with header repetition and content flow management
 
 #### Data Architecture Changes
 - **Paragraph Objects**: All paragraphs now include a unique `id` field
 - **Selection Tracking**: `selectedParagraphs` now stores unique IDs instead of indices
 - **Backward Compatibility**: Automatic migration ensures existing data works with new system
 - **Data Integrity**: More reliable paragraph operations across editing and merging
+
+#### PDF Report System Enhancements
+- **Professional Layout**: Clean, academic-style PDF reports with proper typography and spacing
+- **Dynamic Header System**: Word-wrapping headers with calculated heights and proper background shading
+- **Multi-page Support**: Automatic page breaks with header repetition for long student lists
+- **Column-based Layout**: Precise column width calculations with responsive text wrapping
+- **Grade Distribution Summary**: Comprehensive grade analysis table with percentage breakdowns
+- **Font Consistency**: Matching typography with feedback reports using Helvetica fonts
+- **Compact Design**: Optimized spacing and font sizes for maximum information density
+- **Student Name Truncation**: Smart truncation of long names to maintain layout integrity
+- **Header Shading**: Light gray backgrounds for headers and table sections
+- **Responsive Tables**: Dynamic table sizing with proper content alignment
+
+#### Performance Analysis System
+- **Individual Assessment Cards**: Dedicated performance cards for each assessment
+- **Smart Categorization**: Three-tier performance system (Highest, Medium, Needs Support)
+- **Same Marks Grouping**: Multiple students with identical marks displayed together
+- **Median-based Analysis**: Middle marks calculation using median percentage for balanced categorization
+- **Visual Performance Indicators**: Color-coded badges and icons for quick performance recognition
+- **Horizontal Card Layout**: Responsive grid layout with consistent card sizing
+- **Assessment-specific Data**: Performance analysis calculated per assessment, not overall
+- **Dynamic Labels**: Automatic pluralization of category names based on student count
+- **Comprehensive Coverage**: All students with marks are categorized appropriately
 
 ### v2.5.0 - Previous Version
 

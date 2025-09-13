@@ -1,18 +1,25 @@
 {
   "paragraphs": [
     {
-      "text": "Test",
-      "color": "red"
+      "id": "mfi55c8hzxt7fsbgcxa",
+      "text": "Project Implementation: The project is fully functional, demonstrates strong technical skills and creativity, and aligns completely with the case study.",
+      "color": "green"
+    },
+    {
+      "id": "mfi5z2a6mk1q47cib9",
+      "text": "Coverage of Knowledge Domains: All five domains are comprehensively covered with clear evidence and strong technical justification.",
+      "color": "green"
     }
   ],
   "selectedParagraphs": [
-    0
+    "mfi55c8hzxt7fsbgcxa",
+    "mfi5z2a6mk1q47cib9"
   ],
-  "studentName": "Nikita Mogilevskii (1000097902)",
+  "studentName": "Senaka Amarakeerthi (1000347710)",
   "studentImage": "",
   "categoryMarks": {
-    "Sub Objective 1.2": "20",
-    "General Feedback": "70"
+    "Project Implementation": "15",
+    "Coverage of Knowledge Domains": "5"
   },
   "manualTotalMarks": "100"
 }

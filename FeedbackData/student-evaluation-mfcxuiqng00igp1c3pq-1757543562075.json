@@ -1,11 +1,1 @@
-{
-  "studentId": "mfcxuiqng00igp1c3pq",
-  "assessmentId": "1757543562075",
-  "paragraphs": [],
-  "selectedParagraphs": [],
-  "studentName": "",
-  "studentImage": "",
-  "categoryMarks": {},
-  "manualTotalMarks": "",
-  "savedAt": "2025-09-13T05:42:08.821Z"
-}
+{"studentId":"mfcxuiqng00igp1c3pq","assessmentId":"1757543562075","paragraphs":[{"id":"mfi55c8hzxt7fsbgcxa","text":"Project Implementation: The project is fully functional, demonstrates strong technical skills and creativity, and aligns completely with the case study.","color":"green"},{"id":"mfi5z2a6mk1q47cib9","text":"Coverage of Knowledge Domains: All five domains are comprehensively covered with clear evidence and strong technical justification.","color":"green"}],"selectedParagraphs":["mfi55c8hzxt7fsbgcxa","mfi5z2a6mk1q47cib9"],"studentName":"Senaka Amarakeerthi (1000347710)","studentImage":"","categoryMarks":{"Project Implementation":"15","Coverage of Knowledge Domains":"5"},"manualTotalMarks":"100","savedAt":"2025-09-13T11:10:00.073Z"}

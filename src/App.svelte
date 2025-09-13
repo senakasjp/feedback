@@ -762,7 +762,8 @@
 
 		// Apply the mapped selections and marks
 		selectedParagraphs = mappedSelections
-		studentName = savedStudentName
+		// Preserve the student's display name if no saved name exists
+		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		studentImage = savedStudentImage
 		categoryMarks = savedCategoryMarks
 		manualTotalMarks = savedManualTotalMarks
@@ -1555,7 +1556,10 @@
 				
 				// Get marks for this category
 				const categoryMarksValue = categoryMarks[categoryName] || 0
-				const marksText = categoryMarksValue > 0 ? ` [${categoryMarksValue} MARKS]` : ''
+				// Get allocated marks for this category
+				const allocatedMarks = currentAssessment?.categories?.find(cat => cat.name === categoryName)?.allocatedMarks
+				const marksText = categoryMarksValue > 0 ? 
+					allocatedMarks ? ` [${categoryMarksValue}/${allocatedMarks} Marks]` : ` [${categoryMarksValue} Marks]` : ''
 				
 				// Bold font for category headers and marks
 				doc.setFont('helvetica', 'bold')

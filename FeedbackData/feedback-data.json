@@ -73,7 +73,18 @@
           "id": "1757543562075",
           "name": "Project: Design and Develop a Cloud-based IoT Solution",
           "topics": [],
-          "categories": [],
+          "categories": [
+            {
+              "id": "1757760311472",
+              "name": "Project Implementation",
+              "allocatedMarks": 30
+            },
+            {
+              "id": "1757761694792",
+              "name": "Coverage of Knowledge Domains",
+              "allocatedMarks": 25
+            }
+          ],
           "weight": 70
         }
       ]

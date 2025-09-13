@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core'
 	import { getDynamicColor, getGradeColor } from './colorUtils.js'
+	import { generateCSVContent } from './printUtils.js'
+	import jsPDF from 'jspdf'
 
 	// Types
 	type Assessment = {
@@ -61,6 +63,19 @@
 	
 	// Student reordering state
 	let isReordering = $state(false);
+	
+	// Notification state
+	let showNotification = $state(false);
+	let notificationMessage = $state('');
+
+	// Notification Functions
+	function showSuccessNotification(message) {
+		notificationMessage = message;
+		showNotification = true;
+		setTimeout(() => {
+			showNotification = false;
+		}, 3000); // Auto-hide after 3 seconds
+	}
 
 	// Functions
 	// Ensure all assessments have categories array initialized
@@ -128,6 +143,13 @@
 		
 		studentEvaluations = evaluations;
 		studentsWithMarks = studentsWithData;
+		
+		// Debug logging
+		console.log('=== STUDENT EVALUATIONS LOADED ===');
+		console.log('Total students:', students.length);
+		console.log('Students with marks:', studentsWithData.length);
+		console.log('studentsWithMarks:', studentsWithMarks);
+		console.log('assessments:', assessments);
 	}
 
 	// Load evaluations when component mounts or when students/assessments change
@@ -221,12 +243,14 @@
 		let totalWeightedMarks = 0;
 		let totalWeight = 0;
 		let hasAnyMarks = false;
+		let assessmentsWithMarks = 0;
 
 		for (const assessment of assessments) {
 			const weighted = getWeightedMarks(studentId, assessment.id);
 			if (weighted) {
 				totalWeightedMarks += weighted.weightedMarks;
 				hasAnyMarks = true;
+				assessmentsWithMarks++;
 			}
 			
 			// Sum up the total weight percentage
@@ -235,7 +259,8 @@
 			}
 		}
 
-		if (!hasAnyMarks || totalWeight === 0) {
+		// Don't provide final grade until each assessment has at least one result
+		if (!hasAnyMarks || totalWeight === 0 || assessmentsWithMarks < assessments.length) {
 			return "N/A";
 		}
 
@@ -247,6 +272,8 @@
 		console.log(`Final grade calculation for student ${studentId}:`, {
 			totalWeightedMarks,
 			totalWeight,
+			assessmentsWithMarks,
+			totalAssessments: assessments.length,
 			finalPercentage: Math.round(finalPercentage * 100) / 100,
 			grade: getGrade(finalPercentage)
 		});
@@ -254,53 +281,671 @@
 		return getGrade(finalPercentage);
 	}
 
-	// Export marks to CSV
-	function exportToCSV() {
-		if (studentsWithMarks.length === 0 || assessments.length === 0) return;
-
-		// Create CSV headers
-		const headers = ['Student Name', 'Student ID'];
+	// Print marks table to PDF
+	// Print to download PDF function
+	function generatePDFReport() {
+		console.log('=== GENERATING PDF REPORT ===');
+		console.log('studentsWithMarks:', studentsWithMarks.length);
+		console.log('assessments:', assessments.length);
+		console.log('subjectName:', subjectName);
+		console.log('jsPDF available:', typeof jsPDF);
+		console.log('jsPDF constructor:', jsPDF);
+		
+		try {
+			console.log('Creating PDF document...');
+			const doc = new jsPDF('landscape', 'mm', 'a4');
+			console.log('PDF document created successfully:', doc);
+			console.log('PDF page size:', doc.internal.pageSize.getWidth(), 'x', doc.internal.pageSize.getHeight());
+			
+			// Page dimensions
+			const pageWidth = doc.internal.pageSize.getWidth();
+			const pageHeight = doc.internal.pageSize.getHeight();
+			const margin = 15;
+			const maxWidth = pageWidth - (margin * 2);
+			
+			let yPosition = margin;
+			
+			// Header
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(16);
+			doc.text(`${subjectName} - Student Marks Report`, margin, yPosition);
+			yPosition += 10;
+			
+			// Date
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(10);
+			const now = new Date();
+			const dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+			doc.text(`Generated: ${dateStr}`, margin, yPosition);
+			yPosition += 15;
+			
+			// Table headers
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(10);
+			
+			const headers = ['#', 'Student Name', 'Student ID'];
 		assessments.forEach(assessment => {
 			headers.push(`${assessment.name} (Marks)`);
-			headers.push(`${assessment.name} (Weight % & Weighted)`);
-		});
-		headers.push('Grade');
+				headers.push(`${assessment.name} (Weighted)`);
+			});
+			headers.push('Final Grade');
+			
+			// Calculate column widths
+			const numColumns = headers.length;
+			const colWidth = maxWidth / numColumns;
+			
+			// Draw table header
+			let xPosition = margin;
+			headers.forEach((header, index) => {
+				// Draw cell background
+				doc.setFillColor(240, 240, 240);
+				doc.rect(xPosition, yPosition - 5, colWidth, 8, 'F');
+				
+				// Draw text
+				doc.setFont('helvetica', 'bold');
+				doc.setFontSize(9);
+				doc.text(header, xPosition + 2, yPosition);
+				xPosition += colWidth;
+			});
+			yPosition += 10;
+			
+			// Table data
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(8);
+			
+			// Handle empty data case
+			if (studentsWithMarks.length === 0) {
+				console.log('No students with marks - adding test row');
+				const testRow = ['1', 'Test Student', 'TEST001'];
+				assessments.forEach(assessment => {
+					testRow.push('No marks', 'N/A');
+				});
+				testRow.push('N/A');
+				
+				// Draw test row
+				xPosition = margin;
+				testRow.forEach((cellData) => {
+					doc.text(String(cellData), xPosition + 2, yPosition);
+					xPosition += colWidth;
+				});
+				yPosition += 6;
+			} else {
+				studentsWithMarks.forEach((student, index) => {
+				// Check if we need a new page
+				if (yPosition > pageHeight - 20) {
+					doc.addPage();
+					yPosition = margin;
+				}
+				
+				const rowData = [
+					(index + 1).toString(),
+					student.name,
+					student.studentId
+				];
+				
+				assessments.forEach(assessment => {
+					const marks = getStudentMarks(student.id, assessment.id);
+					const marksValue = marks && marks.hasMarks ? String(marks.total) : 'No marks';
+					
+					const weighted = getWeightedMarks(student.id, assessment.id);
+					const weightedValue = weighted ? weighted.displayValue : 'N/A';
+					
+					rowData.push(marksValue, weightedValue);
+				});
+				
+				// Add final grade
+				const finalGrade = getFinalGrade(student.id);
+				rowData.push(finalGrade);
+				
+				// Draw table row
+				xPosition = margin;
+				rowData.forEach((cellData, cellIndex) => {
+					// Truncate long text
+					const maxTextWidth = colWidth - 4;
+					let displayText = String(cellData);
+					if (doc.getTextWidth(displayText) > maxTextWidth) {
+						while (doc.getTextWidth(displayText + '...') > maxTextWidth && displayText.length > 0) {
+							displayText = displayText.slice(0, -1);
+						}
+						displayText += '...';
+					}
+					
+					doc.text(displayText, xPosition + 2, yPosition);
+					xPosition += colWidth;
+				});
+				yPosition += 6;
+				});
+			}
+			
+			// Footer
+			yPosition += 10;
+			doc.setFont('helvetica', 'italic');
+			doc.setFontSize(8);
+			doc.text(`Total Students: ${studentsWithMarks.length}`, margin, yPosition);
+			
+			// Save PDF
+			const safeSubjectName = (subjectName || 'Unknown-Subject').replace(/[^a-zA-Z0-9]/g, '-');
+			const filename = `student-marks-${safeSubjectName}-${now.toISOString().split('T')[0]}.pdf`;
+			doc.save(filename);
+			return true;
+			
+		} catch (error) {
+			console.error('Error generating PDF:', error);
+			throw error;
+		}
+	}
 
-		// Create CSV rows
-		const rows = [headers.join(',')];
+	// Print to download using the same approach as feedback page
+	function handlePrintToDownload() {
+		// Check if we have data
+		if (studentsWithMarks.length === 0) {
+			showSuccessNotification('No students with marks found. Please add student marks first.');
+			return;
+		}
 		
-		studentsWithMarks.forEach(student => {
-			const row = [
-				`"${student.name}"`,
-				`"${student.studentId}"`
+		if (assessments.length === 0) {
+			showSuccessNotification('No assessments found. Please add assessments first.');
+			return;
+		}
+		
+		// Generate PDF directly without confirmation
+		
+		// Generate PDF using the same approach as feedback page
+		const doc = new jsPDF('landscape', 'mm', 'a4');
+		
+		// Page dimensions
+		const margin = 20;
+		const pageWidth = doc.internal.pageSize.getWidth();
+		const pageHeight = doc.internal.pageSize.getHeight();
+		let yPosition = margin;
+		
+		// Simple header with light gray background
+		doc.setFillColor(248, 249, 250); // Light gray background
+		doc.rect(0, 0, pageWidth, 35, 'F'); // Full width header background
+		
+		// Main title with dark text (same as feedback report)
+		doc.setTextColor(0, 0, 0); // Black text
+		doc.setFont('helvetica', 'bold');
+		doc.setFontSize(10); // Same as feedback report
+		doc.text('Student Marks Report', margin, 15);
+
+		// Subtitle
+		doc.setFontSize(10); // Same as feedback report
+		doc.text('Academic Performance Overview', margin, 25);
+		
+		// Reset text color and position for content
+		doc.setTextColor(0, 0, 0); // Black text
+		yPosition = 45;
+		
+		// Simple info section with word wrapping
+		doc.setFont('helvetica', 'normal');
+		doc.setFontSize(10);
+		
+		// Subject and date in two lines
+		let subjectText = '';
+		let dateText = '';
+		if (subjectName) {
+			subjectText = `Subject: ${subjectName}`;
+		}
+		dateText = `Date: ${new Date().toLocaleDateString()}`;
+		
+		// Display subject and date in two lines
+		const maxWidth = pageWidth - (margin * 2);
+		
+		// Subject line
+		if (subjectText) {
+			const subjectLines = doc.splitTextToSize(subjectText, maxWidth);
+			subjectLines.forEach((line, index) => {
+				doc.text(line, margin, yPosition + (index * 5));
+			});
+			yPosition += (subjectLines.length * 5);
+		}
+		
+		// Date line
+		if (dateText) {
+			const dateLines = doc.splitTextToSize(dateText, maxWidth);
+			dateLines.forEach((line, index) => {
+				doc.text(line, margin, yPosition + (index * 5));
+			});
+			yPosition += (dateLines.length * 5);
+		}
+		
+		yPosition += 10;
+		
+		// Create proper column layout with fixed widths
+		const basicHeaders = ['#', 'Student Name', 'Student ID'];
+		const allHeaders = [...basicHeaders, 'Final Grade'];
+		
+		// Add assessment columns (2 per assessment: Marks and Percentage)
+		assessments.forEach((assessment) => {
+			allHeaders.push(`${assessment.name} (Marks)`);
+			allHeaders.push(`${assessment.name} (${assessment.weight}%)`);
+		});
+		
+		// Calculate column widths - give more space to student names and assessment names
+		const totalCols = basicHeaders.length + (assessments.length * 2) + 1; // +1 for Final Grade
+		const availableWidth = pageWidth - (margin * 2);
+		
+		// Define column widths based on content type
+		const colWidths = [];
+		basicHeaders.forEach((header, index) => {
+			if (header === 'Student Name') {
+				colWidths.push(availableWidth * 0.25); // 25% for student names
+			} else {
+				colWidths.push(availableWidth * 0.08); // 8% for # and Student ID
+			}
+		});
+		
+		// Assessment columns - share remaining space equally
+		const remainingWidth = availableWidth - colWidths.reduce((sum, width) => sum + width, 0) - (availableWidth * 0.1); // 10% for Final Grade
+		const assessmentColWidth = remainingWidth / (assessments.length * 2);
+		
+		assessments.forEach(() => {
+			colWidths.push(assessmentColWidth); // Marks column
+			colWidths.push(assessmentColWidth); // Weighted column
+		});
+		
+		colWidths.push(availableWidth * 0.1); // Final Grade
+		
+		// Calculate maximum header height needed for word wrapping
+		let maxHeaderHeight = 8; // Base height
+		let allHeaderLines = [];
+		
+		// Check basic headers
+		basicHeaders.forEach((header, index) => {
+			const lines = doc.splitTextToSize(header, colWidths[index] - 4);
+			allHeaderLines.push(lines);
+			maxHeaderHeight = Math.max(maxHeaderHeight, lines.length * 4);
+		});
+		
+		// Check assessment headers
+		assessments.forEach((assessment, assessmentIndex) => {
+			const marksHeader = `${assessment.name} (Marks)`;
+			const weightHeader = `${assessment.name} (${assessment.weight}%)`;
+
+			const marksLines = doc.splitTextToSize(marksHeader, colWidths[basicHeaders.length + (assessmentIndex * 2)] - 4);
+			const weightLines = doc.splitTextToSize(weightHeader, colWidths[basicHeaders.length + (assessmentIndex * 2) + 1] - 4);
+
+			allHeaderLines.push(marksLines, weightLines);
+			maxHeaderHeight = Math.max(maxHeaderHeight, marksLines.length * 4, weightLines.length * 4);
+		});
+		
+		// Check final grade header
+		const finalGradeLines = doc.splitTextToSize('Final Grade', colWidths[colWidths.length - 1] - 4);
+		allHeaderLines.push(finalGradeLines);
+		maxHeaderHeight = Math.max(maxHeaderHeight, finalGradeLines.length * 4);
+		
+		// Add padding to header height - dynamic based on content
+		const headerHeight = Math.max(15, maxHeaderHeight + 6);
+		
+		// Draw header background with light gray
+		doc.setFillColor(248, 249, 250);
+		doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
+		
+		// Headers with proper width constraints (same as feedback report)
+		doc.setTextColor(0, 0, 0);
+		doc.setFont('helvetica', 'bold');
+		doc.setFontSize(10); // Same as feedback report
+		
+		let xPosition = margin;
+		let headerLineIndex = 0;
+		
+		basicHeaders.forEach((header, index) => {
+			const lines = allHeaderLines[headerLineIndex++];
+			doc.text(lines, xPosition + 2, yPosition + 2);
+			xPosition += colWidths[index];
+		});
+		
+		// Assessment headers with proper width constraints
+		assessments.forEach((assessment, assessmentIndex) => {
+			// Marks header
+			const marksLines = allHeaderLines[headerLineIndex++];
+			doc.text(marksLines, xPosition + 2, yPosition + 2);
+			xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2)];
+
+			// Percentage header
+			const weightLines = allHeaderLines[headerLineIndex++];
+			doc.text(weightLines, xPosition + 2, yPosition + 2);
+			xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2) + 1];
+		});
+		
+		// Final Grade header
+		const finalGradeHeaderLines = allHeaderLines[headerLineIndex++];
+		doc.text(finalGradeHeaderLines, xPosition + 2, yPosition + 2);
+		
+		// Reset text color for table content and position below header
+		doc.setTextColor(0, 0, 0);
+		yPosition += headerHeight + 5; // Position data below header background with dynamic gap
+		
+		// Check if table fits on current page, if not start on new page
+		const estimatedRowHeight = 8; // Estimated height per student row
+		const rowsPerPage = Math.floor((pageHeight - yPosition - margin) / estimatedRowHeight);
+		
+		if (studentsWithMarks.length > rowsPerPage && yPosition > pageHeight - 100) {
+			doc.addPage();
+			yPosition = margin + 50; // Start with some space for header info
+			
+			// Redraw subject and date on new page
+			if (subjectText) {
+				const subjectLines = doc.splitTextToSize(subjectText, maxWidth);
+				subjectLines.forEach((line, index) => {
+					doc.text(line, margin, yPosition + (index * 5));
+				});
+				yPosition += (subjectLines.length * 5);
+			}
+			
+			if (dateText) {
+				const dateLines = doc.splitTextToSize(dateText, maxWidth);
+				dateLines.forEach((line, index) => {
+					doc.text(line, margin, yPosition + (index * 5));
+				});
+				yPosition += (dateLines.length * 5);
+			}
+			
+			yPosition += 10;
+			
+			// Redraw table headers on new page
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(10);
+			
+			// Draw header background with light gray
+			doc.setFillColor(248, 249, 250);
+			doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
+			
+			// Redraw all headers
+			let xPosition = margin;
+			let headerLineIndex = 0;
+			
+			basicHeaders.forEach((header, index) => {
+				const lines = allHeaderLines[headerLineIndex++];
+				doc.text(lines, xPosition + 2, yPosition + 2);
+				xPosition += colWidths[index];
+			});
+			
+			assessments.forEach((assessment, assessmentIndex) => {
+				const marksLines = allHeaderLines[headerLineIndex++];
+				doc.text(marksLines, xPosition + 2, yPosition + 2);
+				xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2)];
+
+				const weightLines = allHeaderLines[headerLineIndex++];
+				doc.text(weightLines, xPosition + 2, yPosition + 2);
+				xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2) + 1];
+			});
+			
+			const finalGradeHeaderLines = allHeaderLines[headerLineIndex++];
+			doc.text(finalGradeHeaderLines, xPosition + 2, yPosition + 2);
+			
+			yPosition += headerHeight + 5;
+		}
+		
+		// Add table data (same as feedback report)
+		doc.setFont('helvetica', 'normal');
+		doc.setFontSize(10); // Same as feedback report
+		
+		studentsWithMarks.forEach((student, index) => {
+			// Check if we need a new page for each row
+			if (yPosition > pageHeight - 30) {
+				doc.addPage();
+				yPosition = margin + 50; // Start with some space for header info
+				
+				// Redraw subject and date on new page
+				if (subjectText) {
+					const subjectLines = doc.splitTextToSize(subjectText, maxWidth);
+					subjectLines.forEach((line, index) => {
+						doc.text(line, margin, yPosition + (index * 5));
+					});
+					yPosition += (subjectLines.length * 5);
+				}
+				
+				if (dateText) {
+					const dateLines = doc.splitTextToSize(dateText, maxWidth);
+					dateLines.forEach((line, index) => {
+						doc.text(line, margin, yPosition + (index * 5));
+					});
+					yPosition += (dateLines.length * 5);
+				}
+				
+				yPosition += 10;
+				
+				// Redraw table headers on new page
+				doc.setFont('helvetica', 'bold');
+				doc.setFontSize(10);
+				
+				// Draw header background with light gray
+				doc.setFillColor(248, 249, 250);
+				doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
+				
+				// Redraw all headers
+				let xPosition = margin;
+				let headerLineIndex = 0;
+				
+				basicHeaders.forEach((header, index) => {
+					const lines = allHeaderLines[headerLineIndex++];
+					doc.text(lines, xPosition + 2, yPosition + 2);
+					xPosition += colWidths[index];
+				});
+				
+				assessments.forEach((assessment, assessmentIndex) => {
+					const marksLines = allHeaderLines[headerLineIndex++];
+					doc.text(marksLines, xPosition + 2, yPosition + 2);
+					xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2)];
+
+					const weightLines = allHeaderLines[headerLineIndex++];
+					doc.text(weightLines, xPosition + 2, yPosition + 2);
+					xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2) + 1];
+				});
+				
+				const finalGradeHeaderLines = allHeaderLines[headerLineIndex++];
+				doc.text(finalGradeHeaderLines, xPosition + 2, yPosition + 2);
+				
+				yPosition += headerHeight + 5;
+				
+				// Reset font for data
+				doc.setFont('helvetica', 'normal');
+				doc.setFontSize(10);
+			}
+			
+			const rowData = [
+				String(index + 1),
+				student.name,
+				student.studentId
 			];
 			
 			assessments.forEach(assessment => {
 				const marks = getStudentMarks(student.id, assessment.id);
 				if (marks && marks.hasMarks) {
-					row.push(String(marks.total));
+					rowData.push(String(marks.total));
 				} else {
-					row.push('No marks');
+					rowData.push('No marks');
 				}
 				
-				// Add weight percentage and weighted marks combined
-				const weightPercent = assessment.weight ? `${assessment.weight}%` : 'N/A';
 				const weighted = getWeightedMarks(student.id, assessment.id);
 				const weightedValue = weighted ? weighted.displayValue : 'N/A';
-				row.push(`${weightPercent} (${weightedValue})`);
+				rowData.push(weightedValue);
 			});
 			
-			// Add final grade
 			const finalGrade = getFinalGrade(student.id);
-			row.push(finalGrade);
+			rowData.push(finalGrade);
 			
-			rows.push(row.join(','));
-		});
+			// Draw row data with proper column widths
+			xPosition = margin;
+			let maxCellHeight = 6; // Default row height
+			
+				rowData.forEach((cellData, cellIndex) => {
+					let displayText = String(cellData);
+					const currentColWidth = colWidths[cellIndex];
 
-		// Create CSV content
-		const csvContent = rows.join('\n');
+					// For student names, truncate to first three words if more than three words
+					if (cellIndex === 1) { // Student Name column
+						const words = displayText.split(' ');
+						if (words.length > 3) {
+							displayText = words.slice(0, 3).join(' ') + '...';
+						}
+					}
+
+					// Use word wrapping for table cells with proper width constraint
+					const cellLines = doc.splitTextToSize(displayText, currentColWidth - 4);
+
+					// For student names, use word wrapping and track height
+					if (cellIndex === 1) { // Student Name column
+						doc.text(cellLines, xPosition + 2, yPosition);
+						if (cellLines.length > 1) {
+							maxCellHeight = Math.max(maxCellHeight, cellLines.length * 4);
+						}
+					} else {
+						// For other columns, use first line if it wraps
+						doc.text(cellLines[0] || '', xPosition + 2, yPosition);
+					}
+
+					xPosition += currentColWidth;
+				});
+			yPosition += maxCellHeight;
+		});
 		
-		// Create and download file
+		// Add grade distribution table - check if it fits on current page
+		yPosition += 8; // Reduced spacing for compactness
+		
+		// Check if grade distribution fits on current page
+		if (yPosition > pageHeight - 80) {
+			doc.addPage();
+			yPosition = margin + 20;
+			
+			// Redraw subject and date on new page
+			if (subjectText) {
+				const subjectLines = doc.splitTextToSize(subjectText, maxWidth);
+				subjectLines.forEach((line, index) => {
+					doc.text(line, margin, yPosition + (index * 5));
+				});
+				yPosition += (subjectLines.length * 5);
+			}
+			
+			if (dateText) {
+				const dateLines = doc.splitTextToSize(dateText, maxWidth);
+				dateLines.forEach((line, index) => {
+					doc.text(line, margin, yPosition + (index * 5));
+				});
+				yPosition += (dateLines.length * 5);
+			}
+			
+			yPosition += 15;
+		}
+		
+		// Calculate grade distribution - include all grades even if N/A
+		const gradeDistribution = {};
+		const allPossibleGrades = ['A', 'B', 'C', 'D', 'F']; // Define all possible grades
+		
+		// Initialize all grades with 0
+		allPossibleGrades.forEach(grade => {
+			gradeDistribution[grade] = 0;
+		});
+		
+		// Count actual grades
+		studentsWithMarks.forEach(student => {
+			const finalGrade = getFinalGrade(student.id);
+			if (finalGrade && finalGrade !== 'N/A') {
+				gradeDistribution[finalGrade] = (gradeDistribution[finalGrade] || 0) + 1;
+			}
+		});
+		
+		// Add grade distribution header (compact)
+		doc.setFont('helvetica', 'bold');
+		doc.setFontSize(9); // Smaller font for compactness
+		doc.setTextColor(0, 0, 0);
+		doc.text('Grade Distribution Summary', margin, yPosition);
+		yPosition += 5; // Reduced spacing
+		
+		// Create grade distribution table (always show all grades)
+		if (true) { // Always show the table
+			// Table headers (compact)
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(9); // Smaller font for compactness
+
+			// Grade distribution table background (match table size)
+			// Calculate actual table width based on column positioning
+			// Grade: margin+3, Count: margin+35, Percentage: margin+70
+			// Table ends after "Percentage %" text which is around margin+120
+			const gradeTableWidth = 125; // Width from margin to end of last column
+			
+			doc.setFillColor(248, 249, 250);
+			doc.rect(margin, yPosition - 1, gradeTableWidth, 4, 'F'); // Match table row height
+
+			// Headers (distributed positioning: left, middle, right)
+			doc.text('Grade', margin + 3, yPosition + 1); // Left aligned
+			doc.text('Count', margin + gradeTableWidth/2 - 10, yPosition + 1); // Center aligned
+			doc.text('Percentage %', margin + gradeTableWidth - 35, yPosition + 1); // Right aligned
+
+			yPosition += 4; // Match table row spacing
+			
+			// Grade distribution data (compact)
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(9); // Smaller font for compactness
+
+			const totalStudents = Object.values(gradeDistribution).reduce((sum, count) => sum + count, 0);
+
+			// Use predefined grade order for consistent display
+			const sortedGrades = allPossibleGrades;
+
+			sortedGrades.forEach(grade => {
+				const count = gradeDistribution[grade];
+				const percentage = totalStudents > 0 ? ((count / totalStudents) * 100).toFixed(1) : '0.0';
+
+				doc.text(grade, margin + 3, yPosition + 1); // Left aligned
+				doc.text(count.toString(), margin + gradeTableWidth/2 - 5, yPosition + 1); // Center aligned
+				doc.text(`${percentage}%`, margin + gradeTableWidth - 25, yPosition + 1); // Right aligned
+
+				yPosition += 4; // Reduced row spacing
+			});
+		} else {
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(9); // Smaller font for compactness
+			doc.setTextColor(108, 117, 125);
+			doc.text('No final grades available', margin, yPosition);
+			yPosition += 4; // Reduced spacing
+		}
+		
+		// Simple footer (same as feedback report)
+		yPosition += 8; // Reduced spacing for compactness
+		doc.setFont('helvetica', 'italic');
+		doc.setFontSize(10); // Same as feedback report
+		doc.setTextColor(108, 117, 125); // Gray text
+		doc.text(`${new Date().toLocaleDateString()}`, margin, yPosition);
+		
+		// Save PDF
+		const safeSubjectName = (subjectName || 'Unknown-Subject').replace(/[^a-zA-Z0-9]/g, '-');
+		const filename = `student-marks-${safeSubjectName}-${new Date().toISOString().split('T')[0]}.pdf`;
+		doc.save(filename);
+		
+		showSuccessNotification('PDF generated and downloaded successfully!');
+	}
+
+	// Export marks to CSV
+	// Export marks to CSV using modular function with confirmation
+	function exportToCSV() {
+		// Show confirmation dialog
+		const confirmExport = confirm(
+			`Export marks to CSV for ${studentsWithMarks.length} students?\n\n` +
+			`Subject: ${subjectName}\n` +
+			`Assessments: ${assessments.length}\n` +
+			`This will download a CSV file to your device.`
+		);
+		
+		if (!confirmExport) return;
+		
+		try {
+			const csvContent = generateCSVContent(
+				studentsWithMarks,
+				assessments,
+				getStudentMarks,
+				getWeightedMarks,
+				getFinalGrade
+			);
+
+			if (!csvContent) {
+				showSuccessNotification('No data to export');
+				return;
+			}
+
+			// Create and download CSV file
 		const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
 		const link = document.createElement('a');
 		const url = URL.createObjectURL(blob);
@@ -316,6 +961,13 @@
 		document.body.appendChild(link);
 		link.click();
 		document.body.removeChild(link);
+			
+			// Show success notification
+			showSuccessNotification('CSV file downloaded successfully!');
+		} catch (error) {
+			console.error('Error exporting CSV:', error);
+			showSuccessNotification('Error exporting CSV: ' + error.message);
+		}
 	}
 
 	// Weight editing functions
@@ -461,6 +1113,82 @@
 		const mediumPerformer = studentPerformances[mediumIndex];
 
 		return { topPerformer, mediumPerformer, lowestPerformer };
+	}
+
+	// Helper function to get performance highlights for a specific assessment
+	function getAssessmentPerformanceHighlights(assessmentId: string) {
+		const assessment = assessments.find(a => a.id === assessmentId);
+		if (!assessment) return { highestPerformers: [], mediumPerformers: [], needsSupport: [] };
+
+		// Get all students with marks for this specific assessment
+		const studentsWithAssessmentMarks = studentsWithMarks.filter(student => {
+			const marks = getStudentMarks(student.id, assessmentId);
+			return marks && marks.hasMarks;
+		});
+
+		if (studentsWithAssessmentMarks.length === 0) {
+			return { highestPerformers: [], mediumPerformers: [], needsSupport: [] };
+		}
+
+		// Calculate percentages for each student for this assessment
+		const studentPerformances = studentsWithAssessmentMarks.map(student => {
+			const marks = getStudentMarks(student.id, assessmentId);
+			const maxMarks = getMaxPossibleRawMarks(assessmentId);
+			const percentage = maxMarks > 0 ? (marks.total / maxMarks) * 100 : 0;
+			const grade = getGrade(percentage);
+
+			return {
+				student,
+				marks: marks.total,
+				percentage,
+				grade,
+				maxMarks
+			};
+		}).sort((a, b) => b.percentage - a.percentage);
+
+		// Group students by performance levels - focusing on same marks
+		const highestPerformers = [];
+		const mediumPerformers = [];
+		const needsSupport = [];
+
+		if (studentPerformances.length === 0) {
+			return { highestPerformers, mediumPerformers, needsSupport };
+		}
+
+		// Find the highest percentage achieved
+		const highestPercentage = studentPerformances[0]?.percentage || 0;
+		
+		// Find the middle percentage (median)
+		const middleIndex = Math.floor(studentPerformances.length / 2);
+		const middlePercentage = studentPerformances[middleIndex]?.percentage || 0;
+		
+		// Group students by their performance levels
+		studentPerformances.forEach(perf => {
+			if (perf.percentage === highestPercentage) {
+				// All students with the highest percentage
+				highestPerformers.push(perf);
+			} else if (perf.percentage === middlePercentage) {
+				// All students with the middle percentage (could be multiple)
+				mediumPerformers.push(perf);
+			} else if (perf.percentage < 50) {
+				// Students needing support (<50%)
+				needsSupport.push(perf);
+			}
+		});
+
+		// If no medium performers found with exact middle percentage, find students around middle range
+		if (mediumPerformers.length === 0 && studentPerformances.length > 2) {
+			const lowerMiddle = Math.floor(studentPerformances.length * 0.3);
+			const upperMiddle = Math.floor(studentPerformances.length * 0.7);
+			
+			studentPerformances.slice(lowerMiddle, upperMiddle + 1).forEach(perf => {
+				if (perf.percentage !== highestPercentage && perf.percentage >= 50) {
+					mediumPerformers.push(perf);
+				}
+			});
+		}
+
+		return { highestPerformers, mediumPerformers, needsSupport };
 	}
 
 	// Helper function to get grade distribution
@@ -711,6 +1439,15 @@
 								</h5>
 								<p class="text-muted mb-0 small">Students who have marks for assessments in this subject</p>
 							</div>
+							<div class="btn-group" role="group">
+								<!-- Test button - always enabled -->
+								<button 
+									class="btn btn-outline-danger btn-sm"
+									onclick={handlePrintToDownload}
+									title="Generate and download PDF marks report"
+								>
+									<i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+								</button>
 							<button 
 								class="btn btn-outline-success btn-sm"
 								onclick={exportToCSV}
@@ -719,6 +1456,7 @@
 							>
 								<i class="bi bi-download me-1"></i>Export CSV
 							</button>
+							</div>
 						</div>
 						<div class="card-body p-0">
 							<div class="table-responsive">
@@ -923,92 +1661,91 @@
 							</div>
 						</div>
 					</div>
-					
-					<!-- Summary Section -->
-					<div class="card mt-4 border-0 shadow-sm">
-						<div class="card-header bg-gradient text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-							<h6 class="card-title mb-0 fw-bold">
-								<i class="bi bi-graph-up me-2"></i>Performance Summary
-							</h6>
-						</div>
-						<div class="card-body p-4">
-							<div class="row g-4">
-								<!-- Top, Medium, Lowest Performers -->
-								<div class="col-lg-6">
-									<div class="border rounded p-3 h-100" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
-										<h6 class="text-primary mb-3 fw-semibold">
-											<i class="bi bi-trophy me-2"></i>Performance Highlights
-										</h6>
-										{#if getPerformanceHighlights().topPerformer}
-											<div class="d-flex align-items-center mb-3 p-2 rounded" style="background: rgba(25, 135, 84, 0.1);">
-												<i class="bi bi-trophy-fill text-success me-2"></i>
-												<div class="flex-grow-1">
-													<strong class="text-success">Highest Performer</strong>
-													<div class="text-dark">{getPerformanceHighlights().topPerformer.student.name}</div>
-												</div>
-												<span class="badge bg-success fs-6 px-3 py-2">
-													{getPerformanceHighlights().topPerformer.finalGrade} ({getPerformanceHighlights().topPerformer.percentage.toFixed(1)}%)
-												</span>
-											</div>
-										{/if}
-										{#if getPerformanceHighlights().mediumPerformer}
-											<div class="d-flex align-items-center mb-3 p-2 rounded" style="background: rgba(255, 193, 7, 0.1);">
-												<i class="bi bi-award text-warning me-2"></i>
-												<div class="flex-grow-1">
-													<strong class="text-warning">Medium Performer</strong>
-													<div class="text-dark">{getPerformanceHighlights().mediumPerformer.student.name}</div>
-												</div>
-												<span class="badge bg-warning text-dark fs-6 px-3 py-2">
-													{getPerformanceHighlights().mediumPerformer.finalGrade} ({getPerformanceHighlights().mediumPerformer.percentage.toFixed(1)}%)
-												</span>
-											</div>
-										{/if}
-										{#if getPerformanceHighlights().lowestPerformer}
-											<div class="d-flex align-items-center mb-3 p-2 rounded" style="background: rgba(220, 53, 69, 0.1);">
-												<i class="bi bi-exclamation-triangle text-danger me-2"></i>
-												<div class="flex-grow-1">
-													<strong class="text-danger">Needs Support</strong>
-													<div class="text-dark">{getPerformanceHighlights().lowestPerformer.student.name}</div>
-												</div>
-												<span class="badge bg-danger fs-6 px-3 py-2">
-													{getPerformanceHighlights().lowestPerformer.finalGrade} ({getPerformanceHighlights().lowestPerformer.percentage.toFixed(1)}%)
-												</span>
-											</div>
-										{/if}
+				</div>
+			</div>
+			
+			<!-- Performance Highlights Cards for Each Assessment -->
+			<div class="row mt-4 d-flex flex-wrap justify-content-start">
+				{#each assessments as assessment}
+					{@const highlights = getAssessmentPerformanceHighlights(assessment.id)}
+					{#if highlights.highestPerformers.length > 0 || highlights.mediumPerformers.length > 0 || highlights.needsSupport.length > 0}
+						<div class="col-12 col-md-6 col-lg-4 mb-4">
+							<div class="card h-100 shadow-sm" style="width: 100%; max-width: 400px;">
+								<!-- Card Header -->
+								<div class="card-header bg-primary text-white">
+									<div class="d-flex align-items-center">
+										<i class="bi bi-trophy me-2" style="font-size: 1.2rem;"></i>
+										<h6 class="mb-0 fw-bold">Performance Highlights</h6>
 									</div>
+									<small class="opacity-75">{assessment.name}</small>
 								</div>
 								
-								<!-- Grade Distribution -->
-								<div class="col-lg-6">
-									<div class="border rounded p-3 h-100" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
-										<h6 class="text-primary mb-3 fw-semibold">
-											<i class="bi bi-pie-chart me-2"></i>Grade Distribution
-										</h6>
-										<div class="row g-2">
-											{#each getGradeDistribution() as gradeInfo}
-												<div class="col-6">
-													<div class="d-flex justify-content-between align-items-center p-2 rounded" 
-														 style="background: white; border-left: 4px solid {gradeInfo.grade.startsWith('A') ? '#198754' : gradeInfo.grade.startsWith('B') ? '#0d6efd' : gradeInfo.grade.startsWith('C') ? '#ffc107' : gradeInfo.grade.startsWith('D') ? '#fd7e14' : '#6c757d'};">
-														<span class="fw-medium text-dark">{gradeInfo.grade}:</span>
-														<span class="badge fs-6 px-2 py-1 {gradeInfo.color}">
-															{gradeInfo.count}
-														</span>
-													</div>
+								<!-- Card Body -->
+								<div class="card-body p-3">
+									<!-- Highest Performers -->
+									{#if highlights.highestPerformers.length > 0}
+										<div class="mb-3">
+											<div class="d-flex align-items-center mb-2">
+												<div class="bg-success rounded-circle p-1 me-2">
+													<i class="bi bi-trophy text-white" style="font-size: 0.8rem;"></i>
+												</div>
+												<span class="fw-bold text-success small">Highest Performer{highlights.highestPerformers.length > 1 ? 's' : ''}</span>
+											</div>
+											{#each highlights.highestPerformers as performer}
+												<div class="d-flex justify-content-between align-items-center mb-1">
+													<span class="small">{performer.student.name}</span>
+													<span class="badge bg-success text-white fw-bold">
+														{performer.grade} ({performer.percentage.toFixed(1)}%)
+													</span>
 												</div>
 											{/each}
 										</div>
-										<div class="mt-3 pt-3 border-top">
-											<small class="text-muted">
-												<i class="bi bi-info-circle me-1"></i>
-												Total students with marks: <strong>{studentsWithMarks.length}</strong>
-											</small>
+									{/if}
+									
+									<!-- Medium Performers -->
+									{#if highlights.mediumPerformers.length > 0}
+										<div class="mb-3">
+											<div class="d-flex align-items-center mb-2">
+												<div class="bg-warning rounded-circle p-1 me-2">
+													<i class="bi bi-award text-dark" style="font-size: 0.8rem;"></i>
+												</div>
+												<span class="fw-bold text-warning small">Medium Performer{highlights.mediumPerformers.length > 1 ? 's' : ''}</span>
+											</div>
+											{#each highlights.mediumPerformers as performer}
+												<div class="d-flex justify-content-between align-items-center mb-1">
+													<span class="small">{performer.student.name}</span>
+													<span class="badge bg-warning text-dark fw-bold">
+														{performer.grade} ({performer.percentage.toFixed(1)}%)
+													</span>
+												</div>
+											{/each}
 										</div>
-									</div>
+									{/if}
+									
+									<!-- Needs Support -->
+									{#if highlights.needsSupport.length > 0}
+										<div class="mb-2">
+											<div class="d-flex align-items-center mb-2">
+												<div class="bg-danger rounded-circle p-1 me-2">
+													<i class="bi bi-exclamation-triangle text-white" style="font-size: 0.8rem;"></i>
+												</div>
+												<span class="fw-bold text-danger small">Needs Support</span>
+											</div>
+											{#each highlights.needsSupport as performer}
+												<div class="d-flex justify-content-between align-items-center mb-1">
+													<span class="small">{performer.student.name}</span>
+													<span class="badge bg-danger text-white fw-bold">
+														{performer.grade} ({performer.percentage.toFixed(1)}%)
+													</span>
+												</div>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							</div>
 						</div>
-					</div>
-				</div>
+					{/if}
+				{/each}
 			</div>
 		{:else if studentsWithMarks.length === 0 && students.length > 0}
 			<div class="row mt-5">
@@ -1113,6 +1850,22 @@
 						<i class="bi bi-person-x me-2"></i>Remove Student
 					</button>
 				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Success Notification Toast -->
+{#if showNotification}
+	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+		<div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+			<div class="toast-header bg-success text-white">
+				<i class="bi bi-check-circle me-2"></i>
+				<strong class="me-auto">Success</strong>
+				<button type="button" class="btn-close btn-close-white" aria-label="Close notification" onclick={() => showNotification = false}></button>
+			</div>
+			<div class="toast-body">
+				{notificationMessage}
 			</div>
 		</div>
 	</div>

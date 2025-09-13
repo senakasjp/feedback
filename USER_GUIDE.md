@@ -39,7 +39,8 @@
 1. Open an assessment
 2. Click "Manage Categories" in the assessment manager
 3. Add categories like "Strengths", "Areas for Improvement", etc.
-4. Categories help organize your feedback paragraphs
+4. **Allocated Marks**: When adding a category, you can optionally set allocated marks (e.g., 30 marks for "Writing Skills")
+5. Categories help organize your feedback paragraphs and provide mark allocation context
 
 ## Student Management
 
@@ -140,12 +141,14 @@
 - **Student Information**: Name and assessment details
 - **Selected Feedback**: Only chosen paragraphs are included
 - **Professional Formatting**: Clean, readable layout
+- **Enhanced Marks Display**: Shows marks in `[actual/allocated Marks]` format (e.g., `[15/30 Marks]`)
 - **Auto-Save**: Student data is automatically saved when generating PDF
 
 ### PDF Content
 - Subject and assessment names
 - Student name and photo
 - Selected feedback paragraphs
+- **Category Marks**: Displayed as `[actual/allocated Marks]` when allocated marks are set for categories
 - Category organization
 - Professional formatting
 
@@ -214,6 +217,66 @@
 3. **Professional Presentation**: Use clear, constructive language
 4. **Consistent Formatting**: Maintain similar structure across reports
 
+## Advanced Features
+
+### Professional PDF Report Generation
+
+#### Download PDF Reports
+1. Navigate to the Assessment Manager view
+2. Ensure students have marks recorded for assessments
+3. Click the **"Download PDF"** button in the Students with Marks section
+4. The PDF will automatically download with:
+   - **Professional Layout**: Clean, academic-style formatting
+   - **Student Marks Table**: Complete overview of all student performance
+   - **Grade Distribution Summary**: Statistical breakdown of grades
+   - **Multi-page Support**: Automatic page breaks for large student lists
+
+#### PDF Report Features
+- **Dynamic Headers**: Word-wrapping headers that adjust to content
+- **Column-based Layout**: Precise column widths with responsive text wrapping
+- **Grade Analysis**: Comprehensive grade distribution with percentages
+- **Student Name Truncation**: Smart truncation of long names for clean layout
+- **Font Consistency**: Professional typography matching academic standards
+- **Header Shading**: Light gray backgrounds for better visual organization
+
+#### CSV Export
+1. Click the **"Export CSV"** button next to the Download PDF button
+2. Excel-compatible CSV file will be downloaded
+3. Contains all student marks data for external analysis
+
+### Performance Analysis System
+
+#### Individual Assessment Performance Cards
+After viewing the students with marks table, you'll see individual performance highlight cards for each assessment:
+
+1. **Performance Categories**:
+   - **Highest Performers**: Students with the best marks (same marks grouped together)
+   - **Medium Performers**: Students with median performance levels
+   - **Needs Support**: Students requiring additional help (<50%)
+
+2. **Smart Analysis Features**:
+   - **Same Marks Grouping**: Multiple students with identical marks are displayed together
+   - **Median-based Categorization**: Balanced performance analysis using statistical median
+   - **Visual Indicators**: Color-coded badges and icons for quick recognition
+   - **Assessment-specific**: Each assessment gets its own performance analysis
+
+3. **Card Layout**:
+   - **Horizontal Layout**: Cards arranged side-by-side with consistent sizing
+   - **Responsive Design**: Adapts to different screen sizes
+   - **Assessment Names**: Clear identification of which assessment each card represents
+
+#### Understanding Performance Categories
+- **Highest Performers**: All students achieving the top percentage for that assessment
+- **Medium Performers**: Students performing at the median level (middle marks)
+- **Needs Support**: Students scoring below 50% who may need additional help
+- **Dynamic Labels**: Category names automatically adjust (e.g., "Performer" vs "Performers")
+
+### Notification System
+- **Success Notifications**: Green toast notifications for successful operations
+- **Error Feedback**: Clear error messages if operations fail
+- **Automatic Dismissal**: Notifications disappear automatically after a few seconds
+- **Manual Dismissal**: Click the X button to close notifications early
+
 ## Troubleshooting
 
 ### Common Issues
@@ -224,9 +287,11 @@
 - Try saving manually with "Save Student Data"
 
 #### PDF Generation Fails
-- Check that paragraphs are selected
-- Ensure student photo is in correct format
-- Try with a smaller image file
+- Check that students have marks recorded for assessments
+- Ensure you're in the Assessment Manager view
+- Verify that the "Download PDF" button is enabled
+- Check browser download settings if PDF doesn't appear
+- Try refreshing the application if PDF generation fails
 
 #### Student Data Not Loading
 - Verify student is selected in dropdown
@@ -237,6 +302,18 @@
 - Check file permissions in FeedbackData folder
 - Ensure application has write access
 - Try running as administrator (if needed)
+
+#### Performance Highlights Not Showing
+- Ensure students have marks recorded for assessments
+- Check that at least one student has marks for each assessment
+- Verify that you're viewing the Assessment Manager page
+- Performance cards only appear after the students with marks table
+
+#### CSV Export Issues
+- Ensure students have marks recorded before exporting
+- Check that the "Export CSV" button is enabled (not grayed out)
+- Verify browser download settings if CSV doesn't appear
+- Try refreshing the application if export fails
 
 ### Getting Help
 - Check the [Development Guide](DEVELOPMENT.md) for technical issues
