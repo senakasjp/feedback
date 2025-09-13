@@ -432,6 +432,94 @@ function addParagraph() {
 }
 ```
 
+#### Edit Paragraph
+```javascript
+function startEditParagraph(index) {
+  editingParagraphIndex = index;
+  // Extract only the main text content (without category and knowledge area prefixes)
+  editingParagraphText = extractMainTextFromParagraph(paragraphs[index].text);
+}
+
+function saveEditParagraph() {
+  if (editingParagraphIndex !== null && editingParagraphText.trim()) {
+    // Reconstruct the paragraph text with original prefixes
+    const originalText = paragraphs[editingParagraphIndex].text;
+    const newText = reconstructParagraphText(originalText, editingParagraphText.trim());
+    paragraphs[editingParagraphIndex].text = newText;
+    editingParagraphIndex = null;
+    editingParagraphText = '';
+    
+    // Save to both assignment and student storage
+    saveAssessmentData();
+    if (currentStudentId) {
+      saveStudentParagraphs();
+    }
+  }
+}
+
+function cancelEditParagraph() {
+  editingParagraphIndex = null;
+  editingParagraphText = '';
+}
+```
+
+#### Paragraph Text Processing
+```javascript
+// Extract main text from paragraph (without prefixes)
+function extractMainTextFromParagraph(paragraphText) {
+  let text = paragraphText;
+  
+  // Remove category prefix (format: "Category: text")
+  if (text.includes(': ')) {
+    const parts = text.split(': ');
+    if (parts.length >= 2) {
+      text = parts.slice(1).join(': ');
+    }
+  }
+  
+  // Remove knowledge area suffix (format: "text - Knowledge Area")
+  if (text.includes(' - ')) {
+    const parts = text.split(' - ');
+    if (parts.length >= 2) {
+      const lastPart = parts[parts.length - 1];
+      if (!lastPart.includes(':')) {
+        text = parts.slice(0, -1).join(' - ');
+      }
+    }
+  }
+  
+  return text;
+}
+
+// Reconstruct paragraph text with original prefixes
+function reconstructParagraphText(originalText, newMainText) {
+  let categoryPrefix = '';
+  let knowledgeAreaSuffix = '';
+  
+  // Extract category prefix from original text
+  if (originalText.includes(': ')) {
+    const parts = originalText.split(': ');
+    if (parts.length >= 2) {
+      categoryPrefix = parts[0] + ': ';
+    }
+  }
+  
+  // Extract knowledge area suffix from original text
+  if (originalText.includes(' - ')) {
+    const parts = originalText.split(' - ');
+    if (parts.length >= 2) {
+      const lastPart = parts[parts.length - 1];
+      if (!lastPart.includes(':')) {
+        knowledgeAreaSuffix = ' - ' + lastPart;
+      }
+    }
+  }
+  
+  // Reconstruct: Category: MainText - KnowledgeArea
+  return categoryPrefix + newMainText + knowledgeAreaSuffix;
+}
+```
+
 #### Delete Paragraph
 ```javascript
 function deleteParagraph(index) {
@@ -494,6 +582,131 @@ async function generatePDF() {
   }
   
   showSuccessNotification('PDF generated and downloaded successfully!');
+}
+```
+
+### Student Data Loading and Merging
+
+#### Load Student Evaluation with Merging
+```javascript
+async function loadStudentEvaluation() {
+  if (!currentStudentId || !currentAssessmentId) return;
+
+  // First, load assignment paragraphs (including edited ones)
+  await loadAssessmentData(currentSubjectId, currentAssessmentId);
+  const assignmentParagraphs = [...paragraphs];
+
+  // Then, load student paragraphs
+  await loadStudentParagraphs();
+  const studentParagraphs = [...paragraphs];
+
+  // Merge assignment and student paragraphs (avoid duplicates)
+  const mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs);
+  paragraphs = mergedParagraphs;
+
+  // Load evaluation data to get selections and marks
+  let savedSelectedParagraphs = new Set();
+  let savedStudentName = '';
+  let savedStudentImage = '';
+  let savedCategoryMarks = {};
+  let savedManualTotalMarks = '';
+
+  try {
+    const data = await invoke('read_student_evaluation', { 
+      studentId: currentStudentId,
+      assessmentId: currentAssessmentId
+    });
+    if (data) {
+      const evaluationData = JSON.parse(data);
+      savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || []);
+      savedStudentName = evaluationData.studentName || '';
+      savedStudentImage = evaluationData.studentImage || '';
+      savedCategoryMarks = evaluationData.categoryMarks || {};
+      savedManualTotalMarks = evaluationData.manualTotalMarks || '';
+    }
+  } catch (error) {
+    // Fallback to localStorage
+  }
+
+  // Map saved selections to merged paragraph indices
+  const mappedSelections = mapSelectionsToMergedParagraphs(
+    savedSelectedParagraphs, 
+    assignmentParagraphs, 
+    studentParagraphs, 
+    mergedParagraphs
+  );
+
+  // Apply the mapped selections and marks
+  selectedParagraphs = mappedSelections;
+  studentName = savedStudentName;
+  studentImage = savedStudentImage;
+  categoryMarks = savedCategoryMarks;
+  manualTotalMarks = savedManualTotalMarks;
+}
+```
+
+#### Merge Paragraphs
+```javascript
+function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
+  const merged = [...assignmentParagraphs];
+  
+  // Add student paragraphs that don't already exist in assignment
+  for (const studentPara of studentParagraphs) {
+    const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text;
+    const exists = assignmentParagraphs.some(assignmentPara => {
+      const assignmentText = typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text;
+      return assignmentText === studentText;
+    });
+    
+    if (!exists) {
+      merged.push(studentPara);
+    }
+  }
+  
+  return merged;
+}
+```
+
+#### Map Selections to Merged Paragraphs
+```javascript
+function mapSelectionsToMergedParagraphs(savedSelections, assignmentParagraphs, studentParagraphs, mergedParagraphs) {
+  const mappedSelections = new Set();
+  
+  // Create maps to find paragraph text by index
+  const assignmentTexts = assignmentParagraphs.map(para => 
+    typeof para === 'string' ? para : para.text
+  );
+  const studentTexts = studentParagraphs.map(para => 
+    typeof para === 'string' ? para : para.text
+  );
+  const mergedTexts = mergedParagraphs.map(para => 
+    typeof para === 'string' ? para : para.text
+  );
+  
+  // Map each saved selection
+  for (const savedIndex of savedSelections) {
+    let paragraphText = null;
+    
+    // First, try to find in assignment paragraphs
+    if (savedIndex < assignmentTexts.length) {
+      paragraphText = assignmentTexts[savedIndex];
+    }
+    // If not found in assignment, try student paragraphs
+    else if (savedIndex - assignmentTexts.length < studentTexts.length) {
+      const studentIndex = savedIndex - assignmentTexts.length;
+      paragraphText = studentTexts[studentIndex];
+    }
+    
+    // If we found the paragraph text, find its new index in merged array
+    if (paragraphText) {
+      const newIndex = mergedTexts.findIndex(text => text === paragraphText);
+      if (newIndex !== -1) {
+        mappedSelections.add(newIndex);
+      }
+    }
+  }
+  
+  return mappedSelections;
 }
 ```
 

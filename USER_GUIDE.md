@@ -75,8 +75,22 @@
 ### Paragraph Management
 - **View Paragraphs**: All paragraphs are displayed in the main area
 - **Select Paragraphs**: Check boxes to include in PDF reports
+- **Edit Paragraphs**: Click the edit icon to modify paragraph text (preserves category and knowledge area prefixes)
 - **Delete Paragraphs**: Click the trash icon to remove (kept in student history)
 - **Filter Paragraphs**: Use category and topic filters to find specific content
+
+### Editing Paragraphs
+1. **Start Editing**: Click the edit icon (pencil) next to any paragraph
+2. **Edit Text**: Modify only the main text content in the textarea
+3. **Save Changes**: Click the save icon (checkmark) to confirm changes
+4. **Cancel Editing**: Click the cancel icon (X) to discard changes
+
+**Important Notes**:
+- Only the main text content can be edited
+- Category prefixes (e.g., "Strengths: ") are automatically preserved
+- Knowledge area suffixes (e.g., " - Design") are automatically preserved
+- Changes are saved to both assignment and student storage
+- Original structural information is maintained for proper organization
 
 ### Paragraph Colors
 - **Red**: Critical issues or major problems

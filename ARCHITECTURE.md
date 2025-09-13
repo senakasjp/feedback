@@ -302,15 +302,31 @@ async function loadAssessmentData(subjectId, assessmentId) {
 - All marks are reset to zero
 - Provides a clean slate for new evaluations
 
-#### 4. Loading Student Data
+#### 5. Loading Student Data
 When selecting a student:
 
 ```javascript
 async function loadStudentEvaluation() {
   if (!currentStudentId || !currentAssessmentId) return
 
-  // First, load ALL student paragraphs
+  // First, load assignment paragraphs (including edited ones)
+  await loadAssessmentData(currentSubjectId, currentAssessmentId)
+  const assignmentParagraphs = [...paragraphs]
+
+  // Then, load student paragraphs
   await loadStudentParagraphs()
+  const studentParagraphs = [...paragraphs]
+
+  // Merge assignment and student paragraphs (avoid duplicates)
+  const mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs)
+  paragraphs = mergedParagraphs
+
+  // Load evaluation data to get selections and marks
+  let savedSelectedParagraphs = new Set()
+  let savedStudentName = ''
+  let savedStudentImage = ''
+  let savedCategoryMarks = {}
+  let savedManualTotalMarks = ''
 
   try {
     const data = await invoke('read_student_evaluation', { 
@@ -319,43 +335,104 @@ async function loadStudentEvaluation() {
     })
     if (data) {
       const evaluationData = JSON.parse(data)
-      // Don't overwrite paragraphs - keep the student paragraphs loaded above
-      // Only load marks and selections from the evaluation data
-      selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
-      studentName = evaluationData.studentName || ''
-      studentImage = evaluationData.studentImage || ''
-      categoryMarks = evaluationData.categoryMarks || {}
-      manualTotalMarks = evaluationData.manualTotalMarks || ''
+      savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
+      savedStudentName = evaluationData.studentName || ''
+      savedStudentImage = evaluationData.studentImage || ''
+      savedCategoryMarks = evaluationData.categoryMarks || {}
+      savedManualTotalMarks = evaluationData.manualTotalMarks || ''
     }
   } catch (error) {
     // Fallback to localStorage
   }
+
+  // Map saved selections to merged paragraph indices
+  const mappedSelections = mapSelectionsToMergedParagraphs(
+    savedSelectedParagraphs, 
+    assignmentParagraphs, 
+    studentParagraphs, 
+    mergedParagraphs
+  )
+
+  // Apply the mapped selections and marks
+  selectedParagraphs = mappedSelections
+  studentName = savedStudentName
+  studentImage = savedStudentImage
+  categoryMarks = savedCategoryMarks
+  manualTotalMarks = savedManualTotalMarks
+}
+```
+
+**Helper Functions**:
+```javascript
+// Merge assignment and student paragraphs (avoid duplicates)
+function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
+  const merged = [...assignmentParagraphs]
+  
+  // Add student paragraphs that don't already exist in assignment
+  for (const studentPara of studentParagraphs) {
+    const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text
+    const exists = assignmentParagraphs.some(assignmentPara => {
+      const assignmentText = typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text
+      return assignmentText === studentText
+    })
+    
+    if (!exists) {
+      merged.push(studentPara)
+    }
+  }
+  
+  return merged
 }
 
-async function loadStudentParagraphs() {
-  if (!currentStudentId) return
-
-  try {
-    const data = await invoke('read_student_paragraphs', { 
-      studentId: currentStudentId
-    })
-    if (data) {
-      const studentData = JSON.parse(data)
-      // Load ALL student paragraphs (replace current paragraphs)
-      const studentParagraphs = studentData.paragraphs || []
-      paragraphs = [...studentParagraphs]
+// Map saved selections to merged paragraph indices
+function mapSelectionsToMergedParagraphs(savedSelections, assignmentParagraphs, studentParagraphs, mergedParagraphs) {
+  const mappedSelections = new Set()
+  
+  // Create maps to find paragraph text by index
+  const assignmentTexts = assignmentParagraphs.map(para => 
+    typeof para === 'string' ? para : para.text
+  )
+  const studentTexts = studentParagraphs.map(para => 
+    typeof para === 'string' ? para : para.text
+  )
+  const mergedTexts = mergedParagraphs.map(para => 
+    typeof para === 'string' ? para : para.text
+  )
+  
+  // Map each saved selection
+  for (const savedIndex of savedSelections) {
+    let paragraphText = null
+    
+    // First, try to find in assignment paragraphs
+    if (savedIndex < assignmentTexts.length) {
+      paragraphText = assignmentTexts[savedIndex]
     }
-  } catch (error) {
-    // Fallback to localStorage
+    // If not found in assignment, try student paragraphs
+    else if (savedIndex - assignmentTexts.length < studentTexts.length) {
+      const studentIndex = savedIndex - assignmentTexts.length
+      paragraphText = studentTexts[studentIndex]
+    }
+    
+    // If we found the paragraph text, find its new index in merged array
+    if (paragraphText) {
+      const newIndex = mergedTexts.findIndex(text => text === paragraphText)
+      if (newIndex !== -1) {
+        mappedSelections.add(newIndex)
+      }
+    }
   }
+  
+  return mappedSelections
 }
 ```
 
 **Key Behavior**:
-- ALL student paragraphs are loaded first (from all assignments)
-- Student evaluation data is loaded for marks and selections
-- Student paragraphs are not overwritten by evaluation data
-- Provides complete paragraph history for the student
+- Loads assignment paragraphs (including edited ones) first
+- Loads student paragraphs second
+- Merges both sets, avoiding duplicates
+- Maps saved selection indices to new merged paragraph indices
+- Loads student evaluation data (marks, selections, metadata)
+- Provides complete paragraph history with correct selections and marks
 
 ### Benefits of Dual Storage System
 
@@ -369,10 +446,12 @@ async function loadStudentParagraphs() {
 ### Data Consistency Rules
 
 1. **Paragraph Addition**: Always saved to both assignment and student storage when student is selected
-2. **Paragraph Deletion**: Only removed from assignment storage, preserved in student storage
-3. **Student Selection**: Loads complete student paragraph history plus assignment-specific marks
-4. **Assignment Selection**: Loads assignment paragraphs with reset selections and marks
-5. **Duplicate Prevention**: Student storage avoids duplicate paragraphs through content comparison
+2. **Paragraph Editing**: Always saved to both assignment and student storage when student is selected
+3. **Paragraph Deletion**: Only removed from assignment storage, preserved in student storage
+4. **Student Selection**: Loads complete student paragraph history plus assignment-specific marks with proper index mapping
+5. **Assignment Selection**: Loads assignment paragraphs with reset selections and marks
+6. **Duplicate Prevention**: Student storage avoids duplicate paragraphs through content comparison
+7. **Selection Mapping**: Saved selections are correctly mapped to merged paragraph indices using text-based matching
 
 ## Component Architecture
 

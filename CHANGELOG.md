@@ -10,6 +10,9 @@
 - **Student-Level Storage**: Comprehensive paragraph collection across all assignments for complete student history
 - **Smart Paragraph Management**: Add to both assignment and student storage; delete from assignment only (preserve student history)
 - **Student Data Loading**: Load all student paragraphs plus assignment-specific marks and selections
+- **Paragraph Editing**: Inline editing of paragraph text with preservation of category and knowledge area prefixes
+- **Smart Text Extraction**: Automatic extraction of main text content for editing while preserving structural information
+- **Selection Index Mapping**: Intelligent mapping of saved selections to merged paragraph arrays using text-based matching
 - **Subject-Level Paragraph Database**: Centralized paragraph storage per subject (not assessment-level)
 - **Dual Paragraph Display**: Subject paragraphs + student-specific selections and deleted paragraphs
 - **Deleted Paragraph Persistence**: Visual indicators for removed content, stored in student data
@@ -29,6 +32,11 @@
   - `write_student_paragraphs`: Save student-specific paragraph collections
   - `read_student_paragraphs`: Load student-specific paragraph collections
 - **Enhanced Data Flow**: Improved paragraph management with dual storage
+- **Paragraph Editing Functions**: New helper functions for text extraction and reconstruction
+  - `extractMainTextFromParagraph`: Extracts main text while preserving prefixes/suffixes
+  - `reconstructParagraphText`: Rebuilds full paragraph text with original structure
+  - `mapSelectionsToMergedParagraphs`: Maps saved selections to merged paragraph indices
+- **Smart Merging Logic**: Intelligent paragraph merging with duplicate prevention
 - **Memory Optimization**: Better handling of large datasets
 - **Error Handling**: Improved fallback mechanisms for data loading
 - **Performance**: Optimized state updates and data persistence
@@ -48,6 +56,9 @@
 #### User Experience Improvements
 - **Clean Slate Loading**: Assignment selection loads all paragraphs with no selections and zero marks
 - **Complete Student History**: Student selection shows all paragraphs from all assignments
+- **Inline Paragraph Editing**: Direct editing of paragraph text with intuitive save/cancel controls
+- **Preserved Structure**: Category and knowledge area prefixes automatically maintained during editing
+- **Smart Selection Mapping**: Previously selected paragraphs remain selected after merging assignment and student data
 - **Intuitive Navigation**: Clear separation between assignment and student data
 - **Professional PDFs**: Enhanced PDF generation with student photos and proper formatting
 - **Responsive Design**: Better mobile and desktop experience
