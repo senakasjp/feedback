@@ -277,6 +277,47 @@ After viewing the students with marks table, you'll see individual performance h
 - **Automatic Dismissal**: Notifications disappear automatically after a few seconds
 - **Manual Dismissal**: Click the X button to close notifications early
 
+### Student Management
+
+#### Deleting Students
+1. Navigate to the Student Manager by clicking the gear icon next to the student dropdown
+2. Find the student you want to delete in the list
+3. Click the red trash icon next to the student's name
+4. A professional Bootstrap confirmation modal will appear showing:
+   - **Warning Header**: Red header with warning triangle icon
+   - **Student Name**: Clearly displays which student will be deleted
+   - **Detailed List**: Shows exactly what will be permanently removed:
+     - Student information and profile
+     - All evaluation data and feedback
+     - All feedback paragraphs and comments
+     - All assessment marks and grades
+   - **Additional Information**: Notes about current selection being cleared
+5. Choose your action:
+   - **Cancel**: Click the "Cancel" button to abort the deletion
+   - **Delete**: Click the "Delete Student" button to proceed
+6. During deletion:
+   - The delete button shows a loading spinner and "Deleting..." text
+   - Both buttons are disabled to prevent multiple clicks
+7. After completion:
+   - Modal automatically closes
+   - Success notification appears confirming the deletion and cleanup
+
+#### What Gets Deleted
+When you delete a student, the system removes:
+- **Student Information**: Name, ID, and display name from the student database
+- **Evaluation Files**: All `student-evaluation-{studentId}-{assessmentId}.json` files
+- **Paragraph Files**: The `student-paragraphs-{studentId}.json` file
+- **Current Selection**: If the deleted student was currently selected, the selection is cleared
+- **Application State**: All related UI state is reset
+
+#### Important Notes
+- **Permanent Deletion**: Student deletion cannot be undone
+- **Complete Cleanup**: All associated files are automatically removed
+- **No Orphaned Data**: The system ensures no leftover files remain
+- **Cross-Platform**: Works in both Tauri desktop and browser environments
+- **Professional UI**: Uses Bootstrap 5 confirmation modal for better user experience
+- **Safety Features**: Multiple warnings and confirmation steps prevent accidental deletions
+
 ## Troubleshooting
 
 ### Common Issues
@@ -314,6 +355,12 @@ After viewing the students with marks table, you'll see individual performance h
 - Check that the "Export CSV" button is enabled (not grayed out)
 - Verify browser download settings if CSV doesn't appear
 - Try refreshing the application if export fails
+
+#### Student Deletion Issues
+- Ensure you have proper permissions to delete files
+- Check that the student is not currently selected in another view
+- Verify that all associated data has been properly cleaned up
+- If deletion fails, try refreshing the application and attempt again
 
 ### Getting Help
 - Check the [Development Guide](DEVELOPMENT.md) for technical issues

@@ -3,7 +3,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file, write_student_evaluation, read_student_evaluation, write_student_paragraphs, read_student_paragraphs])
+        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file, write_student_evaluation, read_student_evaluation, write_student_paragraphs, read_student_paragraphs, delete_student_evaluation, delete_student_paragraphs, delete_all_student_files])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -212,4 +212,62 @@ fn read_student_paragraphs(student_id: String) -> Result<String, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+#[tauri::command]
+fn delete_student_evaluation(student_id: String, assessment_id: String) -> Result<(), String> {
+    let dir = portable_data_dir()?;
+    let filename = format!("student-evaluation-{}-{}.json", student_id, assessment_id);
+    let path = std::path::Path::new(&dir).join(filename);
+    
+    match std::fs::remove_file(&path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // File doesn't exist, that's fine
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn delete_student_paragraphs(student_id: String) -> Result<(), String> {
+    let dir = portable_data_dir()?;
+    let filename = format!("student-paragraphs-{}.json", student_id);
+    let path = std::path::Path::new(&dir).join(filename);
+    
+    match std::fs::remove_file(&path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // File doesn't exist, that's fine
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn delete_all_student_files(student_id: String) -> Result<(), String> {
+    let dir = portable_data_dir()?;
+    
+    // Delete student paragraphs file
+    let paragraphs_filename = format!("student-paragraphs-{}.json", student_id);
+    let paragraphs_path = std::path::Path::new(&dir).join(paragraphs_filename);
+    
+    if let Err(e) = std::fs::remove_file(&paragraphs_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            return Err(e.to_string());
+        }
+    }
+    
+    // Find and delete all student evaluation files for this student
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                if let Some(file_name) = entry.file_name().to_str() {
+                    if file_name.starts_with(&format!("student-evaluation-{}-", student_id)) && file_name.ends_with(".json") {
+                        if let Err(e) = std::fs::remove_file(entry.path()) {
+                            eprintln!("Warning: Could not delete file {}: {}", file_name, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
 }

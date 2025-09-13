@@ -44,6 +44,9 @@
 	let categoryWarnings = $state({}) // Store warnings for each category
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
+	let deletingStudentId = $state(null) // Track which student is being deleted
+	let showDeleteConfirmation = $state(false) // Show delete confirmation modal
+	let studentToDelete = $state(null) // Student to be deleted
 	let editingParagraphIndex = $state(null) // Track which paragraph is being edited
 	let editingParagraphText = $state('') // Store text being edited
 
@@ -611,15 +614,54 @@
 		}
 	}
 
-	function deleteStudent(studentId) {
-		if (confirm('Are you sure you want to delete this student? This will also delete all their evaluation data.')) {
-			students = students.filter(s => s.id !== studentId)
-			saveStudents()
-			if (currentStudentId === studentId) {
-				currentStudentId = null
-				studentName = ''
+	async function deleteStudent(studentId) {
+		console.log('deleteStudent called with studentId:', studentId)
+		const student = students.find(s => s.id === studentId)
+		const studentDisplayName = student ? student.displayName : 'this student'
+		console.log('Student found:', student, 'Display name:', studentDisplayName)
+		
+		deletingStudentId = studentId // Set loading state
+		
+		try {
+			// Delete all associated student files via Tauri
+			await invoke('delete_all_student_files', { studentId: studentId })
+			console.log(`Deleted all files for student: ${studentId}`)
+		} catch (error) {
+			console.log('Tauri not available, using browser storage cleanup')
+			// Fallback: Clean up browser storage
+			const keysToRemove = []
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i)
+				if (key && (key.startsWith(`student-evaluation-${studentId}-`) || key === `student-paragraphs-${studentId}`)) {
+					keysToRemove.push(key)
+				}
 			}
+			keysToRemove.forEach(key => localStorage.removeItem(key))
 		}
+		
+		// Remove student from the students array
+		students = students.filter(s => s.id !== studentId)
+		saveStudents()
+		
+		// Clear current student selection if the deleted student was selected
+		if (currentStudentId === studentId) {
+			currentStudentId = null
+			studentName = ''
+			studentImage = ''
+			selectedParagraphs.clear()
+			categoryMarks = {}
+			manualTotalMarks = ''
+		}
+		
+		// Clear loading state and close modal
+		deletingStudentId = null
+		showDeleteConfirmation = false
+		studentToDelete = null
+		
+		// Show success notification
+		showNotification = true
+		notificationMessage = `Student deleted successfully. All associated data has been removed.`
+		setTimeout(() => { showNotification = false }, 3000)
 	}
 
 	async function selectStudent(studentId) {
@@ -2406,6 +2448,16 @@
 	:global(*) {
 		box-sizing: border-box;
 	}
+	
+	/* Loading spinner animation */
+	.spin {
+		animation: spin 1s linear infinite;
+	}
+	
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
 </style>
 
 <!-- Total Marks Warning Modal -->
@@ -2526,10 +2578,15 @@
 										</button>
 										<button 
 											class="btn btn-outline-danger btn-sm"
-											onclick={() => deleteStudent(student.id)}
+											onclick={() => { studentToDelete = student; showDeleteConfirmation = true; }}
 											title="Delete this student"
+											disabled={deletingStudentId === student.id}
 										>
-											<i class="bi bi-trash"></i>
+											{#if deletingStudentId === student.id}
+												<i class="bi bi-arrow-clockwise spin"></i>
+											{:else}
+												<i class="bi bi-trash"></i>
+											{/if}
 										</button>
 									</div>
 								</div>
@@ -2558,6 +2615,86 @@
 			</div>
 			<div class="toast-body">
 				{notificationMessage}
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Delete Student Confirmation Modal -->
+{#if showDeleteConfirmation && studentToDelete}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header bg-danger text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-exclamation-triangle me-2"></i>Confirm Student Deletion
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={() => { showDeleteConfirmation = false; studentToDelete = null; }}></button>
+				</div>
+				<div class="modal-body">
+					<div class="alert alert-danger d-flex align-items-center mb-3" role="alert">
+						<i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.2rem;"></i>
+						<div>
+							<strong>Warning!</strong> This action cannot be undone.
+						</div>
+					</div>
+					
+					<p class="mb-3">
+						Are you sure you want to delete <strong>{studentToDelete.displayName}</strong>?
+					</p>
+					
+					<p class="mb-3 text-muted">
+						This will permanently delete:
+					</p>
+					
+					<ul class="list-unstyled mb-4">
+						<li class="mb-2">
+							<i class="bi bi-person-x text-danger me-2"></i>
+							Student information and profile
+						</li>
+						<li class="mb-2">
+							<i class="bi bi-file-text-x text-danger me-2"></i>
+							All evaluation data and feedback
+						</li>
+						<li class="mb-2">
+							<i class="bi bi-journal-x text-danger me-2"></i>
+							All feedback paragraphs and comments
+						</li>
+						<li class="mb-2">
+							<i class="bi bi-clipboard-x text-danger me-2"></i>
+							All assessment marks and grades
+						</li>
+					</ul>
+					
+					<div class="alert alert-info d-flex align-items-center" role="alert">
+						<i class="bi bi-info-circle me-2"></i>
+						<div>
+							If this student is currently selected, the selection will be cleared.
+						</div>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button 
+						type="button" 
+						class="btn btn-secondary" 
+						onclick={() => { showDeleteConfirmation = false; studentToDelete = null; }}
+						disabled={deletingStudentId === studentToDelete?.id}
+					>
+						<i class="bi bi-x-circle me-2"></i>Cancel
+					</button>
+					<button 
+						type="button" 
+						class="btn btn-danger"
+						onclick={() => deleteStudent(studentToDelete.id)}
+						disabled={deletingStudentId === studentToDelete?.id}
+					>
+						{#if deletingStudentId === studentToDelete?.id}
+							<i class="bi bi-arrow-clockwise spin me-2"></i>Deleting...
+						{:else}
+							<i class="bi bi-trash me-2"></i>Delete Student
+						{/if}
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>
