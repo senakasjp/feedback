@@ -368,6 +368,75 @@ The system automatically migrates existing data:
 - Improved reliability outweighs slight overhead
 - ID-based lookups are efficient with Map/Set operations
 
+## Subject-Specific Student Management
+
+### Overview
+The application now supports removing students from specific subjects while preserving their global student records. This allows for flexible student management across multiple subjects.
+
+### Key Features
+
+#### Student Deletion from Subject
+- **Location**: `src/lib/AssessmentManager.svelte`
+- **UI Element**: Red trash button next to student name in the student list
+- **Confirmation**: Professional Bootstrap modal with comprehensive warning information
+- **Data Impact**: Removes all evaluation data for the student across all assessments in the current subject
+
+#### Modal Warning System
+- **Bootstrap Integration**: Uses consistent modal design patterns
+- **Comprehensive Information**: Shows student details, warning alerts, and action consequences
+- **User-Friendly**: Clear explanation of what will be deleted and what will be preserved
+- **Accessibility**: Proper ARIA labels and semantic HTML structure
+
+### Implementation Details
+
+#### State Management
+```javascript
+let showStudentDeleteConfirm = $state(false);
+let studentToDelete = $state(null);
+```
+
+#### Core Functions
+- `deleteStudentFromSubject(studentId)`: Shows confirmation modal
+- `confirmStudentDelete()`: Executes the deletion and data cleanup
+- `cancelStudentDelete()`: Cancels the operation and closes modal
+
+#### Data Cleanup Process
+1. Iterates through all assessments in the current subject
+2. Clears evaluation data for each student-assessment combination
+3. Updates both Tauri storage and localStorage fallback
+4. Reloads student evaluations to update the display
+5. Shows success notification
+
+### UI/UX Considerations
+
+#### Button Placement
+- Positioned horizontally next to move up/down buttons
+- Uses Bootstrap's `btn-outline-danger` class for consistent styling
+- Small size (24x20px) to fit in the student name column
+- Font Awesome trash icon (`bi-trash`) for clear visual indication
+
+#### Modal Design
+- **Header**: Red background with warning icon and clear title
+- **Student Info**: Large icon, name, and student ID display
+- **Warning Section**: Red alert explaining data deletion consequences
+- **Info Section**: Blue alert clarifying global student preservation
+- **Action Buttons**: Cancel (secondary) and Remove Student (danger) buttons
+
+### Development Guidelines
+
+#### When Adding Similar Features
+1. Follow the established modal pattern for confirmations
+2. Use Bootstrap 5 "sm" theme consistently
+3. Include comprehensive warning information
+4. Provide clear user feedback for actions
+5. Maintain accessibility standards
+
+#### Error Handling
+- Graceful fallback between Tauri and localStorage
+- User-friendly error messages
+- Console logging for debugging
+- Proper state cleanup on errors
+
 ## Code Style Guidelines
 
 ### Svelte Components

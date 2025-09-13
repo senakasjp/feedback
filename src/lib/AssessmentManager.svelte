@@ -51,6 +51,8 @@
 	// Local state
 	let showDeleteConfirm = $state(false);
 	let assessmentToDelete = $state(null);
+	let showStudentDeleteConfirm = $state(false);
+	let studentToDelete = $state(null);
 	let localNewAssessmentName = $state('');
 	let studentEvaluations = $state({}); // Store student evaluation data
 	let studentsWithMarks = $state([]); // Students who have marks for this subject
@@ -522,6 +524,65 @@
 			setTimeout(() => isReordering = false, 200);
 		}
 	}
+
+	// Show delete confirmation modal for student
+	function deleteStudentFromSubject(studentId) {
+		const student = students.find(s => s.id === studentId);
+		if (!student) return;
+		
+		studentToDelete = student;
+		showStudentDeleteConfirm = true;
+	}
+
+	// Confirm delete student from subject
+	async function confirmStudentDelete() {
+		if (!studentToDelete) return;
+
+		try {
+			// Delete evaluation data for each assessment in this subject
+			for (const assessment of assessments) {
+				try {
+					// Try Tauri first
+					await invoke('write_student_evaluation', {
+						studentId: studentToDelete.id,
+						assessmentId: assessment.id,
+						data: JSON.stringify({
+							studentId: studentToDelete.id,
+							assessmentId: assessment.id,
+							paragraphs: [],
+							selectedParagraphs: [],
+							studentName: '',
+							studentImage: '',
+							categoryMarks: {},
+							manualTotalMarks: '',
+							savedAt: new Date().toISOString()
+						}, null, 2)
+					});
+				} catch (error) {
+					// Fallback to localStorage
+					const key = `student-evaluation-${studentToDelete.id}-${assessment.id}`;
+					localStorage.removeItem(key);
+				}
+			}
+
+			// Reload student evaluations to update the display
+			await loadStudentEvaluations();
+			
+			// Close modal and show success notification
+			showStudentDeleteConfirm = false;
+			studentToDelete = null;
+			alert(`${studentToDelete?.name || 'Student'} has been successfully removed from this subject.`);
+		} catch (error) {
+			console.error('Error deleting student from subject:', error);
+			alert('Error removing student from subject. Please try again.');
+		}
+	}
+
+	// Cancel student delete
+	function cancelStudentDelete() {
+		showStudentDeleteConfirm = false;
+		studentToDelete = null;
+	}
 </script>
 
 <style>
@@ -760,7 +821,7 @@
 																<div class="d-flex align-items-center">
 																	<span>{student.name}</span>
 																</div>
-																<div class="d-flex flex-column gap-1">
+																<div class="d-flex gap-1">
 																	<button 
 																		class="btn btn-sm btn-outline-secondary p-1" 
 																		style="width: 24px; height: 20px; font-size: 0.7rem;"
@@ -778,6 +839,14 @@
 																		title="Move down"
 																		aria-label="Move student down">
 																		<i class="bi bi-chevron-down"></i>
+																	</button>
+																	<button 
+																		class="btn btn-sm btn-outline-danger p-1" 
+																		style="width: 24px; height: 20px; font-size: 0.7rem;"
+																		onclick={() => deleteStudentFromSubject(student.id)}
+																		title="Remove student from this subject"
+																		aria-label="Remove student from subject">
+																		<i class="bi bi-trash"></i>
 																	</button>
 																</div>
 															</div>
@@ -1001,6 +1070,47 @@
 					</button>
 					<button type="button" class="btn btn-danger" onclick={confirmDelete}>
 						<i class="bi bi-trash me-2"></i>Delete Assessment
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Student Delete Confirmation Dialog -->
+{#if showStudentDeleteConfirm && studentToDelete}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header bg-danger text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-exclamation-triangle me-2"></i>Remove Student from Subject
+					</h5>
+				</div>
+				<div class="modal-body">
+					<div class="d-flex align-items-center mb-3">
+						<i class="bi bi-person-x text-danger me-3" style="font-size: 2rem;"></i>
+						<div>
+							<h6 class="mb-1">Student: <strong>{studentToDelete.name}</strong></h6>
+							<p class="text-muted mb-0">ID: {studentToDelete.studentId}</p>
+						</div>
+					</div>
+					<div class="alert alert-warning">
+						<i class="bi bi-warning me-2"></i>
+						<strong>Warning:</strong> This will remove the student from this subject and delete all their evaluation data (marks, selections, feedback) for all assessments in this subject. This action cannot be undone.
+					</div>
+					<div class="alert alert-info">
+						<i class="bi bi-info-circle me-2"></i>
+						<strong>Note:</strong> The student will remain in the global student list and can be added to other subjects.
+					</div>
+					<p class="mb-0">Are you sure you want to remove this student from this subject?</p>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={cancelStudentDelete}>
+						<i class="bi bi-x-circle me-2"></i>Cancel
+					</button>
+					<button type="button" class="btn btn-danger" onclick={confirmStudentDelete}>
+						<i class="bi bi-person-x me-2"></i>Remove Student
 					</button>
 				</div>
 			</div>

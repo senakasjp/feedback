@@ -604,6 +604,15 @@ let studentName = $state('')                // Current student display name
 - Student marks table with weighting
 - CSV export functionality
 - Grade calculation system
+- Subject-specific student management
+- Professional delete confirmations with Bootstrap modals
+
+**Student Management Features**:
+- **Student List Display**: Shows students with evaluation data for the current subject
+- **Student Removal**: Red trash button to remove students from the current subject
+- **Confirmation Modal**: Professional Bootstrap modal with detailed warning information
+- **Data Cleanup**: Removes all evaluation data for the student across all assessments in the subject
+- **Global Preservation**: Student remains in global student list for use in other subjects
 
 ### ✏️ Feedback Editor (`FeedbackEditor.svelte`)
 

@@ -60,6 +60,21 @@
 2. Select a student to load their data
 3. The interface will show all paragraphs associated with that student
 
+### Managing Students in Subjects
+- **View Students**: Students with evaluation data for a subject appear in the assessment manager
+- **Remove from Subject**: Click the red trash button next to a student's name to remove them from the current subject
+- **Global vs Subject-Specific**: Removing a student from a subject only affects that subject; the student remains in the global student list
+
+### Removing Students from Subjects
+1. Open a subject and go to the assessment manager
+2. Find the student you want to remove in the student list
+3. Click the red trash button next to their name
+4. A confirmation modal will appear with detailed information about what will be deleted
+5. Review the warning information carefully
+6. Click "Remove Student" to confirm or "Cancel" to abort
+7. The student's evaluation data for all assessments in that subject will be permanently deleted
+8. The student will no longer appear in the subject's student list but remains in the global student database
+
 ## Creating Feedback
 
 ### Adding Paragraphs

@@ -360,6 +360,93 @@ async function selectStudent(studentId) {
 }
 ```
 
+#### Delete Student from Subject
+```javascript
+function deleteStudentFromSubject(studentId) {
+  const student = students.find(s => s.id === studentId);
+  if (!student) return;
+  
+  studentToDelete = student;
+  showStudentDeleteConfirm = true;
+}
+```
+Shows a confirmation modal for removing a student from the current subject.
+
+**Parameters**:
+- `studentId`: string - ID of the student to remove from subject
+
+**Usage**:
+```javascript
+deleteStudentFromSubject('student-123');
+```
+
+#### Confirm Student Delete
+```javascript
+async function confirmStudentDelete() {
+  if (!studentToDelete) return;
+
+  try {
+    // Delete evaluation data for each assessment in this subject
+    for (const assessment of assessments) {
+      try {
+        // Try Tauri first
+        await invoke('write_student_evaluation', {
+          studentId: studentToDelete.id,
+          assessmentId: assessment.id,
+          data: JSON.stringify({
+            studentId: studentToDelete.id,
+            assessmentId: assessment.id,
+            paragraphs: [],
+            selectedParagraphs: [],
+            studentName: '',
+            studentImage: '',
+            categoryMarks: {},
+            manualTotalMarks: '',
+            savedAt: new Date().toISOString()
+          }, null, 2)
+        });
+      } catch (error) {
+        // Fallback to localStorage
+        const key = `student-evaluation-${studentToDelete.id}-${assessment.id}`;
+        localStorage.removeItem(key);
+      }
+    }
+
+    // Reload student evaluations to update the display
+    await loadStudentEvaluations();
+    
+    // Close modal and show success notification
+    showStudentDeleteConfirm = false;
+    studentToDelete = null;
+    alert(`${studentToDelete?.name || 'Student'} has been successfully removed from this subject.`);
+  } catch (error) {
+    console.error('Error deleting student from subject:', error);
+    alert('Error removing student from subject. Please try again.');
+  }
+}
+```
+Confirms and executes the removal of a student from the current subject.
+
+**Behavior**:
+- Removes all evaluation data for the student across all assessments in the subject
+- Updates both Tauri storage and localStorage
+- Reloads student list to reflect changes
+- Shows success notification
+
+#### Cancel Student Delete
+```javascript
+function cancelStudentDelete() {
+  showStudentDeleteConfirm = false;
+  studentToDelete = null;
+}
+```
+Cancels the student deletion process and closes the confirmation modal.
+
+**Usage**:
+```javascript
+cancelStudentDelete();
+```
+
 ### Assessment Management
 
 #### Add Assessment to Subject

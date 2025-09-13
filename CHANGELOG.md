@@ -9,6 +9,8 @@
 - **Data Migration System**: Automatic migration of existing paragraphs to include unique IDs for backward compatibility
 - **Enhanced Paragraph Tracking**: Reliable paragraph selection and editing using unique identifiers
 - **Improved Data Integrity**: Better handling of paragraph operations with ID-based tracking
+- **Subject-Specific Student Management**: Ability to remove students from specific subjects while preserving global student records
+- **Professional Delete Confirmations**: Bootstrap modal-based warning system for destructive actions
 
 #### Technical Improvements
 - **ID Generation**: New `generateId()` function for creating unique string identifiers
@@ -17,6 +19,9 @@
 - **Enhanced Merging**: Improved `mergeParagraphs()` with ID-based duplicate detection
 - **Smart Mapping**: Updated `mapSelectionsToMergedParagraphs()` for ID-based selection mapping
 - **UI Updates**: Modified paragraph rendering to use ID-based selection state
+- **Student Deletion Functions**: New `deleteStudentFromSubject()`, `confirmStudentDelete()`, and `cancelStudentDelete()` functions
+- **Modal State Management**: Added `showStudentDeleteConfirm` and `studentToDelete` state variables
+- **Enhanced Warning System**: Professional Bootstrap modal confirmations with comprehensive information
 
 #### Data Architecture Changes
 - **Paragraph Objects**: All paragraphs now include a unique `id` field
