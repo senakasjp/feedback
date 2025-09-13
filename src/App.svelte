@@ -682,8 +682,17 @@
 	async function loadStudentEvaluation() {
 		if (!currentStudentId || !currentAssessmentId) return
 
-		// First, load ALL student paragraphs
+		// First, load assignment paragraphs (including edited ones)
+		await loadAssessmentData(currentSubjectId, currentAssessmentId)
+		const assignmentParagraphs = [...paragraphs]
+
+		// Then, load student paragraphs
 		await loadStudentParagraphs()
+		const studentParagraphs = [...paragraphs]
+
+		// Merge assignment and student paragraphs (avoid duplicates)
+		const mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs)
+		paragraphs = mergedParagraphs
 
 		try {
 			const data = await invoke('read_student_evaluation', { 
@@ -692,8 +701,7 @@
 			})
 			if (data) {
 				const evaluationData = JSON.parse(data)
-				// Don't overwrite paragraphs - keep the student paragraphs loaded above
-				// Only load marks and selections from the evaluation data
+				// Load marks and selections from the evaluation data
 				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
 				studentName = evaluationData.studentName || ''
 				studentImage = evaluationData.studentImage || ''
@@ -702,7 +710,7 @@
 				
 				showSuccessNotification('Student evaluation data loaded successfully!')
 			} else {
-				// If no evaluation data, reset marks and selections but keep student paragraphs
+				// If no evaluation data, reset marks and selections but keep merged paragraphs
 				selectedParagraphs = new Set()
 				categoryMarks = {}
 				manualTotalMarks = ''
@@ -714,8 +722,7 @@
 			const data = localStorage.getItem(key)
 			if (data) {
 				const evaluationData = JSON.parse(data)
-				// Don't overwrite paragraphs - keep the student paragraphs loaded above
-				// Only load marks and selections from the evaluation data
+				// Load marks and selections from the evaluation data
 				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
 				studentName = evaluationData.studentName || ''
 				studentImage = evaluationData.studentImage || ''
@@ -724,13 +731,33 @@
 				
 				showSuccessNotification('Student evaluation data loaded successfully!')
 			} else {
-				// If no evaluation data, reset marks and selections but keep student paragraphs
+				// If no evaluation data, reset marks and selections but keep merged paragraphs
 				selectedParagraphs = new Set()
 				categoryMarks = {}
 				manualTotalMarks = ''
 				showSuccessNotification('No saved data found for this student and assessment.')
 			}
 		}
+	}
+
+	// Helper function to merge assignment and student paragraphs (avoid duplicates)
+	function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
+		const merged = [...assignmentParagraphs]
+		
+		// Add student paragraphs that don't already exist in assignment
+		for (const studentPara of studentParagraphs) {
+			const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text
+			const exists = assignmentParagraphs.some(assignmentPara => {
+				const assignmentText = typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text
+				return assignmentText === studentText
+			})
+			
+			if (!exists) {
+				merged.push(studentPara)
+			}
+		}
+		
+		return merged
 	}
 
 	// Save student paragraphs (separate from assessment data)
