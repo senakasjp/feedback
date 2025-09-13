@@ -694,6 +694,13 @@
 		const mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs)
 		paragraphs = mergedParagraphs
 
+		// Load evaluation data to get selections and marks
+		let savedSelectedParagraphs = new Set()
+		let savedStudentName = ''
+		let savedStudentImage = ''
+		let savedCategoryMarks = {}
+		let savedManualTotalMarks = ''
+
 		try {
 			const data = await invoke('read_student_evaluation', { 
 				studentId: currentStudentId,
@@ -701,20 +708,11 @@
 			})
 			if (data) {
 				const evaluationData = JSON.parse(data)
-				// Load marks and selections from the evaluation data
-				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
-				studentName = evaluationData.studentName || ''
-				studentImage = evaluationData.studentImage || ''
-				categoryMarks = evaluationData.categoryMarks || {}
-				manualTotalMarks = evaluationData.manualTotalMarks || ''
-				
-				showSuccessNotification('Student evaluation data loaded successfully!')
-			} else {
-				// If no evaluation data, reset marks and selections but keep merged paragraphs
-				selectedParagraphs = new Set()
-				categoryMarks = {}
-				manualTotalMarks = ''
-				showSuccessNotification('No saved data found for this student and assessment.')
+				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
+				savedStudentName = evaluationData.studentName || ''
+				savedStudentImage = evaluationData.studentImage || ''
+				savedCategoryMarks = evaluationData.categoryMarks || {}
+				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -722,21 +720,33 @@
 			const data = localStorage.getItem(key)
 			if (data) {
 				const evaluationData = JSON.parse(data)
-				// Load marks and selections from the evaluation data
-				selectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
-				studentName = evaluationData.studentName || ''
-				studentImage = evaluationData.studentImage || ''
-				categoryMarks = evaluationData.categoryMarks || {}
-				manualTotalMarks = evaluationData.manualTotalMarks || ''
-				
-				showSuccessNotification('Student evaluation data loaded successfully!')
-			} else {
-				// If no evaluation data, reset marks and selections but keep merged paragraphs
-				selectedParagraphs = new Set()
-				categoryMarks = {}
-				manualTotalMarks = ''
-				showSuccessNotification('No saved data found for this student and assessment.')
+				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
+				savedStudentName = evaluationData.studentName || ''
+				savedStudentImage = evaluationData.studentImage || ''
+				savedCategoryMarks = evaluationData.categoryMarks || {}
+				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
 			}
+		}
+
+		// Map saved selections to merged paragraph indices
+		const mappedSelections = mapSelectionsToMergedParagraphs(
+			savedSelectedParagraphs, 
+			assignmentParagraphs, 
+			studentParagraphs, 
+			mergedParagraphs
+		)
+
+		// Apply the mapped selections and marks
+		selectedParagraphs = mappedSelections
+		studentName = savedStudentName
+		studentImage = savedStudentImage
+		categoryMarks = savedCategoryMarks
+		manualTotalMarks = savedManualTotalMarks
+
+		if (savedSelectedParagraphs.size > 0 || Object.keys(savedCategoryMarks).length > 0) {
+			showSuccessNotification('Student evaluation data loaded successfully!')
+		} else {
+			showSuccessNotification('No saved data found for this student and assessment.')
 		}
 	}
 
@@ -758,6 +768,47 @@
 		}
 		
 		return merged
+	}
+
+	// Helper function to map saved selections to merged paragraph indices
+	function mapSelectionsToMergedParagraphs(savedSelections, assignmentParagraphs, studentParagraphs, mergedParagraphs) {
+		const mappedSelections = new Set()
+		
+		// Create maps to find paragraph text by index
+		const assignmentTexts = assignmentParagraphs.map(para => 
+			typeof para === 'string' ? para : para.text
+		)
+		const studentTexts = studentParagraphs.map(para => 
+			typeof para === 'string' ? para : para.text
+		)
+		const mergedTexts = mergedParagraphs.map(para => 
+			typeof para === 'string' ? para : para.text
+		)
+		
+		// Map each saved selection
+		for (const savedIndex of savedSelections) {
+			let paragraphText = null
+			
+			// First, try to find in assignment paragraphs
+			if (savedIndex < assignmentTexts.length) {
+				paragraphText = assignmentTexts[savedIndex]
+			}
+			// If not found in assignment, try student paragraphs
+			else if (savedIndex - assignmentTexts.length < studentTexts.length) {
+				const studentIndex = savedIndex - assignmentTexts.length
+				paragraphText = studentTexts[studentIndex]
+			}
+			
+			// If we found the paragraph text, find its new index in merged array
+			if (paragraphText) {
+				const newIndex = mergedTexts.findIndex(text => text === paragraphText)
+				if (newIndex !== -1) {
+					mappedSelections.add(newIndex)
+				}
+			}
+		}
+		
+		return mappedSelections
 	}
 
 	// Save student paragraphs (separate from assessment data)

@@ -146,7 +146,98 @@ function addParagraph() {
 - If a student is selected, also saved to student's paragraph collection
 - Avoids duplicates in student storage through comparison logic
 
-#### 2. Deleting Paragraphs
+#### 2. Editing Paragraphs
+When a paragraph is edited:
+
+```javascript
+function startEditParagraph(index) {
+  editingParagraphIndex = index
+  // Extract only the main text content (without category and knowledge area prefixes)
+  editingParagraphText = extractMainTextFromParagraph(paragraphs[index].text)
+}
+
+function saveEditParagraph() {
+  if (editingParagraphIndex !== null && editingParagraphText.trim()) {
+    // Reconstruct the paragraph text with original prefixes
+    const originalText = paragraphs[editingParagraphIndex].text
+    const newText = reconstructParagraphText(originalText, editingParagraphText.trim())
+    paragraphs[editingParagraphIndex].text = newText
+    editingParagraphIndex = null
+    editingParagraphText = ''
+    
+    // Save to both assignment and student storage
+    saveAssessmentData()
+    if (currentStudentId) {
+      saveStudentParagraphs()
+    }
+  }
+}
+```
+
+**Helper Functions**:
+```javascript
+// Extract main text from paragraph (without prefixes)
+function extractMainTextFromParagraph(paragraphText) {
+  let text = paragraphText
+  
+  // Remove category prefix (format: "Category: text")
+  if (text.includes(': ')) {
+    const parts = text.split(': ')
+    if (parts.length >= 2) {
+      text = parts.slice(1).join(': ')
+    }
+  }
+  
+  // Remove knowledge area suffix (format: "text - Knowledge Area")
+  if (text.includes(' - ')) {
+    const parts = text.split(' - ')
+    if (parts.length >= 2) {
+      const lastPart = parts[parts.length - 1]
+      if (!lastPart.includes(':')) {
+        text = parts.slice(0, -1).join(' - ')
+      }
+    }
+  }
+  
+  return text
+}
+
+// Reconstruct paragraph text with original prefixes
+function reconstructParagraphText(originalText, newMainText) {
+  let categoryPrefix = ''
+  let knowledgeAreaSuffix = ''
+  
+  // Extract category prefix from original text
+  if (originalText.includes(': ')) {
+    const parts = originalText.split(': ')
+    if (parts.length >= 2) {
+      categoryPrefix = parts[0] + ': '
+    }
+  }
+  
+  // Extract knowledge area suffix from original text
+  if (originalText.includes(' - ')) {
+    const parts = originalText.split(' - ')
+    if (parts.length >= 2) {
+      const lastPart = parts[parts.length - 1]
+      if (!lastPart.includes(':')) {
+        knowledgeAreaSuffix = ' - ' + lastPart
+      }
+    }
+  }
+  
+  // Reconstruct: Category: MainText - KnowledgeArea
+  return categoryPrefix + newMainText + knowledgeAreaSuffix
+}
+```
+
+**Key Behavior**:
+- Only the main text content can be edited (preserves category and knowledge area prefixes)
+- Edited paragraph is saved to both assignment and student storage
+- Original structural information (category, knowledge area) is preserved
+- Maintains data integrity across both storage systems
+
+#### 3. Deleting Paragraphs
 When a paragraph is deleted:
 
 ```javascript
@@ -179,7 +270,7 @@ function deleteParagraph(index) {
 - Selected paragraph indices are updated accordingly
 - Only assignment data is saved (student data unchanged)
 
-#### 3. Loading Assignment Data
+#### 4. Loading Assignment Data
 When selecting an assignment:
 
 ```javascript
