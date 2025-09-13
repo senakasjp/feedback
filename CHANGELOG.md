@@ -2,7 +2,29 @@
 
 ## Version History
 
-### v2.5.0 - Current Version
+### v2.6.0 - Current Version
+
+#### New Features
+- **Unique ID-Based Paragraph Management**: Robust paragraph selection system using unique IDs instead of array indices
+- **Data Migration System**: Automatic migration of existing paragraphs to include unique IDs for backward compatibility
+- **Enhanced Paragraph Tracking**: Reliable paragraph selection and editing using unique identifiers
+- **Improved Data Integrity**: Better handling of paragraph operations with ID-based tracking
+
+#### Technical Improvements
+- **ID Generation**: New `generateId()` function for creating unique string identifiers
+- **Data Migration**: New `ensureParagraphsHaveIds()` function to migrate existing data
+- **ID-Based Selection**: Updated `toggleParagraph()` to use unique IDs instead of array indices
+- **Enhanced Merging**: Improved `mergeParagraphs()` with ID-based duplicate detection
+- **Smart Mapping**: Updated `mapSelectionsToMergedParagraphs()` for ID-based selection mapping
+- **UI Updates**: Modified paragraph rendering to use ID-based selection state
+
+#### Data Architecture Changes
+- **Paragraph Objects**: All paragraphs now include a unique `id` field
+- **Selection Tracking**: `selectedParagraphs` now stores unique IDs instead of indices
+- **Backward Compatibility**: Automatic migration ensures existing data works with new system
+- **Data Integrity**: More reliable paragraph operations across editing and merging
+
+### v2.5.0 - Previous Version
 
 #### New Features
 - **Dual Storage System**: Sophisticated paragraph management with assignment-level and student-level storage

@@ -22,6 +22,93 @@ Subject (1 or more)
 - **FeedbackEditor.svelte**: Paragraph creation and editing
 - **SelectedTextSection.svelte**: PDF generation and text export
 
+## Unique ID-Based Paragraph Management System
+
+### Overview
+
+The application implements a robust paragraph management system using unique IDs instead of array indices. This ensures reliable paragraph selection, editing, and tracking even when paragraphs are modified, reordered, or merged from different sources.
+
+### ID Generation and Management
+
+#### Unique ID Generation
+```javascript
+function generateId() {
+  return Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
+}
+```
+
+#### Data Migration
+```javascript
+function ensureParagraphsHaveIds(paragraphs) {
+  return paragraphs.map(para => {
+    if (typeof para === 'string') {
+      return {
+        id: generateId(),
+        text: para,
+        color: undefined
+      }
+    } else if (para && !para.id) {
+      return {
+        ...para,
+        id: generateId()
+      }
+    }
+    return para
+  })
+}
+```
+
+### Paragraph Object Structure
+
+All paragraphs now include a unique `id` field:
+
+```json
+{
+  "id": "abc123def456",
+  "text": "Student demonstrates excellent understanding of design principles.",
+  "color": "green"
+}
+```
+
+### ID-Based Selection System
+
+#### Selection Tracking
+```javascript
+let selectedParagraphs = $state(new Set())  // Stores unique IDs, not indices
+```
+
+#### Toggle Function
+```javascript
+function toggleParagraph(index) {
+  const paragraphId = paragraphs[index]?.id
+  if (!paragraphId) return
+
+  if (selectedParagraphs.has(paragraphId)) {
+    selectedParagraphs.delete(paragraphId)
+  } else {
+    selectedParagraphs.add(paragraphId)
+  }
+  selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
+}
+```
+
+### Data Migration and Backward Compatibility
+
+The system automatically migrates existing data to include unique IDs:
+
+1. **Assignment Data Loading**: `loadAssessmentData()` applies `ensureParagraphsHaveIds()`
+2. **Student Data Loading**: `loadStudentParagraphs()` applies `ensureParagraphsHaveIds()`
+3. **Paragraph Creation**: New paragraphs automatically get unique IDs
+4. **Data Merging**: ID-based duplicate detection prevents conflicts
+
+### Benefits of ID-Based System
+
+1. **Reliable Selection**: Paragraph selections remain correct even after editing or reordering
+2. **Robust Merging**: ID-based duplicate detection prevents data conflicts
+3. **Data Integrity**: Unique identifiers ensure consistent paragraph tracking
+4. **Backward Compatibility**: Automatic migration ensures existing data works seamlessly
+5. **Future-Proof**: System can handle complex paragraph operations without breaking
+
 ## Dual Storage System for Paragraphs and Student Data
 
 ### Storage Architecture

@@ -144,6 +144,25 @@
 		return Date.now().toString(36) + Math.random().toString(36).substr(2)
 	}
 
+	// Ensure paragraphs have IDs (migration function for existing data)
+	function ensureParagraphsHaveIds(paragraphs) {
+		return paragraphs.map(para => {
+			if (typeof para === 'string') {
+				return {
+					id: generateId(),
+					text: para,
+					color: undefined
+				}
+			} else if (para && !para.id) {
+				return {
+					...para,
+					id: generateId()
+				}
+			}
+			return para
+		})
+	}
+
 
 	async function loadSubjects() {
 		try {
@@ -198,7 +217,8 @@
 			const data = await invoke('read_subject_data', { subjectId: `${subjectId}-${assessmentId}` })
 			if (data) {
 				const parsed = JSON.parse(data)
-				paragraphs = parsed.paragraphs || []
+				// Ensure paragraphs have IDs (migration for existing data)
+				paragraphs = ensureParagraphsHaveIds(parsed.paragraphs || [])
 				// Load all paragraphs but don't select any by default
 				selectedParagraphs = new Set()
 				studentName = parsed.studentName || ''
@@ -223,7 +243,8 @@
 				const data = localStorage.getItem(key)
 				if (data) {
 					const parsed = JSON.parse(data)
-					paragraphs = parsed.paragraphs || []
+					// Ensure paragraphs have IDs (migration for existing data)
+					paragraphs = ensureParagraphsHaveIds(parsed.paragraphs || [])
 					// Load all paragraphs but don't select any by default
 					selectedParagraphs = new Set()
 					studentName = parsed.studentName || ''
@@ -394,6 +415,7 @@
 			}
 			
 			paragraphs.push({
+				id: generateId(), // Add unique ID for reliable tracking
 				text: paragraphText,
 				color: selectedColor || undefined
 			})
@@ -475,8 +497,8 @@
 
 	function checkCategoryHasSelectedParagraphs(category) {
 		// Check if any selected paragraphs belong to this category
-		for (const selectedIndex of selectedParagraphs) {
-			const paragraph = paragraphs[selectedIndex]
+		for (const selectedId of selectedParagraphs) {
+			const paragraph = paragraphs.find(p => p.id === selectedId)
 			if (paragraph) {
 				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
 				
@@ -756,13 +778,19 @@
 		
 		// Add student paragraphs that don't already exist in assignment
 		for (const studentPara of studentParagraphs) {
+			const studentId = studentPara?.id
 			const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text
-			const exists = assignmentParagraphs.some(assignmentPara => {
+			
+			// Check if paragraph exists by ID first, then by text
+			const existsById = assignmentParagraphs.some(assignmentPara => 
+				assignmentPara?.id === studentId
+			)
+			const existsByText = assignmentParagraphs.some(assignmentPara => {
 				const assignmentText = typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text
 				return assignmentText === studentText
 			})
 			
-			if (!exists) {
+			if (!existsById && !existsByText) {
 				merged.push(studentPara)
 			}
 		}
@@ -770,41 +798,37 @@
 		return merged
 	}
 
-	// Helper function to map saved selections to merged paragraph indices
+	// Helper function to map saved selections to merged paragraph IDs
 	function mapSelectionsToMergedParagraphs(savedSelections, assignmentParagraphs, studentParagraphs, mergedParagraphs) {
 		const mappedSelections = new Set()
 		
-		// Create maps to find paragraph text by index
-		const assignmentTexts = assignmentParagraphs.map(para => 
-			typeof para === 'string' ? para : para.text
-		)
-		const studentTexts = studentParagraphs.map(para => 
-			typeof para === 'string' ? para : para.text
-		)
-		const mergedTexts = mergedParagraphs.map(para => 
-			typeof para === 'string' ? para : para.text
-		)
+		// Create maps to find paragraph by ID
+		const assignmentParagraphMap = new Map()
+		assignmentParagraphs.forEach(para => {
+			if (para && para.id) {
+				assignmentParagraphMap.set(para.id, para)
+			}
+		})
 		
-		// Map each saved selection
-		for (const savedIndex of savedSelections) {
-			let paragraphText = null
-			
-			// First, try to find in assignment paragraphs
-			if (savedIndex < assignmentTexts.length) {
-				paragraphText = assignmentTexts[savedIndex]
+		const studentParagraphMap = new Map()
+		studentParagraphs.forEach(para => {
+			if (para && para.id) {
+				studentParagraphMap.set(para.id, para)
 			}
-			// If not found in assignment, try student paragraphs
-			else if (savedIndex - assignmentTexts.length < studentTexts.length) {
-				const studentIndex = savedIndex - assignmentTexts.length
-				paragraphText = studentTexts[studentIndex]
+		})
+		
+		const mergedParagraphMap = new Map()
+		mergedParagraphs.forEach(para => {
+			if (para && para.id) {
+				mergedParagraphMap.set(para.id, para)
 			}
-			
-			// If we found the paragraph text, find its new index in merged array
-			if (paragraphText) {
-				const newIndex = mergedTexts.findIndex(text => text === paragraphText)
-				if (newIndex !== -1) {
-					mappedSelections.add(newIndex)
-				}
+		})
+		
+		// Map each saved selection (now treating as IDs)
+		for (const savedId of savedSelections) {
+			// Check if this ID exists in the merged paragraphs
+			if (mergedParagraphMap.has(savedId)) {
+				mappedSelections.add(savedId)
 			}
 		}
 		
@@ -879,7 +903,8 @@
 				const studentData = JSON.parse(data)
 				// Load ALL student paragraphs (replace current paragraphs)
 				const studentParagraphs = studentData.paragraphs || []
-				paragraphs = [...studentParagraphs]
+				// Ensure paragraphs have IDs (migration for existing data)
+				paragraphs = ensureParagraphsHaveIds(studentParagraphs)
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -888,7 +913,8 @@
 			if (data) {
 				const studentData = JSON.parse(data)
 				const studentParagraphs = studentData.paragraphs || []
-				paragraphs = [...studentParagraphs]
+				// Ensure paragraphs have IDs (migration for existing data)
+				paragraphs = ensureParagraphsHaveIds(studentParagraphs)
 			}
 		}
 	}
@@ -963,10 +989,13 @@
 	}
 
 	function toggleParagraph(index) {
-		if (selectedParagraphs.has(index)) {
-			selectedParagraphs.delete(index)
+		const paragraphId = paragraphs[index]?.id
+		if (!paragraphId) return
+		
+		if (selectedParagraphs.has(paragraphId)) {
+			selectedParagraphs.delete(paragraphId)
 		} else {
-			selectedParagraphs.add(index)
+			selectedParagraphs.add(paragraphId)
 		}
 		selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
 		
@@ -983,22 +1012,17 @@
 	}
 
 	function deleteParagraph(index) {
+		// Get the paragraph ID before deletion
+		const deletedParagraphId = paragraphs[index]?.id
+		
 		// Remove from paragraphs array (assignment level only)
 		paragraphs.splice(index, 1)
 		
-		// Update selected paragraphs indices (shift down for indices after deleted one)
-		const newSelectedParagraphs = new Set()
-		selectedParagraphs.forEach(selectedIndex => {
-			if (selectedIndex < index) {
-				// Keep indices before deleted paragraph unchanged
-				newSelectedParagraphs.add(selectedIndex)
-			} else if (selectedIndex > index) {
-				// Shift down indices after deleted paragraph
-				newSelectedParagraphs.add(selectedIndex - 1)
-			}
-			// Don't add the deleted index
-		})
-		selectedParagraphs = newSelectedParagraphs
+		// Remove the deleted paragraph ID from selected paragraphs
+		if (deletedParagraphId) {
+			selectedParagraphs.delete(deletedParagraphId)
+			selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
+		}
 		
 		// Update warnings for all categories with marks
 		Object.keys(categoryMarks).forEach(category => {
@@ -1137,9 +1161,11 @@
 				// Handle both string and object formats
 				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
 				const paragraphColor = typeof paragraph === 'object' ? paragraph.color : undefined
+				const paragraphId = typeof paragraph === 'object' ? paragraph.id : undefined
 				return { 
 					paragraph: paragraphText, 
 					color: paragraphColor || undefined,
+					id: paragraphId,
 					originalIndex 
 				}
 			})
@@ -1222,7 +1248,7 @@
 		const ordered = getOrderedParagraphs()
 		const grouped = {}
 		
-		ordered.forEach(({paragraph, color, originalIndex}) => {
+		ordered.forEach(({paragraph, color, id, originalIndex}) => {
 			// Extract category and knowledge area from paragraph text
 			let category = ''
 			let knowledgeArea = ''
@@ -1283,6 +1309,7 @@
 			grouped[groupKey].knowledgeAreas[knowledgeAreaKey].push({
 				text: cleanText,
 				color,
+				id,
 				originalIndex,
 				fullText: paragraph // Keep original for PDF
 			})
@@ -1295,13 +1322,13 @@
 		const orderedParagraphs = getOrderedParagraphs()
 		const selectedOrderedParagraphs = Array.from(selectedParagraphs)
 			.sort((a, b) => {
-				// Find the ordered positions of these indices
-				const posA = orderedParagraphs.findIndex(item => item.originalIndex === a)
-				const posB = orderedParagraphs.findIndex(item => item.originalIndex === b)
+				// Find the ordered positions of these paragraph IDs
+				const posA = orderedParagraphs.findIndex(item => paragraphs[item.originalIndex]?.id === a)
+				const posB = orderedParagraphs.findIndex(item => paragraphs[item.originalIndex]?.id === b)
 				return posA - posB
 			})
-			.map(index => {
-				const paragraph = paragraphs[index]
+			.map(paragraphId => {
+				const paragraph = paragraphs.find(p => p.id === paragraphId)
 				// Handle both string and object formats
 				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
 				// Clean the text for PDF (remove knowledge area prefix)
@@ -2164,7 +2191,7 @@
 																	</small>
 																</div>
 															{/if}
-															{#each paragraphs as {text, color, originalIndex, fullText}}
+															{#each paragraphs as {text, color, id, originalIndex, fullText}}
 																<div class="border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
 																	<div class="d-flex align-items-start">
 																		<div class="form-check me-3">
@@ -2172,7 +2199,7 @@
 																				class="form-check-input form-check-input-lg" 
 																				type="checkbox" 
 																				id="paragraph-{originalIndex}"
-																				checked={selectedParagraphs.has(originalIndex)}
+																				checked={selectedParagraphs.has(id)}
 																				onchange={() => toggleParagraph(originalIndex)}
 																			>
 																			<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">

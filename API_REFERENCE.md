@@ -397,6 +397,217 @@ function updateAssessmentWeight(assessmentId, weight) {
 }
 ```
 
+### Unique ID-Based Paragraph Management
+
+#### Generate Unique ID
+```javascript
+function generateId() {
+  return Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
+}
+```
+Generates a unique string identifier for paragraphs.
+
+**Returns**:
+- `string` - Unique ID combining random string and timestamp
+
+**Usage**:
+```javascript
+const paragraphId = generateId();
+```
+
+#### Ensure Paragraphs Have IDs
+```javascript
+function ensureParagraphsHaveIds(paragraphs) {
+  return paragraphs.map(para => {
+    if (typeof para === 'string') {
+      return {
+        id: generateId(),
+        text: para,
+        color: undefined
+      }
+    } else if (para && !para.id) {
+      return {
+        ...para,
+        id: generateId()
+      }
+    }
+    return para
+  })
+}
+```
+Migrates existing paragraphs to include unique IDs for backward compatibility.
+
+**Parameters**:
+- `paragraphs`: Array - Array of paragraph objects or strings
+
+**Returns**:
+- `Array` - Array of paragraph objects with unique IDs
+
+**Usage**:
+```javascript
+const migratedParagraphs = ensureParagraphsHaveIds(paragraphs);
+```
+
+#### Toggle Paragraph Selection (ID-Based)
+```javascript
+function toggleParagraph(index) {
+  const paragraphId = paragraphs[index]?.id
+  if (!paragraphId) return
+
+  if (selectedParagraphs.has(paragraphId)) {
+    selectedParagraphs.delete(paragraphId)
+  } else {
+    selectedParagraphs.add(paragraphId)
+  }
+  selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
+}
+```
+Toggles paragraph selection using unique IDs instead of array indices.
+
+**Parameters**:
+- `index`: number - Array index of the paragraph
+
+**Usage**:
+```javascript
+toggleParagraph(0); // Toggle first paragraph
+```
+
+#### Check Category Has Selected Paragraphs (ID-Based)
+```javascript
+function checkCategoryHasSelectedParagraphs(category) {
+  for (const selectedId of selectedParagraphs) {
+    const paragraph = paragraphs.find(p => p.id === selectedId)
+    if (paragraph) {
+      const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
+      if (paragraphText.includes(`${category}:`)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+```
+Checks if any selected paragraphs belong to a specific category using ID-based lookup.
+
+**Parameters**:
+- `category`: string - Category name to check
+
+**Returns**:
+- `boolean` - True if category has selected paragraphs
+
+**Usage**:
+```javascript
+const hasSelected = checkCategoryHasSelectedParagraphs('Strengths');
+```
+
+#### Delete Paragraph (ID-Based)
+```javascript
+function deleteParagraph(index) {
+  const deletedParagraphId = paragraphs[index]?.id
+  paragraphs.splice(index, 1)
+  if (deletedParagraphId) {
+    selectedParagraphs.delete(deletedParagraphId)
+    selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
+  }
+  saveAssessmentData()
+}
+```
+Deletes a paragraph and removes its ID from selected paragraphs.
+
+**Parameters**:
+- `index`: number - Array index of the paragraph to delete
+
+**Usage**:
+```javascript
+deleteParagraph(2); // Delete third paragraph
+```
+
+#### Merge Paragraphs (ID-Based)
+```javascript
+function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
+  const merged = [...assignmentParagraphs]
+  for (const studentPara of studentParagraphs) {
+    const studentId = studentPara?.id
+    const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text
+    const existsById = assignmentParagraphs.some(assignmentPara =>
+      assignmentPara?.id === studentId
+    )
+    const existsByText = assignmentParagraphs.some(assignmentPara => {
+      const assignmentText = typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text
+      return assignmentText === studentText
+    })
+    if (!existsById && !existsByText) {
+      merged.push(studentPara)
+    }
+  }
+  return merged
+}
+```
+Merges assignment and student paragraphs using ID-based duplicate detection.
+
+**Parameters**:
+- `assignmentParagraphs`: Array - Assignment-level paragraphs
+- `studentParagraphs`: Array - Student-level paragraphs
+
+**Returns**:
+- `Array` - Merged paragraph array without duplicates
+
+**Usage**:
+```javascript
+const merged = mergeParagraphs(assignmentParagraphs, studentParagraphs);
+```
+
+#### Map Selections to Merged Paragraphs (ID-Based)
+```javascript
+function mapSelectionsToMergedParagraphs(savedSelections, assignmentParagraphs, studentParagraphs, mergedParagraphs) {
+  const mappedSelections = new Set()
+  const assignmentParagraphMap = new Map()
+  assignmentParagraphs.forEach(para => {
+    if (para && para.id) {
+      assignmentParagraphMap.set(para.id, para)
+    }
+  })
+  const studentParagraphMap = new Map()
+  studentParagraphs.forEach(para => {
+    if (para && para.id) {
+      studentParagraphMap.set(para.id, para)
+    }
+  })
+  const mergedParagraphMap = new Map()
+  mergedParagraphs.forEach(para => {
+    if (para && para.id) {
+      mergedParagraphMap.set(para.id, para)
+    }
+  })
+  for (const savedId of savedSelections) {
+    if (mergedParagraphMap.has(savedId)) {
+      mappedSelections.add(savedId)
+    }
+  }
+  return mappedSelections
+}
+```
+Maps saved paragraph selections (IDs) to merged paragraph array using ID-based matching.
+
+**Parameters**:
+- `savedSelections`: Set - Set of saved paragraph IDs
+- `assignmentParagraphs`: Array - Assignment-level paragraphs
+- `studentParagraphs`: Array - Student-level paragraphs
+- `mergedParagraphs`: Array - Merged paragraph array
+
+**Returns**:
+- `Set` - Set of mapped paragraph IDs
+
+**Usage**:
+```javascript
+const mappedSelections = mapSelectionsToMergedParagraphs(
+  savedSelections, 
+  assignmentParagraphs, 
+  studentParagraphs, 
+  mergedParagraphs
+);
+```
+
 ### Paragraph Management
 
 #### Add Paragraph
@@ -756,6 +967,7 @@ interface Student {
 ### Paragraph
 ```typescript
 interface Paragraph {
+  id: string;        // Unique identifier for reliable tracking
   text: string;
   color?: string;
 }
@@ -767,7 +979,7 @@ interface StudentEvaluationData {
   studentId: string;
   assessmentId: string;
   paragraphs: Paragraph[];
-  selectedParagraphs: number[];
+  selectedParagraphs: string[];  // Now stores paragraph IDs instead of indices
   studentName: string;
   studentImage: string;
   categoryMarks: Record<string, string>;

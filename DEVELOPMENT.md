@@ -285,6 +285,89 @@ npm run tauri build
 npm run tauri build -- --target x86_64-pc-windows-msvc
 ```
 
+## Unique ID-Based Paragraph Management
+
+### Overview
+The application now uses a unique ID-based system for paragraph management instead of array indices. This ensures reliable paragraph selection, editing, and tracking even when paragraphs are modified, reordered, or merged from different sources.
+
+### Key Changes in v2.6.0
+
+#### 1. Paragraph Object Structure
+All paragraphs now include a unique `id` field:
+```javascript
+{
+  id: "abc123def456",  // Unique identifier
+  text: "Paragraph content",
+  color: "green"
+}
+```
+
+#### 2. ID Generation
+```javascript
+function generateId() {
+  return Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
+}
+```
+
+#### 3. Data Migration
+```javascript
+function ensureParagraphsHaveIds(paragraphs) {
+  return paragraphs.map(para => {
+    if (typeof para === 'string') {
+      return {
+        id: generateId(),
+        text: para,
+        color: undefined
+      }
+    } else if (para && !para.id) {
+      return {
+        ...para,
+        id: generateId()
+      }
+    }
+    return para
+  })
+}
+```
+
+#### 4. Selection System
+- `selectedParagraphs` now stores unique IDs instead of array indices
+- `toggleParagraph()` uses IDs for reliable selection tracking
+- `checkCategoryHasSelectedParagraphs()` uses ID-based lookup
+
+### Migration Strategy
+
+#### Automatic Migration
+The system automatically migrates existing data:
+1. **Assignment Data Loading**: `loadAssessmentData()` applies `ensureParagraphsHaveIds()`
+2. **Student Data Loading**: `loadStudentParagraphs()` applies `ensureParagraphsHaveIds()`
+3. **Paragraph Creation**: New paragraphs automatically get unique IDs
+4. **Data Merging**: ID-based duplicate detection prevents conflicts
+
+#### Backward Compatibility
+- Existing data without IDs is automatically migrated
+- No manual data conversion required
+- System works seamlessly with both old and new data formats
+
+### Development Considerations
+
+#### When Adding New Paragraph Functions
+1. Always use `paragraph.id` for identification
+2. Update `selectedParagraphs` using IDs, not indices
+3. Apply `ensureParagraphsHaveIds()` when loading data
+4. Use ID-based duplicate detection in merging functions
+
+#### When Debugging Paragraph Issues
+1. Check that paragraphs have valid IDs
+2. Verify `selectedParagraphs` contains IDs, not indices
+3. Use `console.log` to trace ID-based operations
+4. Ensure migration functions are applied to loaded data
+
+#### Performance Impact
+- Minimal performance impact from ID generation
+- Improved reliability outweighs slight overhead
+- ID-based lookups are efficient with Map/Set operations
+
 ## Code Style Guidelines
 
 ### Svelte Components
