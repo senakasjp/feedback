@@ -526,7 +526,7 @@
   border-top-color: var(--dark-border) !important;
 }
 
-/* Student Photo Section Dark Mode */
+/* Header Photo Section Dark Mode */
 [data-bs-theme="dark"] .card.border-warning {
   background-color: var(--dark-bg-secondary) !important;
   border-color: var(--bs-warning) !important;

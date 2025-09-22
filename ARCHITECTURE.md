@@ -568,7 +568,7 @@ let percentageRanges = $state([])           // Universal percentage ranges
 let showCalculator = $state(false)          // Calculator/navigation toggle
 let categoryMarks = $state({})              // Student-specific category marks
 let manualTotalMarks = $state('')           // Student-specific total marks
-let studentImage = $state('')               // Student photo (base64)
+let studentImage = $state('')               // Header photo (base64)
 let studentName = $state('')                // Current student display name
 ```
 
@@ -630,7 +630,7 @@ let studentName = $state('')                // Current student display name
 
 **Features**:
 - PDF generation with jsPDF
-- Student photo integration
+- Header photo integration
 - Professional formatting
 - Copy to clipboard functionality
 

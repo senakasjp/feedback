@@ -54,7 +54,7 @@
 - **Name**: Student's full name
 - **Student ID**: Unique identifier (e.g., student number)
 - **Display Name**: Shows as "Name (ID)" in the interface
-- **Photo**: Upload a student photo for PDF reports
+- **Photo**: Upload a header photo for PDF reports
 
 ### Selecting Students
 1. Use the student dropdown in the sidebar
@@ -137,7 +137,7 @@
 4. The PDF will be downloaded automatically
 
 ### PDF Features
-- **Student Photo**: Full-width header image
+- **Header Photo**: Full-width header image
 - **Student Information**: Name and assessment details
 - **Selected Feedback**: Only chosen paragraphs are included
 - **Professional Formatting**: Clean, readable layout

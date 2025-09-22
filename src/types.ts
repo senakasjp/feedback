@@ -10,6 +10,7 @@ export interface Assessment {
 	topics: Topic[];
 	categories: Category[];
 	weight?: number;
+	headerPhoto?: string;
 }
 
 export interface Topic {

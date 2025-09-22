@@ -189,7 +189,7 @@
 - **Preserved Structure**: Category and knowledge area prefixes automatically maintained during editing
 - **Smart Selection Mapping**: Previously selected paragraphs remain selected after merging assignment and student data
 - **Intuitive Navigation**: Clear separation between assignment and student data
-- **Professional PDFs**: Enhanced PDF generation with student photos and proper formatting
+- **Professional PDFs**: Enhanced PDF generation with header photos and proper formatting
 - **Responsive Design**: Better mobile and desktop experience
 
 ### Key Architectural Decisions
@@ -242,7 +242,7 @@
 
 ### Current Limitations
 1. **Large Datasets**: Performance may degrade with very large student lists (>1000 students)
-2. **Image Size**: Very large student photos may cause memory issues
+2. **Image Size**: Very large header photos may cause memory issues
 3. **Cross-Platform**: Some platform-specific features may vary
 
 ### Planned Improvements

@@ -241,7 +241,7 @@ Student Evaluation (student-eval-{student}-{assessment}.json):
 - **Paragraph Management**: Add, edit, delete paragraphs
 - **Category Selection**: Assign categories to paragraphs
 - **Color Coding**: Visual paragraph organization
-- **Image Upload**: Student photo handling
+- **Image Upload**: Header photo handling
 - **Filtering**: Filter by category/topic
 
 ### Backend (Rust/Tauri)

@@ -853,7 +853,7 @@ async function generatePDF() {
 
   const doc = new jsPDF();
   
-  // Add full-width student image if available
+  // Add full-width header image if available
   if (studentImage) {
     const img = new Image();
     img.onload = function() {

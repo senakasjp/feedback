@@ -11,6 +11,7 @@
 		topics?: Topic[];
 		categories?: Category[];
 		weight?: number;
+		headerPhoto?: string;
 	}
 
 	type Topic = {

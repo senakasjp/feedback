@@ -115,26 +115,6 @@
 				onchange={onUpdateStudentName}
 			>
 		</div>
-		<div class="col-lg-6 col-md-12">
-			<label for="studentImageInput" class="form-label">Student Photo:</label>
-			<div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3">
-				<input 
-					id="studentImageInput" 
-					type="file" 
-					class="form-control form-control-sm flex-grow-1" 
-					accept="image/*"
-					onchange={onHandleImageUpload}
-				>
-				{#if studentImage}
-					<img 
-						src={studentImage} 
-						alt="Student" 
-						class="rounded border"
-						style="width: 60px; height: 60px; object-fit: cover; flex-shrink: 0;"
-					>
-				{/if}
-			</div>
-		</div>
 	</div>
 
 

@@ -21,6 +21,7 @@
 		name: string;
 		topics?: Topic[];
 		categories?: Category[];
+		headerPhoto?: string;
 	}
 	
 	type Subject = {

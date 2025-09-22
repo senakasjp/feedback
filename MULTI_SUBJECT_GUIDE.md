@@ -31,7 +31,7 @@ PDFs now include:
 - Subject name
 - Assessment name  
 - Student name
-- Student photo (full-width header)
+- Header photo (full-width header)
 - Selected feedback paragraphs
 
 ## How to Use

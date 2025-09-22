@@ -245,19 +245,29 @@
 	}
 
 	async function loadAssessmentData(subjectId, assessmentId) {
-		// Validate that the assessment exists in the current subject
+		// STRICT FILTER: Validate assessment context before loading any data
 		if (!currentSubject || !currentSubject.assessments) {
-			console.error('No current subject or assessments found')
+			console.error('STRICT FILTER: No current subject or assessments found')
 			initializeEmptyData()
 			return
 		}
 		
+		// STRICT FILTER: Ensure assessment exists in current subject
 		const assessmentExists = currentSubject.assessments.some(assessment => assessment.id === assessmentId)
 		if (!assessmentExists) {
-			console.error(`Assessment with ID ${assessmentId} not found in subject ${currentSubject.name}`)
+			console.error(`STRICT FILTER: Assessment with ID ${assessmentId} not found in subject ${currentSubject.name}`)
 			initializeEmptyData()
 			return
 		}
+		
+		// STRICT FILTER: Ensure we're loading data for the correct assessment
+		if (currentAssessmentId !== assessmentId) {
+			console.error(`STRICT FILTER: Assessment ID mismatch - current: ${currentAssessmentId}, requested: ${assessmentId}`)
+			initializeEmptyData()
+			return
+		}
+		
+		console.log(`STRICT FILTER: Loading data for assessment ${assessmentId} in subject ${subjectId}`)
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -270,6 +280,10 @@
 				selectedParagraphs = new Set()
 				studentName = parsed.studentName || ''
 				studentImage = parsed.studentImage || ''
+				// Load assessment header photo if available
+				if (currentAssessment && parsed.headerPhoto) {
+					currentAssessment.headerPhoto = parsed.headerPhoto
+				}
 				// Reset all marks to zero
 				categoryMarks = {}
 				manualTotalMarks = ''
@@ -291,6 +305,10 @@
 					selectedParagraphs = new Set()
 					studentName = parsed.studentName || ''
 					studentImage = parsed.studentImage || ''
+					// Load assessment header photo if available
+					if (currentAssessment && parsed.headerPhoto) {
+						currentAssessment.headerPhoto = parsed.headerPhoto
+					}
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = ''
@@ -305,14 +323,22 @@
 		}
 	}
 	
-	// Helper function to initialize empty data
+	// Helper function to initialize empty data - STRICT FILTER
 	function initializeEmptyData() {
+		// Clear all assessment-related data
 		paragraphs = []
 		selectedParagraphs = new Set()
 		studentName = ''
 		studentImage = ''
 		categoryMarks = {}
 		manualTotalMarks = ''
+		
+		// Clear student selection to prevent cross-contamination
+		currentStudentId = null
+		
+		// Clear any cached data that might be from other assessments
+		// This ensures a clean slate when entering any assessment
+		console.log('STRICT FILTER: All data cleared before entering assessment')
 	}
 
 	async function saveAssessmentData() {
@@ -323,6 +349,7 @@
 			selectedParagraphs: Array.from(selectedParagraphs),
 			studentName,
 			studentImage,
+			headerPhoto: currentAssessment?.headerPhoto || '',
 			categoryMarks,
 			manualTotalMarks
 		}
@@ -420,9 +447,15 @@
 	}
 
 	function selectAssessment(assessment) {
+		// STRICT FILTER: Clear ALL data before entering assessment feedback page
+		initializeEmptyData()
+		
+		// Set new assessment context
 		currentAssessmentId = assessment.id
 		currentAssessment = assessment
 		currentView = 'feedback'
+		
+		// Load ONLY data for this specific assessment
 		loadAssessmentData(currentSubjectId, currentAssessmentId)
 	}
 
@@ -710,18 +743,28 @@
 	}
 
 	async function selectStudent(studentId) {
+		// STRICT FILTER: Validate context before selecting student
+		if (currentView !== 'feedback') {
+			console.error('STRICT FILTER: Cannot select student outside of feedback view')
+			return
+		}
+		
+		if (!currentAssessmentId) {
+			console.error('STRICT FILTER: Cannot select student without assessment context')
+			return
+		}
+		
 		currentStudentId = studentId
 		const student = students.find(s => s.id === studentId)
 		if (student) {
 			studentName = student.displayName
-			// Automatically load student evaluation data if we're on the feedback page
-			if (currentView === 'feedback' && currentAssessmentId) {
-				await loadStudentEvaluation()
-			}
+			// STRICT FILTER: Only load student evaluation data for the current assessment
+			console.log(`STRICT FILTER: Selecting student ${studentId} for assessment ${currentAssessmentId}`)
+			await loadStudentEvaluation()
 		} else {
-			// Clear only student-specific data, keep paragraphs visible
+			// Clear only student-specific data, keep paragraphs and header photo visible
 			studentName = ''
-			studentImage = ''
+			// Don't clear studentImage - preserve header photo
 			// Don't clear paragraphs, selectedParagraphs, or marks - keep them visible
 		}
 	}
@@ -791,7 +834,31 @@
 
 	// Load student evaluation data
 	async function loadStudentEvaluation() {
-		if (!currentStudentId || !currentAssessmentId) return
+		// STRICT FILTER: Validate context before loading student evaluation
+		if (!currentStudentId || !currentAssessmentId) {
+			console.log('STRICT FILTER: No student or assessment selected for evaluation')
+			return
+		}
+		
+		// STRICT FILTER: Ensure we're in feedback view for the correct assessment
+		if (currentView !== 'feedback') {
+			console.error('STRICT FILTER: Not in feedback view - cannot load student evaluation')
+			return
+		}
+		
+		// STRICT FILTER: Validate assessment context
+		if (!currentSubject || !currentSubject.assessments) {
+			console.error('STRICT FILTER: No current subject or assessments found for student evaluation')
+			return
+		}
+		
+		const assessmentExists = currentSubject.assessments.some(assessment => assessment.id === currentAssessmentId)
+		if (!assessmentExists) {
+			console.error(`STRICT FILTER: Assessment ${currentAssessmentId} not found in current subject for student evaluation`)
+			return
+		}
+
+		console.log(`STRICT FILTER: Loading student evaluation for student ${currentStudentId} in assessment ${currentAssessmentId}`)
 
 		// Load only assignment paragraphs (not all student paragraphs from all assignments)
 		await loadAssessmentData(currentSubjectId, currentAssessmentId)
@@ -811,6 +878,13 @@
 			})
 			if (data) {
 				const evaluationData = JSON.parse(data)
+				
+				// STRICT FILTER: Validate that the loaded data matches the current context
+				if (evaluationData.studentId !== currentStudentId || evaluationData.assessmentId !== currentAssessmentId) {
+					console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
+					return
+				}
+				
 				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
 				savedStudentName = evaluationData.studentName || ''
 				savedStudentImage = evaluationData.studentImage || ''
@@ -823,6 +897,13 @@
 			const data = localStorage.getItem(key)
 			if (data) {
 				const evaluationData = JSON.parse(data)
+				
+				// STRICT FILTER: Validate that the loaded data matches the current context
+				if (evaluationData.studentId !== currentStudentId || evaluationData.assessmentId !== currentAssessmentId) {
+					console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
+					return
+				}
+				
 				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
 				savedStudentName = evaluationData.studentName || ''
 				savedStudentImage = evaluationData.studentImage || ''
@@ -1490,6 +1571,22 @@
 		}
 	}
 
+	// Handle assessment header photo upload
+	function handleAssessmentHeaderPhotoUpload(event) {
+		const file = event.target.files[0]
+		if (file) {
+			const reader = new FileReader()
+			reader.onload = function(e) {
+				if (typeof e.target.result === 'string' && currentAssessment) {
+					currentAssessment.headerPhoto = e.target.result
+					// Save the updated assessment data
+					saveSubjects()
+				}
+			}
+			reader.readAsDataURL(file)
+		}
+	}
+
 	function copyToClipboard() {
 		navigator.clipboard.writeText(getSelectedText())
 			.then(() => showSuccessNotification('Copied to clipboard!'))
@@ -1518,8 +1615,8 @@
 		const maxLineWidth = pageWidth - (margin * 2)
 		let yPosition = 0 // Start at very top of page
 		
-		// Add full-width student image if available
-		if (studentImage) {
+		// Add full-width header image if available
+		if (currentAssessment?.headerPhoto) {
 			try {
 				// Create a temporary image to get dimensions
 				const img = new Image()
@@ -1535,13 +1632,13 @@
 					const xPosition = margin
 					const yPosition = margin
 					
-					doc.addImage(studentImage, 'JPEG', xPosition, yPosition, imageWidth, imageHeight)
+					doc.addImage(currentAssessment.headerPhoto, 'JPEG', xPosition, yPosition, imageWidth, imageHeight)
 					
 					// Continue with the rest of the PDF generation
 					let currentY = yPosition + imageHeight + 15
 					generateRestOfPDF(doc, currentY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
 				}
-				img.src = studentImage
+				img.src = currentAssessment.headerPhoto
 				return // Exit here as the rest will be handled in onload
 			} catch (error) {
 				console.log('Could not add image to PDF:', error)
@@ -1821,10 +1918,16 @@
 								students={students}
 								subjectName={currentSubject?.name || 'Unknown Subject'}
 								onSelectAssessment={(assessment) => {
+									// STRICT FILTER: Clear ALL data before entering assessment feedback page
+									initializeEmptyData()
+									
+									// Set new assessment context
 									currentAssessment = assessment
 									currentAssessmentId = assessment.id
 									console.log('Selected assessment:', assessment.name, 'Categories:', assessment.categories?.length || 0, assessment.categories)
 									updateView('feedback')
+									
+									// Load ONLY data for this specific assessment
 									loadAssessmentData(currentSubjectId, currentAssessmentId)
 								}}
 								onUpdateAssessments={(updatedAssessments) => {
@@ -1854,6 +1957,38 @@
 									>
 										<i class="bi bi-arrow-left me-2"></i>Back to Assessments
 									</button>
+								</div>
+							</div>
+						</div>
+						
+						<!-- Assessment Header Photo Section -->
+						<div class="row mb-3">
+							<div class="col-12">
+								<div class="card border-primary">
+									<div class="card-header bg-primary text-white py-2">
+										<h5 class="card-title mb-0">
+											<i class="bi bi-image me-2"></i>Assessment Header Photo
+										</h5>
+									</div>
+									<div class="card-body py-2">
+										<div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3">
+											<input 
+												id="assessmentHeaderPhotoInput" 
+												type="file" 
+												class="form-control form-control-sm flex-grow-1" 
+												accept="image/*"
+												onchange={handleAssessmentHeaderPhotoUpload}
+											>
+											{#if currentAssessment?.headerPhoto}
+												<img 
+													src={currentAssessment.headerPhoto} 
+													alt="Assessment Header" 
+													class="rounded border"
+													style="width: 60px; height: 60px; object-fit: cover; flex-shrink: 0;"
+												>
+											{/if}
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -1909,26 +2044,6 @@
 													</div>
 												</div>
 											{/if}
-										</div>
-										<div class="col-12">
-											<label for="studentImageInput" class="form-label fw-bold">Student Photo:</label>
-											<div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3">
-												<input 
-													id="studentImageInput" 
-													type="file" 
-													class="form-control form-control-sm flex-grow-1" 
-													accept="image/*"
-													onchange={handleImageUpload}
-												>
-												{#if studentImage}
-													<img 
-														src={studentImage} 
-														alt="Student" 
-														class="rounded border"
-														style="width: 60px; height: 60px; object-fit: cover; flex-shrink: 0;"
-													>
-												{/if}
-											</div>
 										</div>
 									</div>
 								</div>
@@ -2173,21 +2288,21 @@
 						</div>
 					</div>
 
-					<!-- Student Photo Display (if uploaded) -->
-					{#if studentImage}
+					<!-- Assessment Header Photo Display (if uploaded) -->
+					{#if currentAssessment?.headerPhoto}
 						<div class="row mb-3">
 							<div class="col-12">
-								<div class="card border-warning">
-									<div class="card-header bg-warning text-dark py-2">
+								<div class="card border-primary">
+									<div class="card-header bg-primary text-white py-2">
 										<h5 class="card-title mb-0">
-											<i class="bi bi-image me-2"></i>Student Photo
+											<i class="bi bi-image me-2"></i>Assessment Header Photo
 										</h5>
 									</div>
 									<div class="card-body p-0">
 										<div class="text-center">
 											<img 
-												src={studentImage} 
-												alt="Student" 
+												src={currentAssessment.headerPhoto} 
+												alt="Assessment Header" 
 												class="rounded-bottom w-100" style="max-height: 600px; object-fit: contain;"
 											>
 										</div>
