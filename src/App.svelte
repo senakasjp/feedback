@@ -15,6 +15,7 @@
 	import './styles/fixed-components.css'
 	import './styles/subject-manager.css'
 	import './styles/assessment-manager.css'
+	import './styles/dark-mode.css'
 
 	// Data structure for hierarchical subjects/assessments
 	let subjects = $state([])
@@ -63,11 +64,41 @@
 	let showMobileSidebar = $state(false)
 	let showCalculator = $state(false) // Calculator toggle state
 	let currentView = $state('subjects') // 'subjects', 'assessments', 'feedback'
+	let isDarkMode = $state(false) // Dark mode toggle state
 	
 	// Force reactivity for debugging
 	$effect(() => {
 		console.log('Current view changed to:', currentView)
 	})
+
+	// Dark mode functionality
+	$effect(() => {
+		// Apply dark mode to document
+		if (isDarkMode) {
+			document.documentElement.setAttribute('data-bs-theme', 'dark')
+		} else {
+			document.documentElement.setAttribute('data-bs-theme', 'light')
+		}
+		
+		// Save preference to localStorage
+		localStorage.setItem('darkMode', isDarkMode.toString())
+	})
+
+	// Initialize dark mode from localStorage or system preference
+	function initializeDarkMode() {
+		const savedDarkMode = localStorage.getItem('darkMode')
+		if (savedDarkMode !== null) {
+			isDarkMode = savedDarkMode === 'true'
+		} else {
+			// Check system preference
+			isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+		}
+	}
+
+	// Toggle dark mode
+	function toggleDarkMode() {
+		isDarkMode = !isDarkMode
+	}
 
 	// Update student name when currentStudentId changes
 	$effect(() => {
@@ -214,6 +245,19 @@
 	}
 
 	async function loadAssessmentData(subjectId, assessmentId) {
+		// Validate that the assessment exists in the current subject
+		if (!currentSubject || !currentSubject.assessments) {
+			console.error('No current subject or assessments found')
+			initializeEmptyData()
+			return
+		}
+		
+		const assessmentExists = currentSubject.assessments.some(assessment => assessment.id === assessmentId)
+		if (!assessmentExists) {
+			console.error(`Assessment with ID ${assessmentId} not found in subject ${currentSubject.name}`)
+			initializeEmptyData()
+			return
+		}
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -230,13 +274,8 @@
 				categoryMarks = {}
 				manualTotalMarks = ''
 			} else {
-				// Initialize empty data
-				paragraphs = []
-				selectedParagraphs = new Set()
-				studentName = ''
-				studentImage = ''
-				categoryMarks = {}
-				manualTotalMarks = ''
+				// Initialize empty data for new assessment
+				initializeEmptyData()
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -256,18 +295,24 @@
 					categoryMarks = {}
 					manualTotalMarks = ''
 				} else {
-					// Initialize empty data
-					paragraphs = []
-					selectedParagraphs = new Set()
-					studentName = ''
-					studentImage = ''
-					categoryMarks = {}
-					manualTotalMarks = ''
+					// Initialize empty data for new assessment
+					initializeEmptyData()
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
+				initializeEmptyData()
 			}
 		}
+	}
+	
+	// Helper function to initialize empty data
+	function initializeEmptyData() {
+		paragraphs = []
+		selectedParagraphs = new Set()
+		studentName = ''
+		studentImage = ''
+		categoryMarks = {}
+		manualTotalMarks = ''
 	}
 
 	async function saveAssessmentData() {
@@ -748,17 +793,9 @@
 	async function loadStudentEvaluation() {
 		if (!currentStudentId || !currentAssessmentId) return
 
-		// First, load assignment paragraphs (including edited ones)
+		// Load only assignment paragraphs (not all student paragraphs from all assignments)
 		await loadAssessmentData(currentSubjectId, currentAssessmentId)
-		const assignmentParagraphs = [...paragraphs]
-
-		// Then, load student paragraphs
-		await loadStudentParagraphs()
-		const studentParagraphs = [...paragraphs]
-
-		// Merge assignment and student paragraphs (avoid duplicates)
-		const mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs)
-		paragraphs = mergedParagraphs
+		// paragraphs now contains only the current assignment's paragraphs
 
 		// Load evaluation data to get selections and marks
 		let savedSelectedParagraphs = new Set()
@@ -794,16 +831,8 @@
 			}
 		}
 
-		// Map saved selections to merged paragraph indices
-		const mappedSelections = mapSelectionsToMergedParagraphs(
-			savedSelectedParagraphs, 
-			assignmentParagraphs, 
-			studentParagraphs, 
-			mergedParagraphs
-		)
-
-		// Apply the mapped selections and marks
-		selectedParagraphs = mappedSelections
+		// Apply the saved selections and marks directly to assignment paragraphs
+		selectedParagraphs = savedSelectedParagraphs
 		// Preserve the student's display name if no saved name exists
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		studentImage = savedStudentImage
@@ -1647,6 +1676,7 @@
 
 	onMount(() => {
 		loadSubjects()
+		initializeDarkMode()
 	})
 </script>
 
@@ -1669,6 +1699,20 @@
 							All Subjects
 						{/if}
 					</span>
+				</li>
+				<li class="nav-item">
+					<button 
+						class="btn btn-outline-light btn-sm ms-2" 
+						onclick={toggleDarkMode}
+						title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+						aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+					>
+						{#if isDarkMode}
+							<i class="bi bi-sun"></i>
+						{:else}
+							<i class="bi bi-moon"></i>
+						{/if}
+					</button>
 				</li>
 			</ul>
 		</div>
