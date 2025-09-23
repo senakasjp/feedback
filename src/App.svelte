@@ -583,13 +583,14 @@
 				paragraphText = `${paragraphText} - ${selectedKnowledgeArea}`
 			}
 			
-			paragraphs.push({
-				id: generateId(), // Add unique ID for reliable tracking
-				text: paragraphText,
-				color: selectedColor || undefined
-			})
-			newParagraph = ''
-			selectedKnowledgeArea = '' // Reset knowledge area selection
+		paragraphs.push({
+			id: generateId(), // Add unique ID for reliable tracking
+			text: paragraphText,
+			color: selectedColor || undefined
+		})
+		newParagraph = ''
+		// Keep knowledge area selection intact (like category selection)
+		// selectedKnowledgeArea = '' // Reset knowledge area selection
 			
 			// Save to both assignment and student
 			saveAssessmentData()
@@ -1945,6 +1946,7 @@
 					onGeneratePDF={generatePDF}
 					onSaveStudentEvaluation={saveStudentEvaluation}
 					onLoadStudentEvaluation={loadStudentEvaluation}
+					onSaveAssignmentData={saveAssessmentData}
 					onAddPercentageRange={addPercentageRange}
 					onDeletePercentageRange={deletePercentageRange}
 					currentStudentId={currentStudentId}

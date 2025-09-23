@@ -27,6 +27,7 @@
 	export let onToggleView = () => {};
 	export let onSaveStudentEvaluation = () => {};
 	export let onLoadStudentEvaluation = () => {};
+	export let onSaveAssignmentData = () => {};
 	export let onCopyToClipboard = () => {};
 	export let onGeneratePDF = () => {};
 	export let onAddPercentageRange = (value, color, lowerPercentage, upperPercentage) => {};
@@ -255,6 +256,9 @@
 											<i class="bi bi-upload me-2"></i>Load Student Data
 										</button>
 									{/if}
+									<button class="btn btn-outline-primary btn-sm w-100 mb-2" onclick={onSaveAssignmentData}>
+										<i class="bi bi-save me-2"></i>Save Assignment
+									</button>
 									<button class="btn btn-outline-success btn-sm w-100 mb-2" onclick={onCopyToClipboard}>
 										<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
 									</button>
