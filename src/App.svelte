@@ -985,9 +985,17 @@
 
 		console.log(`STRICT FILTER: Loading student evaluation for student ${currentStudentId} in assessment ${currentAssessmentId}`)
 
-		// Load only assignment paragraphs (not all student paragraphs from all assignments)
+		// Load assignment paragraphs first
 		await loadAssessmentData(currentSubjectId, currentAssessmentId, true) // preserveSelections = true
-		// paragraphs now contains only the current assignment's paragraphs
+		const assignmentParagraphs = [...paragraphs]
+
+		// Load student paragraphs for this specific student
+		await loadStudentParagraphs()
+		const studentParagraphs = [...paragraphs]
+
+		// Merge assignment and student paragraphs (handle index-based differences)
+		const mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs)
+		paragraphs = mergedParagraphs
 
 		// Load evaluation data to get selections and marks
 		let savedSelectedParagraphs = new Set()
@@ -1037,29 +1045,23 @@
 			}
 		}
 
-		// Apply the saved selections and marks directly to assignment paragraphs
-		// When a student is selected, always load their saved selections
-		selectedParagraphs = savedSelectedParagraphs
+		// Map saved selections to merged paragraph IDs
+		const mappedSelections = mapSelectionsToMergedParagraphs(
+			savedSelectedParagraphs, 
+			assignmentParagraphs, 
+			studentParagraphs, 
+			mergedParagraphs
+		)
+
+		// Apply the mapped selections and marks
+		selectedParagraphs = mappedSelections
 		// Preserve the student's display name if no saved name exists
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		studentImage = savedStudentImage
 		categoryMarks = savedCategoryMarks
 		manualTotalMarks = savedManualTotalMarks
 
-		// FIX: Clear saved selections if they don't match current paragraph IDs
-		// This prevents issues when paragraph IDs have changed
-		if (savedSelectedParagraphs.size > 0) {
-			const currentParagraphIds = new Set(paragraphs.map(p => p.id))
-			const validSelections = new Set()
-			
-			for (const savedId of savedSelectedParagraphs) {
-				if (currentParagraphIds.has(savedId)) {
-					validSelections.add(savedId)
-				}
-			}
-			
-			selectedParagraphs = validSelections
-		}
+		// Selection mapping is now handled by mapSelectionsToMergedParagraphs above
 
 		if (savedSelectedParagraphs.size > 0 || Object.keys(savedCategoryMarks).length > 0) {
 			showSuccessNotification('Student evaluation data loaded successfully!')
@@ -1068,26 +1070,108 @@
 		}
 	}
 
-	// Helper function to merge assignment and student paragraphs (avoid duplicates)
+	// Helper function to merge assignment and student paragraphs
+	// If paragraphs at the same index differ, include both versions
 	function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
-		const merged = [...assignmentParagraphs]
+		const merged = []
+		const maxLength = Math.max(assignmentParagraphs.length, studentParagraphs.length)
 		
-		// Add student paragraphs that don't already exist in assignment
-		for (const studentPara of studentParagraphs) {
-			const studentId = studentPara?.id
+		// Process each index position
+		for (let i = 0; i < maxLength; i++) {
+			const assignmentPara = assignmentParagraphs[i]
+			const studentPara = studentParagraphs[i]
+			
+			// Get paragraph texts for comparison
+			const assignmentText = assignmentPara ? (typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text) : null
+			const studentText = studentPara ? (typeof studentPara === 'string' ? studentPara : studentPara.text) : null
+			
+			if (assignmentText && studentText) {
+				// Both paragraphs exist at this index
+				if (assignmentText !== studentText) {
+					// Paragraphs are different - include both versions
+					// Add assignment version with original ID
+					if (assignmentPara && typeof assignmentPara === 'object') {
+						merged.push({
+							...assignmentPara,
+							// Mark as assignment version for clarity
+							_source: 'assignment'
+						})
+					} else {
+						merged.push({
+							id: generateId(assignmentText, i),
+							text: assignmentText,
+							_source: 'assignment'
+						})
+					}
+					
+					// Add student version with modified ID to avoid conflicts
+					if (studentPara && typeof studentPara === 'object') {
+						merged.push({
+							...studentPara,
+							id: studentPara.id + '_student', // Modify ID to avoid conflicts
+							_source: 'student'
+						})
+					} else {
+						merged.push({
+							id: generateId(studentText, i) + '_student',
+							text: studentText,
+							_source: 'student'
+						})
+					}
+				} else {
+					// Paragraphs are identical - add only one version
+					if (assignmentPara && typeof assignmentPara === 'object') {
+						merged.push(assignmentPara)
+					} else {
+						merged.push({
+							id: generateId(assignmentText, i),
+							text: assignmentText
+						})
+					}
+				}
+			} else if (assignmentText) {
+				// Only assignment paragraph exists at this index
+				if (assignmentPara && typeof assignmentPara === 'object') {
+					merged.push(assignmentPara)
+				} else {
+					merged.push({
+						id: generateId(assignmentText, i),
+						text: assignmentText
+					})
+				}
+			} else if (studentText) {
+				// Only student paragraph exists at this index
+				if (studentPara && typeof studentPara === 'object') {
+					merged.push(studentPara)
+				} else {
+					merged.push({
+						id: generateId(studentText, i),
+						text: studentText
+					})
+				}
+			}
+		}
+		
+		// Add any additional student paragraphs that don't have corresponding assignment paragraphs
+		for (let i = maxLength; i < studentParagraphs.length; i++) {
+			const studentPara = studentParagraphs[i]
 			const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text
 			
-			// Check if paragraph exists by ID first, then by text
-			const existsById = assignmentParagraphs.some(assignmentPara => 
-				assignmentPara?.id === studentId
-			)
-			const existsByText = assignmentParagraphs.some(assignmentPara => {
-				const assignmentText = typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text
-				return assignmentText === studentText
+			// Check if this paragraph already exists in merged array
+			const exists = merged.some(mergedPara => {
+				const mergedText = typeof mergedPara === 'string' ? mergedPara : mergedPara.text
+				return mergedText === studentText
 			})
 			
-			if (!existsById && !existsByText) {
-				merged.push(studentPara)
+			if (!exists) {
+				if (studentPara && typeof studentPara === 'object') {
+					merged.push(studentPara)
+				} else {
+					merged.push({
+						id: generateId(studentText, i),
+						text: studentText
+					})
+				}
 			}
 		}
 		
@@ -1545,6 +1629,9 @@
 		const grouped = {}
 		
 		ordered.forEach(({paragraph, color, id, originalIndex}) => {
+			// Get the source information from the paragraph object
+			const paragraphObj = paragraphs.find(p => p.id === id)
+			const source = paragraphObj?._source
 			// Extract category and knowledge area from paragraph text
 			let category = ''
 			let knowledgeArea = ''
@@ -1607,7 +1694,8 @@
 				color,
 				id,
 				originalIndex,
-				fullText: paragraph // Keep original for PDF
+				fullText: paragraph, // Keep original for PDF
+				source: source // Include source information
 			})
 		})
 		
@@ -2542,7 +2630,7 @@
 																	</small>
 																</div>
 															{/if}
-															{#each paragraphs as {text, color, id, originalIndex, fullText}}
+															{#each paragraphs as {text, color, id, originalIndex, fullText, source}}
 																<div class="border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
 																	<div class="d-flex align-items-start">
 																		{#if currentStudentId}
@@ -2577,7 +2665,24 @@
 																					style="resize: vertical;"
 																				></textarea>
 																			{:else}
-																				<p class="mb-0 fs-6 lh-base">{text}</p>
+																				<div class="d-flex align-items-start">
+																					<div class="flex-grow-1">
+																						<p class="mb-0 fs-6 lh-base">{text}</p>
+																					</div>
+																					{#if source}
+																						<div class="ms-2">
+																							{#if source === 'assignment'}
+																								<span class="badge bg-primary" title="Assignment version">
+																									<i class="bi bi-file-text me-1"></i>Assignment
+																								</span>
+																							{:else if source === 'student'}
+																								<span class="badge bg-success" title="Student version">
+																									<i class="bi bi-person me-1"></i>Student
+																								</span>
+																							{/if}
+																						</div>
+																					{/if}
+																				</div>
 																			{/if}
 																		</div>
 																		<div class="d-flex gap-1">

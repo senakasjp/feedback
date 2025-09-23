@@ -451,19 +451,46 @@ async function loadStudentEvaluation() {
 
 **Helper Functions**:
 ```javascript
-// Merge assignment and student paragraphs (avoid duplicates)
+// Merge assignment and student paragraphs with index-based comparison
+// If paragraphs at the same index differ, include both versions
 function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
-  const merged = [...assignmentParagraphs]
+  const merged = []
+  const maxLength = Math.max(assignmentParagraphs.length, studentParagraphs.length)
   
-  // Add student paragraphs that don't already exist in assignment
-  for (const studentPara of studentParagraphs) {
-    const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text
-    const exists = assignmentParagraphs.some(assignmentPara => {
-      const assignmentText = typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text
-      return assignmentText === studentText
-    })
+  // Process each index position
+  for (let i = 0; i < maxLength; i++) {
+    const assignmentPara = assignmentParagraphs[i]
+    const studentPara = studentParagraphs[i]
     
-    if (!exists) {
+    // Get paragraph texts for comparison
+    const assignmentText = assignmentPara ? (typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text) : null
+    const studentText = studentPara ? (typeof studentPara === 'string' ? studentPara : studentPara.text) : null
+    
+    if (assignmentText && studentText) {
+      // Both paragraphs exist at this index
+      if (assignmentText !== studentText) {
+        // Paragraphs are different - include both versions
+        // Add assignment version with source marking
+        merged.push({
+          ...assignmentPara,
+          _source: 'assignment'
+        })
+        
+        // Add student version with modified ID to avoid conflicts
+        merged.push({
+          ...studentPara,
+          id: studentPara.id + '_student',
+          _source: 'student'
+        })
+      } else {
+        // Paragraphs are identical - add only one version
+        merged.push(assignmentPara)
+      }
+    } else if (assignmentText) {
+      // Only assignment paragraph exists at this index
+      merged.push(assignmentPara)
+    } else if (studentText) {
+      // Only student paragraph exists at this index
       merged.push(studentPara)
     }
   }

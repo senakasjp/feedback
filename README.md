@@ -1,6 +1,22 @@
-# Feedback Manager v3.0.2
+# Feedback Manager v3.0.3
 
-A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, and automatic data saving.
+A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, and intelligent paragraph merging.
+
+## 🎉 Version 3.0.3 - Index-Based Paragraph Merging and Knowledge Area Improvements
+
+This release introduces advanced paragraph comparison, assignment-specific knowledge areas, and enhanced save functionality:
+
+### 🚀 Major New Features
+- **Index-Based Paragraph Merging**: Advanced system that detects differences between assignment and student paragraphs at the same index position
+- **Dual Version Display**: When paragraphs differ, both assignment and student versions are displayed with clear visual indicators
+- **Assignment-Specific Knowledge Areas**: Knowledge areas are now stored as assignment properties instead of global entities
+- **Enhanced Save Functionality**: Added dedicated "Save Assignment" button in the right panel for manual assignment data saving
+
+### 🎨 User Interface Improvements
+- **Source Indicators**: Clear visual badges distinguish between "Assignment" (blue) and "Student" (green) paragraph versions
+- **Knowledge Area Persistence**: Knowledge area selection now remains intact when adding paragraphs (consistent with category behavior)
+- **Enhanced Right Panel**: Save Assignment button positioned logically under the print button in the sidebar
+- **Improved Visual Feedback**: Professional badge system with icons for easy identification of paragraph sources
 
 ## 🎉 Version 3.0.2 - Autosave and UI Improvements
 

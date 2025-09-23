@@ -2,6 +2,39 @@
 
 ## Version History
 
+### v3.0.3 - Index-Based Paragraph Merging and Knowledge Area Improvements - January 2025
+
+#### 🚀 Major New Features
+- **Index-Based Paragraph Merging**: Advanced paragraph comparison system that detects differences between assignment and student paragraphs at the same index position
+- **Dual Version Display**: When paragraphs differ between assignment and student, both versions are displayed with clear visual indicators
+- **Assignment-Specific Knowledge Areas**: Knowledge areas are now stored as assignment properties instead of global entities
+- **Enhanced Save Functionality**: Added dedicated "Save Assignment" button in the right panel for manual assignment data saving
+
+#### 🎨 User Interface Improvements
+- **Source Indicators**: Clear visual badges distinguish between "Assignment" (blue) and "Student" (green) paragraph versions
+- **Knowledge Area Persistence**: Knowledge area selection now remains intact when adding paragraphs (consistent with category behavior)
+- **Enhanced Right Panel**: Save Assignment button positioned logically under the print button in the sidebar
+- **Improved Visual Feedback**: Professional badge system with icons for easy identification of paragraph sources
+
+#### 🔧 Technical Improvements
+- **Advanced Merge Algorithm**: New `mergeParagraphs()` function handles index-based comparison with intelligent duplicate detection
+- **Assignment Property Architecture**: Knowledge areas moved from global storage to assignment-specific properties for better data organization
+- **Enhanced Data Loading**: Fixed `loadStudentEvaluation()` to properly load and merge student paragraphs with assignment paragraphs
+- **Selection Mapping**: Improved `mapSelectionsToMergedParagraphs()` for reliable selection tracking across merged paragraph arrays
+- **ID Conflict Prevention**: Student paragraph versions get modified IDs to prevent conflicts with assignment versions
+
+#### 🎯 User Experience Enhancements
+- **Clear Version Distinction**: Users can easily identify which version of a paragraph they're viewing
+- **Consistent Selection Behavior**: Both assignment and student versions can be selected independently
+- **Proper Categorization**: Both versions are correctly categorized under their respective categories and knowledge areas
+- **Assignment-Specific Organization**: Each assignment can have its own set of knowledge areas, improving data organization
+
+#### 🛡️ Data Integrity Improvements
+- **Assignment-Only Display**: System ensures only paragraphs from the current assignment are displayed (no cross-contamination)
+- **Strict Validation**: Multiple validation checks prevent loading data from incorrect assessments
+- **Backward Compatibility**: Existing data automatically migrates to new knowledge area storage system
+- **Enhanced Error Handling**: Better error handling and logging for debugging paragraph loading issues
+
 ### v3.0.2 - Autosave and UI Improvements - January 2025
 
 #### 🚀 Major New Features
