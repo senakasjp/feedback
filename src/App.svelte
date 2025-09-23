@@ -2522,17 +2522,19 @@
 															{#each paragraphs as {text, color, id, originalIndex, fullText}}
 																<div class="border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
 																	<div class="d-flex align-items-start">
-																		<div class="form-check me-3">
-																			<input 
-																				class="form-check-input form-check-input-lg" 
-																				type="checkbox" 
-																				id="paragraph-{originalIndex}"
-																				checked={selectedParagraphs.has(id)}
-																				onchange={() => toggleParagraph(originalIndex)}
-																			>
-																			<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
-																			</label>
-																		</div>
+																		{#if currentStudentId}
+																			<div class="form-check me-3">
+																				<input 
+																					class="form-check-input form-check-input-lg" 
+																					type="checkbox" 
+																					id="paragraph-{originalIndex}"
+																					checked={selectedParagraphs.has(id)}
+																					onchange={() => toggleParagraph(originalIndex)}
+																				>
+																				<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
+																				</label>
+																			</div>
+																		{/if}
 																		<!-- Color indicator between checkbox and text -->
 																		{#if color}
 																			<div class="me-3 d-flex align-items-center">
