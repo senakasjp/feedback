@@ -169,7 +169,41 @@ cargo clean
 cargo install tauri-cli --force
 ```
 
-#### 2. File System Permissions
+#### 2. Paragraph Selection Issues (Fixed in v3.0.1)
+**Issue**: Paragraph checkboxes stop working when students with saved data are selected.
+
+**Root Cause**: Saved paragraph IDs don't match current paragraph IDs due to random ID generation.
+
+**Solution**: Implemented deterministic ID generation and selection validation:
+```javascript
+// Deterministic ID generation based on content and position
+function generateId(text = '', index = 0) {
+  const content = text || `paragraph-${index}`
+  let hash = 0
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return `para-${Math.abs(hash)}-${index}`
+}
+
+// Selection validation in loadStudentEvaluation
+if (savedSelectedParagraphs.size > 0) {
+  const currentParagraphIds = new Set(paragraphs.map(p => p.id))
+  const validSelections = new Set()
+  
+  for (const savedId of savedSelectedParagraphs) {
+    if (currentParagraphIds.has(savedId)) {
+      validSelections.add(savedId)
+    }
+  }
+  
+  selectedParagraphs = validSelections
+}
+```
+
+#### 3. File System Permissions
 Ensure `capabilities/default.json` includes:
 ```json
 {

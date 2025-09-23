@@ -1,0 +1,75 @@
+{
+  "studentId": "mfd2743xj11avt7lazi",
+  "paragraphs": [
+    {
+      "id": "mfq6v8j2s2mdhcs0ujg",
+      "text": "Sub Learning Outcome 1.1: Features are of sufficient complexity and in\nsufficient quantity and acceptable quality for the\ncontext. Contributions are finished (merged to\nmaster branch) and deployed.\n(Evidence: Git commits, feature/bug “tickets” finished)",
+      "color": "green"
+    },
+    {
+      "id": "mfq6wn5d4l9e4v13eif",
+      "text": "Sub Learning Outcome 1.1: Learner is maintaining multiple environments for\nthe project. All environments are working and it is\npossible to easily deploy new versions by\nfollowing the written documentation.\n(Evidence: Git commits, deployment scripts or other\ndeployment setup)",
+      "color": "green"
+    },
+    {
+      "id": "mfq6wyvp3fz9gn4czns",
+      "text": "Sub Learning Outcome 1.1: CI/CD server is functional, runs the test suite\nautomatically and is used for deployments. Code\nquality and test coverage is visible.\n(Evidence: Existence of CI/CD server, CI/CD-related scripts\nand setup)",
+      "color": "green"
+    },
+    {
+      "id": "mfq6xfxrmjqcqrp7swa",
+      "text": "Sub Learning Outcome 1.1: The learner correctly identified areas for\nimprovement (in terms of team/project\nmanagement or performance). Solutions were\nsuggested and implemented and positive results\nare demonstrably achieved. (Evidence: Agile KPI’s, meeting minutes, executive summary reports)",
+      "color": "green"
+    },
+    {
+      "id": "mfq6xve8bguufru2qhv",
+      "text": "Sub Learning Outcome 1.2: The learner can show how they contributed to the\ntransparency and decision-making processes in\ntheir team. (Evidence: Meeting minutes Tickets, boards and comments on GitHub Code review (comments on Pull Requests))",
+      "color": "green"
+    },
+    {
+      "id": "mfq6yfpuqyyuxzq18q",
+      "text": "Sub Learning Outcome 2.1: The learner created automated test scripts in\nsufficient quantity and quality standards, or\ncreated scripts to help with execution of the test\nsuite. (Evidence: Git commits, scripts to run the test suite)",
+      "color": "green"
+    },
+    {
+      "id": "mfq6yw3l5yg5inoj6on",
+      "text": "Sub Learning Outcome 2.1: Security audit was completed with issues\nidentified and patches suggested. Ideally some (or\nall) vulnerabilities have been patched. (Evidence: Security audit document)",
+      "color": "green"
+    },
+    {
+      "id": "mfq6zoh8pjaepkax0le",
+      "text": "Sub Learning Outcome 2.1: Learner made correct use of Pull Requests and/or\ncontributed to other members’ Pull Requests in a\nconstructive way. (Evidence: Pull Requests, comments)",
+      "color": "green"
+    },
+    {
+      "id": "mfq702jtra1jwh5pv1",
+      "text": "Sub Learning Outcome 2.2: Positive changes are made or constructive dialog\nstarted in response to team/lecturer feedback.",
+      "color": "green"
+    },
+    {
+      "id": "mfq7b7gp13tu7wzgo5i",
+      "text": "Sub Learning Outcome 1.1: Portfolio has evidence. CI/CD pipelines. He know the triggering logic. he know the Ubutun. instance and checkout. Testing and security codes in pipleline. Git leaks not sure what is it. - Student Specific Comments"
+    },
+    {
+      "id": "mfq7bmzb63z0qcej9ay",
+      "text": "Sub Learning Outcome 1.2: Everybody knows what is happening.  She has contributed. You know where to save screts. - Student Specific Comments"
+    },
+    {
+      "id": "mfq7c9bmx21ba1eqga",
+      "text": "Sub Learning Outcome 2.1: They didn’t fix any bugs. Kalin Zap found any vulnerabilities. They didn’t do patching and they will do it. - Student Specific Comments"
+    },
+    {
+      "id": "mfq7dqffo4h768js19",
+      "text": "Sub Learning Outcome 2.2: He used OWASP knowladge. Firends were helpful. overall experience was good. - Student Specific Comments"
+    },
+    {
+      "id": "mfq7c9bmx21ba1eqga",
+      "text": "Sub Learning Outcome 2.1: Kali based testing. The have added them to evidence portfolio - Student Specific Comments"
+    },
+    {
+      "id": "mfq7dqffo4h768js19",
+      "text": "Sub Learning Outcome 2.2: Learn a lot. Automation were learned. Coliuges were coorpoated well. - Student Specific Comments"
+    }
+  ],
+  "savedAt": "2025-09-23T03:45:55.599Z"
+}

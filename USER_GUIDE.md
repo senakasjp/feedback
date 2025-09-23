@@ -95,6 +95,19 @@
 - **Delete Paragraphs**: Click the trash icon to remove (kept in student history)
 - **Filter Paragraphs**: Use category and topic filters to find specific content
 
+### Paragraph Selection Reliability (v3.0.1+)
+The paragraph selection system has been enhanced for improved reliability:
+
+- **Consistent Selection**: Paragraph checkboxes work reliably for all students, including those with saved data
+- **Selection Persistence**: Previously selected paragraphs remain selected when switching between students
+- **Selection Count**: The selection count updates correctly when checkboxes are clicked
+- **Selected Paragraphs Panel**: The "Selected Paragraphs" panel appears consistently when paragraphs are selected
+
+**How It Works**:
+- Each paragraph has a unique, deterministic ID based on its content and position
+- Saved selections are validated against current paragraph IDs to prevent mismatches
+- Invalid selections are automatically filtered out to maintain system reliability
+
 ### Editing Paragraphs
 1. **Start Editing**: Click the edit icon (pencil) next to any paragraph
 2. **Edit Text**: Modify only the main text content in the textarea

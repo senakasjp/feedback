@@ -486,21 +486,39 @@ function updateAssessmentWeight(assessmentId, weight) {
 
 ### Unique ID-Based Paragraph Management
 
-#### Generate Unique ID
+#### Generate Deterministic ID
 ```javascript
-function generateId() {
-  return Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
+function generateId(text = '', index = 0) {
+  // Create deterministic ID based on text content and position
+  // This ensures the same paragraph always gets the same ID across sessions
+  const content = text || `paragraph-${index}`
+  let hash = 0
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return `para-${Math.abs(hash)}-${index}`
 }
 ```
-Generates a unique string identifier for paragraphs.
+Generates a deterministic string identifier for paragraphs based on content and position.
+
+**Parameters**:
+- `text`: String - Paragraph text content (optional)
+- `index`: Number - Paragraph position in array (optional)
 
 **Returns**:
-- `string` - Unique ID combining random string and timestamp
+- `string` - Deterministic ID based on content hash and position
 
 **Usage**:
 ```javascript
-const paragraphId = generateId();
+const paragraphId = generateId(paragraphText, paragraphIndex);
 ```
+
+**Benefits**:
+- **Consistent IDs**: Same paragraph content always generates the same ID
+- **Session Persistence**: IDs remain consistent across application restarts
+- **Selection Reliability**: Prevents ID mismatches that break paragraph selection
 
 #### Ensure Paragraphs Have IDs
 ```javascript
@@ -533,6 +551,40 @@ Migrates existing paragraphs to include unique IDs for backward compatibility.
 **Usage**:
 ```javascript
 const migratedParagraphs = ensureParagraphsHaveIds(paragraphs);
+```
+
+#### Validate Saved Selections
+```javascript
+// Selection validation in loadStudentEvaluation
+if (savedSelectedParagraphs.size > 0) {
+  const currentParagraphIds = new Set(paragraphs.map(p => p.id))
+  const validSelections = new Set()
+  
+  for (const savedId of savedSelectedParagraphs) {
+    if (currentParagraphIds.has(savedId)) {
+      validSelections.add(savedId)
+    }
+  }
+  
+  selectedParagraphs = validSelections
+}
+```
+Validates saved paragraph selections against current paragraph IDs to prevent selection system failures.
+
+**Purpose**:
+- **ID Mismatch Prevention**: Filters out saved selections that don't match current paragraph IDs
+- **Selection Reliability**: Ensures checkboxes work properly for students with saved data
+- **Data Integrity**: Maintains consistent selection state across sessions
+
+**Process**:
+1. **Get Current IDs**: Creates set of current paragraph IDs
+2. **Validate Selections**: Checks each saved selection against current IDs
+3. **Filter Valid**: Only keeps selections that match current paragraph IDs
+4. **Update State**: Sets selectedParagraphs to validated selections
+
+**Usage**:
+```javascript
+// Called automatically in loadStudentEvaluation when student with saved data is selected
 ```
 
 #### Toggle Paragraph Selection (ID-Based)

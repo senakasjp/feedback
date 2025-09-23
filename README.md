@@ -1,6 +1,16 @@
-# Feedback Manager v3.0.0
+# Feedback Manager v3.0.1
 
 A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, and comprehensive grade distribution analysis.
+
+## 🎉 Version 3.0.1 - Bug Fix Release
+
+This release fixes a critical bug in paragraph selection functionality and introduces enhanced data integrity features:
+
+### 🐛 Critical Bug Fixes
+- **Fixed Paragraph Selection Issue**: Resolved critical bug where paragraph checkboxes stopped working when students with saved data were selected
+- **Deterministic ID Generation**: Implemented deterministic paragraph ID generation based on content and position to ensure consistent IDs across sessions
+- **Saved Selection Validation**: Added validation system to filter out invalid saved selections that don't match current paragraph IDs
+- **Enhanced Data Integrity**: Improved paragraph selection system to handle ID mismatches gracefully
 
 ## 🎉 Version 3.0.0 - Major Release
 

@@ -2,6 +2,26 @@
 
 ## Version History
 
+### v3.0.1 - Bug Fix Release - January 2025
+
+#### 🐛 Critical Bug Fixes
+- **Fixed Paragraph Selection Issue**: Resolved critical bug where paragraph checkboxes stopped working when students with saved data were selected
+- **Deterministic ID Generation**: Implemented deterministic paragraph ID generation based on content and position to ensure consistent IDs across sessions
+- **Saved Selection Validation**: Added validation system to filter out invalid saved selections that don't match current paragraph IDs
+- **Enhanced Data Integrity**: Improved paragraph selection system to handle ID mismatches gracefully
+
+#### 🔧 Technical Improvements
+- **ID-Based Selection System**: Enhanced paragraph selection to use deterministic IDs instead of random generation
+- **Selection Validation Logic**: Added validation in `loadStudentEvaluation()` to ensure saved selections match current paragraph IDs
+- **Backward Compatibility**: Maintained compatibility with existing saved data while fixing ID mismatches
+- **Error Prevention**: Implemented safeguards to prevent selection system failures
+
+#### 🎯 User Experience Fixes
+- **Consistent Checkbox Behavior**: Paragraph checkboxes now work reliably for all students regardless of saved data status
+- **Selection Count Updates**: Fixed issue where selection count wouldn't update when students with saved data were selected
+- **Selected Paragraphs Panel**: Restored functionality of the "Selected Paragraphs" panel for all student types
+- **Reliable Selection State**: Ensured selection state remains consistent across student selection changes
+
 ### v3.0.0 - Major Release - January 2025
 
 #### 🎉 Major New Features

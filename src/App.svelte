@@ -174,23 +174,43 @@
 	]
 
 	// Generate unique ID
-	function generateId() {
-		return Date.now().toString(36) + Math.random().toString(36).substr(2)
+	function generateId(text = '', index = 0) {
+		// Create deterministic ID based on text content and position
+		// This ensures the same paragraph always gets the same ID across sessions
+		const content = text || `paragraph-${index}`
+		let hash = 0
+		for (let i = 0; i < content.length; i++) {
+			const char = content.charCodeAt(i)
+			hash = ((hash << 5) - hash) + char
+			hash = hash & hash // Convert to 32-bit integer
+		}
+		return `para-${Math.abs(hash)}-${index}`
 	}
 
 	// Ensure paragraphs have IDs (migration function for existing data)
 	function ensureParagraphsHaveIds(paragraphs) {
-		return paragraphs.map(para => {
+		return paragraphs.map((para, index) => {
 			if (typeof para === 'string') {
 				return {
-					id: generateId(),
+					id: generateId(para, index),
 					text: para,
-					color: undefined
+					color: undefined,
+					originalIndex: index,
+					fullText: para
 				}
 			} else if (para && !para.id) {
 				return {
 					...para,
-					id: generateId()
+					id: generateId(para.text || para, index),
+					originalIndex: index,
+					fullText: para.text || para
+				}
+			} else if (para && para.id) {
+				// Ensure existing objects have all required fields
+				return {
+					...para,
+					originalIndex: para.originalIndex !== undefined ? para.originalIndex : index,
+					fullText: para.fullText || para.text || para
 				}
 			}
 			return para
@@ -244,7 +264,7 @@
 		}
 	}
 
-	async function loadAssessmentData(subjectId, assessmentId) {
+	async function loadAssessmentData(subjectId, assessmentId, preserveSelections = false) {
 		// STRICT FILTER: Validate assessment context before loading any data
 		if (!currentSubject || !currentSubject.assessments) {
 			console.error('STRICT FILTER: No current subject or assessments found')
@@ -276,8 +296,10 @@
 				const parsed = JSON.parse(data)
 				// Ensure paragraphs have IDs (migration for existing data)
 				paragraphs = ensureParagraphsHaveIds(parsed.paragraphs || [])
-				// Load all paragraphs but don't select any by default
-				selectedParagraphs = new Set()
+				// Load all paragraphs but don't select any by default (unless preserving selections)
+				if (!preserveSelections) {
+					selectedParagraphs = new Set()
+				}
 				studentName = parsed.studentName || ''
 				studentImage = parsed.studentImage || ''
 				// Load assessment header photo if available
@@ -301,8 +323,10 @@
 					const parsed = JSON.parse(data)
 					// Ensure paragraphs have IDs (migration for existing data)
 					paragraphs = ensureParagraphsHaveIds(parsed.paragraphs || [])
-					// Load all paragraphs but don't select any by default
-					selectedParagraphs = new Set()
+					// Load all paragraphs but don't select any by default (unless preserving selections)
+					if (!preserveSelections) {
+						selectedParagraphs = new Set()
+					}
 					studentName = parsed.studentName || ''
 					studentImage = parsed.studentImage || ''
 					// Load assessment header photo if available
@@ -861,7 +885,7 @@
 		console.log(`STRICT FILTER: Loading student evaluation for student ${currentStudentId} in assessment ${currentAssessmentId}`)
 
 		// Load only assignment paragraphs (not all student paragraphs from all assignments)
-		await loadAssessmentData(currentSubjectId, currentAssessmentId)
+		await loadAssessmentData(currentSubjectId, currentAssessmentId, true) // preserveSelections = true
 		// paragraphs now contains only the current assignment's paragraphs
 
 		// Load evaluation data to get selections and marks
@@ -913,12 +937,28 @@
 		}
 
 		// Apply the saved selections and marks directly to assignment paragraphs
+		// When a student is selected, always load their saved selections
 		selectedParagraphs = savedSelectedParagraphs
 		// Preserve the student's display name if no saved name exists
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		studentImage = savedStudentImage
 		categoryMarks = savedCategoryMarks
 		manualTotalMarks = savedManualTotalMarks
+
+		// FIX: Clear saved selections if they don't match current paragraph IDs
+		// This prevents issues when paragraph IDs have changed
+		if (savedSelectedParagraphs.size > 0) {
+			const currentParagraphIds = new Set(paragraphs.map(p => p.id))
+			const validSelections = new Set()
+			
+			for (const savedId of savedSelectedParagraphs) {
+				if (currentParagraphIds.has(savedId)) {
+					validSelections.add(savedId)
+				}
+			}
+			
+			selectedParagraphs = validSelections
+		}
 
 		if (savedSelectedParagraphs.size > 0 || Object.keys(savedCategoryMarks).length > 0) {
 			showSuccessNotification('Student evaluation data loaded successfully!')
@@ -2412,6 +2452,7 @@
 																				onchange={() => toggleParagraph(originalIndex)}
 																			>
 																			<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
+																				<span class="badge bg-secondary ms-1">#{originalIndex}</span>
 																			</label>
 																		</div>
 																		<!-- Color indicator between checkbox and text -->
@@ -2778,6 +2819,7 @@
 		</div>
 	</div>
 {/if}
+
 
 <!-- Delete Student Confirmation Modal -->
 {#if showDeleteConfirmation && studentToDelete}

@@ -1,0 +1,251 @@
+{
+  "studentId": "mfbqityuk4oda2ph8wc",
+  "paragraphs": [
+    {
+      "text": "Executive Summary [10]: Student provides a clear, concise, and well-structured summary covering all required elements. Demonstrates strong understanding of the project, highlighting key findings and recommendations with no factual errors.",
+      "color": "green",
+      "id": "mfhop40a90e3mddr0be"
+    },
+    {
+      "text": "Executive Summary [10]: The student covers all major points but may lack some depth in one or two areas. Mostly clear and logically organised. Minor omissions or small inaccuracies.",
+      "color": "lightgreen",
+      "id": "mfhop40aumdbx019rgm"
+    },
+    {
+      "text": "Executive Summary [10]: The student summarises main ideas but misses several important details. Some sentences lack clarity or coherence.",
+      "color": "yellow",
+      "id": "mfhop40az99th6u0je9"
+    },
+    {
+      "text": "Executive Summary [10]: The executive summary is brief and incomplete; it lacks logical flow, and multiple key points are missing.",
+      "color": "orange",
+      "id": "mfhop40a7zi5wvbozct"
+    },
+    {
+      "text": "Executive Summary [10]: The summary is very short, unclear, or irrelevant to the project.",
+      "color": "red",
+      "id": "mfhop40ag8ifyrj3hsm"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: The student provides a comprehensive, technically accurate evaluation covering all subcomponents (cloud model, data flow, protocols, security, scalability). Well-illustrated with original diagrams, code/config snippets, and precise explanations. Shows deep technical insight.",
+      "color": "green",
+      "id": "mfhop40afd2pcggt0s4"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Strong analysis covering most subcomponents with good accuracy and detail. Diagrams support explanation. May lack some precision or depth in one area.",
+      "color": "lightgreen",
+      "id": "mfhop40amydudbhwrkd"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: The student provides adequate coverage, but some gaps in key areas. Diagrams are present but simplistic. Analysis is descriptive rather than critical.",
+      "color": "yellow",
+      "id": "mfhop40astgz8f1q6h"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Limited detail and accuracy. Diagrams unclear or missing. Explanations are vague and lack technical depth.",
+      "color": "orange",
+      "id": "mfhop40a9zbi8mttzc"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Very limited or missing technical discussion; inaccurate or irrelevant content.",
+      "color": "red",
+      "id": "mfhop40apauymapyaym"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Thorough, well-researched discussion of all key theoretical aspects (sensor science, algorithms, topology, edge computing, real-time analytics). Links concepts directly to project with strong academic references and clear technical reasoning.",
+      "color": "green",
+      "id": "mfhop40ajxx6vc3dvv8"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Good coverage of most theoretical aspects with relevant examples. Links to project are present but may lack detail in places.",
+      "color": "lightgreen",
+      "id": "mfhop40a49fleo1xich"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Covers basic theory but with limited connection to the project. Some technical terms are used incorrectly or without explanation.",
+      "color": "yellow",
+      "id": "mfhop40apc4a66vx6h"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Minimal theoretical discussion; weak or missing links to project; lacks technical accuracy.",
+      "color": "orange",
+      "id": "mfhop40ad94iroflnra"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Missing or incorrect theoretical content; no relevance to project.",
+      "color": "red",
+      "id": "mfhop40a8nwnhaned2e"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Detailed, accurate, and critical analysis of all required subcomponents. Explains how chosen services and standards support scalability, maintainability, and performance. Includes concrete examples from the project and industry best practice.",
+      "color": "green",
+      "id": "mfhop40afvsa93u3o5b"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Good coverage with accurate explanations for most areas. Some critical discussion present. Examples are relevant but not always detailed.",
+      "color": "lightgreen",
+      "id": "mfhop40a3vccb3j6utu"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Adequate description of standards but mostly descriptive. Limited examples or critical evaluation.",
+      "color": "yellow",
+      "id": "mfhop40ango1jlp72cb"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Minimal coverage; inaccurate or incomplete descriptions; weak or no examples.",
+      "color": "orange",
+      "id": "mfhop40a7lwezjhx16e"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Missing or irrelevant discussion of standards and methodologies.",
+      "color": "red",
+      "id": "mfhop40a6vtrmx6hfaf"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Comprehensive identification of technical, security, scalability, privacy, and reliability challenges. Strong evidence-based evaluation, supported with real-world parallels and possible mitigation strategies.",
+      "color": "green",
+      "id": "mfhop40a0hj9wmewkn7"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Good coverage of most key challenges and risks with relevant examples. May lack depth in analysis or proposed mitigation.",
+      "color": "lightgreen",
+      "id": "mfhop40awu53d7byisl"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Adequate list of challenges and risks, but mostly descriptive. Limited discussion of impact or mitigation.",
+      "color": "yellow",
+      "id": "mfhop40arp1el8lj1di"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Minimal coverage; misses several major risks; no meaningful analysis.",
+      "color": "orange",
+      "id": "mfhop40a1toj64za0a1"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Missing or irrelevant section.",
+      "color": "red",
+      "id": "mfhop40avlsnu2pz5tj"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Highly innovative and practical recommendations addressing technical, security, scalability, and industry application aspects. Shows awareness of emerging technologies and trends. Clearly justified and feasible.",
+      "color": "green",
+      "id": "mfhop40a9rud90w7rof"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Good recommendations with some innovation and relevance. Justification provided but may lack depth in one or two areas.",
+      "color": "lightgreen",
+      "id": "mfhop40a15pjj8hsf9yj"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Adequate recommendations but limited originality or justification. Some are generic rather than project-specific.",
+      "color": "yellow",
+      "id": "mfhop40ajrg9g8w9ee"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Minimal recommendations with little relevance or feasibility.",
+      "color": "orange",
+      "id": "mfhop40aldsgrjso5ha"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: No recommendations given or irrelevant content.",
+      "color": "red",
+      "id": "mfhop40adeorou7m256"
+    },
+    {
+      "text": "Some images are not properly explained in the main text.",
+      "color": "red",
+      "id": "mfhop40a3rqhqzp77se"
+    },
+    {
+      "text": "An adequate number of diagrams to support the explanations are not provided.",
+      "color": "red",
+      "id": "mfhop40a8gxb1da13fd"
+    },
+    {
+      "text": "The references are listed but not cited within the main text.",
+      "color": "red",
+      "id": "mfhop40ao0vy1mumztj"
+    },
+    {
+      "text": "The grammar and spelling mistakes have not been corrected properly.",
+      "color": "red",
+      "id": "mfhop40ax85yb6td3pe"
+    },
+    {
+      "text": "The report is too short and lacks explanations.",
+      "color": "red",
+      "id": "mfhop40a7fdbmteyffv"
+    },
+    {
+      "text": "The reference list is missing.",
+      "color": "red",
+      "id": "mfhop40aqozxutfn1gj"
+    },
+    {
+      "text": "The referencing does not follow APA 7 guidelines.",
+      "color": "red",
+      "id": "mfhop40auep6ic714i"
+    },
+    {
+      "text": "An adequate amount of literature has not been referred to, as expected in this assessment.",
+      "color": "red",
+      "id": "mfhop40ayvqslokto77"
+    },
+    {
+      "text": "All or most of the references are from websites. The student has not used other resources, such as research papers or technical documents.",
+      "color": "red",
+      "id": "mfhop40aa1iibn22287"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Some sections read like a best-practice manual rather than project-specific analysis, but overall very strong.",
+      "id": "mfhop40airruzfvocrr"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Mitigations are thorough and standards-based. Slightly dense in style.",
+      "id": "mfhop40axvlogbeal9d"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Clear and innovative, well connected to earlier challenges.",
+      "id": "mfhop40auyjn21ju2m"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Critical analysis is present (trade-offs SaaS vs IaaS, JSON vs CBOR). Minor deduction for occasional verbosity.",
+      "id": "mfhop40abvwcuc5248"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Highly detailed and supported with academic standards. Could be condensed for clarity.",
+      "id": "mfhop40a0a289hr8zxnx"
+    },
+    {
+      "text": "Executive Summary [10]: Concise and professional, though slightly technical for an executive audience.",
+      "color": "red",
+      "id": "mfhop40aia7lcy4g0tg"
+    },
+    {
+      "text": "Executive Summary [10]: Missing stronger linkage of findings to risks.",
+      "color": "red",
+      "id": "mfhop40aia7lcy4g0tg"
+    },
+    {
+      "text": "Technical Architecture Analysis [25]: Critical evaluation is present, but some sections (e.g., scalability evaluation) are descriptive rather than analytical.",
+      "id": "mfhop40abvwcuc5248"
+    },
+    {
+      "text": "IoT Theory & Scientific Foundation [20]: Correct and clear, but less depth than stronger submissions. Limited critique of ESP8266 constraints.",
+      "id": "mfhop40a0a289hr8zxnx"
+    },
+    {
+      "text": "Cloud Infrastructure Standards & Methodologies [20]: Well structured and referenced (ISO, NIST, OWASP). However, analysis is generic in places and lacks project-specific application.",
+      "id": "mfhop40airruzfvocrr"
+    },
+    {
+      "text": "Challenges & Risk Analysis [15]: Mitigations mentioned (QoS, topic partitioning, buffering, retention), but not always developed in depth.",
+      "id": "mfhop40axvlogbeal9d"
+    },
+    {
+      "text": "Recommendations & Future Directions [10]: Strong, but some suggestions are generic and could be more tightly tied to identified risks.",
+      "id": "mfhop40auyjn21ju2m"
+    }
+  ],
+  "savedAt": "2025-09-13T04:45:58.309Z"
+}
