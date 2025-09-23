@@ -38,7 +38,7 @@
 	let newCategoryKnowledgeArea = $state('')
 	let newCategoryAllocatedMarks = $state('')
 	let newKnowledgeAreaName = $state('')
-	let availableKnowledgeAreas = $state([])
+	// Note: knowledgeAreas are now stored as assignment properties (currentAssessment.knowledgeAreas)
 	let categoryMarks = $state({}) // Store marks for each category
 	let manualTotalMarks = $state('') // Store manually entered total marks
 	let showTotalMarksWarning = $state(false) // Show warning modal
@@ -151,11 +151,10 @@
 	// Autosave for subject/student data
 	$effect(() => {
 		if (autosaveEnabled && !isSaving) {
-			// Watch for changes in subjects, students, or knowledge areas
+			// Watch for changes in subjects, students, or percentage ranges
 			const mainData = {
 				subjects,
 				students,
-				knowledgeAreas: availableKnowledgeAreas,
 				percentageRanges
 			}
 			
@@ -289,7 +288,7 @@
 			if (data) {
 				const parsed = JSON.parse(data)
 				subjects = parsed.subjects || []
-				availableKnowledgeAreas = parsed.knowledgeAreas || []
+				// Note: knowledgeAreas are now stored as assignment properties
 				students = parsed.students || []
 				percentageRanges = parsed.percentageRanges || []
 			}
@@ -301,7 +300,7 @@
 				if (data) {
 					const parsed = JSON.parse(data)
 					subjects = parsed.subjects || []
-					availableKnowledgeAreas = parsed.knowledgeAreas || []
+					// Note: knowledgeAreas are now stored as assignment properties
 					students = parsed.students || []
 					percentageRanges = parsed.percentageRanges || []
 				}
@@ -312,7 +311,7 @@
 	}
 
 	async function saveSubjects() {
-		const data = { subjects, knowledgeAreas: availableKnowledgeAreas, students, percentageRanges }
+		const data = { subjects, students, percentageRanges }
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -478,7 +477,10 @@
 		if (newAssessmentName.trim() && currentSubject) {
 			const assessment = {
 				id: generateId(),
-				name: newAssessmentName.trim()
+				name: newAssessmentName.trim(),
+				topics: [],
+				categories: [],
+				knowledgeAreas: []
 			}
 			currentSubject.assessments.push(assessment)
 			newAssessmentName = ''
@@ -655,16 +657,50 @@
 	}
 
 	function addKnowledgeArea() {
-		if (newKnowledgeAreaName.trim() && !availableKnowledgeAreas.includes(newKnowledgeAreaName.trim())) {
-			availableKnowledgeAreas = [...availableKnowledgeAreas, newKnowledgeAreaName.trim()]
+		if (newKnowledgeAreaName.trim() && currentAssessment) {
+			// Ensure knowledgeAreas array exists
+			if (!currentAssessment.knowledgeAreas) {
+				currentAssessment.knowledgeAreas = []
+			}
+			
+			// Add knowledge area if it doesn't already exist
+			if (!currentAssessment.knowledgeAreas.includes(newKnowledgeAreaName.trim())) {
+				currentAssessment.knowledgeAreas = [...currentAssessment.knowledgeAreas, newKnowledgeAreaName.trim()]
+				
+				// Update the current subject's assessments
+				if (currentSubject) {
+					const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+					if (subjectIndex !== -1) {
+						const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+						if (assessmentIndex !== -1) {
+							subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+							console.log('Saving knowledge area to assessment:', newKnowledgeAreaName.trim(), 'Total knowledge areas:', currentAssessment.knowledgeAreas.length)
+							saveSubjects()
+						}
+					}
+				}
+			}
 			newKnowledgeAreaName = ''
-			saveSubjects()
 		}
 	}
 
 	function removeKnowledgeArea(knowledgeArea) {
-		availableKnowledgeAreas = availableKnowledgeAreas.filter(area => area !== knowledgeArea)
-		saveSubjects()
+		if (currentAssessment && currentAssessment.knowledgeAreas) {
+			currentAssessment.knowledgeAreas = currentAssessment.knowledgeAreas.filter(area => area !== knowledgeArea)
+			
+			// Update the current subject's assessments
+			if (currentSubject) {
+				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+				if (subjectIndex !== -1) {
+					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+					if (assessmentIndex !== -1) {
+						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+						console.log('Removing knowledge area from assessment:', knowledgeArea, 'Remaining knowledge areas:', currentAssessment.knowledgeAreas.length)
+						saveSubjects()
+					}
+				}
+			}
+		}
 	}
 
 	function checkCategoryHasSelectedParagraphs(category) {
@@ -755,7 +791,7 @@
 
 	async function saveStudents() {
 		// Save students to main data file
-		const mainData = { subjects, knowledgeAreas: availableKnowledgeAreas, students }
+		const mainData = { subjects, students }
 		try {
 			await invoke('write_portable', { data: JSON.stringify(mainData) })
 		} catch (error) {
@@ -2202,7 +2238,7 @@
 										<div class="d-flex justify-content-between align-items-center mb-2">
 											<label class="form-label fw-bold mb-0">Knowledge Areas:</label>
 											<div class="d-flex align-items-center gap-2">
-												<small class="text-muted">{availableKnowledgeAreas.length} areas</small>
+												<small class="text-muted">{(currentAssessment?.knowledgeAreas || []).length} areas</small>
 												<button 
 													class="btn btn-outline-secondary btn-sm"
 													onclick={() => showAddCategoryKnowledgeArea = !showAddCategoryKnowledgeArea}
@@ -2242,10 +2278,10 @@
 										{/if}
 										
 										<!-- Knowledge Areas List - Compact Horizontal -->
-										{#if availableKnowledgeAreas.length > 0}
+										{#if (currentAssessment?.knowledgeAreas || []).length > 0}
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
-													{#each availableKnowledgeAreas as area}
+													{#each (currentAssessment?.knowledgeAreas || []) as area}
 														<div class="d-flex align-items-center bg-light border rounded px-1 py-0 small">
 															<span class="text-muted me-1">{area}</span>
 																<button 
@@ -2350,7 +2386,7 @@
 															bind:value={selectedKnowledgeArea}
 														>
 															<option value="">Choose a knowledge area...</option>
-															{#each availableKnowledgeAreas as area}
+															{#each (currentAssessment?.knowledgeAreas || []) as area}
 																<option value={area}>{area}</option>
 															{/each}
 														</select>

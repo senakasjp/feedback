@@ -9,6 +9,7 @@ export interface Assessment {
 	name: string;
 	topics: Topic[];
 	categories: Category[];
+	knowledgeAreas: string[];
 	weight?: number;
 	headerPhoto?: string;
 }
