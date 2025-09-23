@@ -51,6 +51,13 @@
 	let editingParagraphIndex = $state(null) // Track which paragraph is being edited
 	let editingParagraphText = $state('') // Store text being edited
 
+	// Autosave functionality
+	let autosaveEnabled = $state(true) // Enable/disable autosave
+	let autosaveInterval = $state(2000) // Autosave interval in milliseconds (2 seconds)
+	let lastSaved = $state(null) // Track when data was last saved
+	let isSaving = $state(false) // Track if currently saving
+	let autosaveTimeout = null // Store timeout reference for debouncing
+
 	// UI state
 	let showAddSubject = $state(false)
 	let showAddAssessment = $state(false)
@@ -99,6 +106,63 @@
 	function toggleDarkMode() {
 		isDarkMode = !isDarkMode
 	}
+
+	// Autosave functionality
+	function debouncedAutosave(saveFunction, delay = autosaveInterval) {
+		// Clear existing timeout
+		if (autosaveTimeout) {
+			clearTimeout(autosaveTimeout)
+		}
+		
+		// Set new timeout
+		autosaveTimeout = setTimeout(async () => {
+			if (autosaveEnabled && !isSaving) {
+				isSaving = true
+				try {
+					await saveFunction()
+					lastSaved = new Date()
+				} catch (error) {
+					console.error('Autosave failed:', error)
+				} finally {
+					isSaving = false
+				}
+			}
+		}, delay)
+	}
+
+	// Autosave for assessment data
+	$effect(() => {
+		if (autosaveEnabled && currentSubjectId && currentAssessmentId && !isSaving) {
+			// Watch for changes in assessment data
+			const assessmentData = {
+				paragraphs,
+				selectedParagraphs: Array.from(selectedParagraphs),
+				studentName,
+				studentImage,
+				categoryMarks,
+				manualTotalMarks
+			}
+			
+			// Debounce the save operation
+			debouncedAutosave(saveAssessmentData)
+		}
+	})
+
+	// Autosave for subject/student data
+	$effect(() => {
+		if (autosaveEnabled && !isSaving) {
+			// Watch for changes in subjects, students, or knowledge areas
+			const mainData = {
+				subjects,
+				students,
+				knowledgeAreas: availableKnowledgeAreas,
+				percentageRanges
+			}
+			
+			// Debounce the save operation
+			debouncedAutosave(saveSubjects)
+		}
+	})
 
 	// Update student name when currentStudentId changes
 	$effect(() => {
@@ -406,7 +470,7 @@
 			subjects.push(subject)
 			newSubjectName = ''
 			showAddSubject = false
-			saveSubjects()
+			// Autosave will handle saving automatically
 		}
 	}
 
@@ -419,7 +483,7 @@
 			currentSubject.assessments.push(assessment)
 			newAssessmentName = ''
 			showAddAssessment = false
-			saveSubjects()
+			// Autosave will handle saving automatically
 		}
 	}
 
@@ -674,7 +738,7 @@
 
 	function updateTotalMarks(totalMarks) {
 		manualTotalMarks = totalMarks
-		saveAssessmentData()
+		// Autosave will handle saving automatically
 	}
 
 	// Notification Functions
@@ -1838,6 +1902,21 @@
 					</span>
 				</li>
 				<li class="nav-item">
+					<!-- Autosave Status Indicator -->
+					<span class="navbar-text me-3" title="Autosave Status">
+						{#if isSaving}
+							<i class="bi bi-arrow-clockwise text-warning" style="animation: spin 1s linear infinite;"></i>
+							<span class="ms-1">Saving...</span>
+						{:else if lastSaved}
+							<i class="bi bi-check-circle text-success"></i>
+							<span class="ms-1">Saved</span>
+						{:else}
+							<i class="bi bi-circle text-muted"></i>
+							<span class="ms-1">Ready</span>
+						{/if}
+					</span>
+				</li>
+				<li class="nav-item">
 					<button 
 						class="btn btn-outline-light btn-sm ms-2" 
 						onclick={toggleDarkMode}
@@ -2452,7 +2531,6 @@
 																				onchange={() => toggleParagraph(originalIndex)}
 																			>
 																			<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
-																				<span class="badge bg-secondary ms-1">#{originalIndex}</span>
 																			</label>
 																		</div>
 																		<!-- Color indicator between checkbox and text -->
@@ -2597,6 +2675,12 @@
 	:global(.col-lg-9 .row) {
 		display: flex;
 		flex-direction: column;
+	}
+	
+	/* Autosave animation */
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
 	}
 	
 	:global(.col-lg-9 .col-12) {

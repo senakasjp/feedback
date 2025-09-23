@@ -90,10 +90,17 @@
 
 ### Paragraph Management
 - **View Paragraphs**: All paragraphs are displayed in the main area
-- **Select Paragraphs**: Check boxes to include in PDF reports
+- **Select Paragraphs**: Check boxes to include in PDF reports (clean interface without paragraph numbers)
 - **Edit Paragraphs**: Click the edit icon to modify paragraph text (preserves category and knowledge area prefixes)
 - **Delete Paragraphs**: Click the trash icon to remove (kept in student history)
 - **Filter Paragraphs**: Use category and topic filters to find specific content
+
+### Clean Paragraph Interface (v3.0.2+)
+The paragraph display has been improved for better usability:
+- **No Paragraph Numbers**: Removed distracting paragraph numbers (e.g., "#0") from checkboxes
+- **Cleaner Look**: Less cluttered interface for better focus on content
+- **Professional Appearance**: Clean, uncluttered design following Bootstrap 5 principles
+- **Better Scanning**: Easier to scan and select paragraphs without visual distractions
 
 ### Paragraph Selection Reliability (v3.0.1+)
 The paragraph selection system has been enhanced for improved reliability:
@@ -187,10 +194,46 @@ The paragraph selection system has been enhanced for improved reliability:
 
 ## Data Management
 
-### Saving Data
-- **Auto-Save**: Data is automatically saved when generating PDFs
-- **Manual Save**: Click "Save Student Data" in the sidebar
-- **Load Data**: Click "Load Student Data" to restore previous state
+### Automatic Data Saving (v3.0.2+)
+The application now features comprehensive autosave functionality that automatically preserves your work:
+
+#### How Autosave Works
+- **Automatic Saving**: Data is automatically saved every 2 seconds after you stop making changes
+- **Visual Feedback**: The navbar shows your save status:
+  - 🔄 **"Saving..."** - Data is being saved (with spinning animation)
+  - ✅ **"Saved"** - Data has been successfully saved
+  - ⚪ **"Ready"** - System is ready (no recent saves)
+- **Smart Debouncing**: The system waits 2 seconds after your last change before saving to prevent excessive operations
+- **Multiple Data Types**: Autosave works for:
+  - Assessment data (paragraphs, selections, marks, student info)
+  - Subject and student management data
+  - Knowledge areas and percentage ranges
+
+#### What Gets Auto-Saved
+- **Paragraph Changes**: Adding, editing, or deleting paragraphs
+- **Selection Changes**: Checking/unchecking paragraph checkboxes
+- **Mark Changes**: Entering or updating category marks
+- **Student Data**: Student information and evaluation data
+- **Subject Data**: Subject and assessment information
+- **Configuration**: Knowledge areas and percentage ranges
+
+#### Benefits of Autosave
+- **No Manual Saving**: You never need to remember to save your work
+- **Continuous Backup**: Your work is continuously preserved
+- **Reduced Data Loss**: Minimizes risk of losing work due to unexpected interruptions
+- **Seamless Workflow**: Focus on content creation without interruption
+
+### Manual Data Management (Legacy)
+While autosave handles most saving automatically, you can still use manual options:
+
+#### Saving Data
+- **Auto-Save**: Primary method - happens automatically every 2 seconds
+- **Manual Save**: Click "Save Student Data" in the sidebar (if needed)
+- **PDF Auto-Save**: PDF generation automatically saves complete student data
+
+#### Loading Data
+- **Automatic Loading**: Data loads automatically when you select subjects/students
+- **Manual Load**: Click "Load Student Data" to restore previous state (if needed)
 
 ### Data Storage
 - All data is stored locally in the `FeedbackData` folder

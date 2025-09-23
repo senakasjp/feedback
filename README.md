@@ -1,6 +1,27 @@
-# Feedback Manager v3.0.1
+# Feedback Manager v3.0.2
 
-A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, and comprehensive grade distribution analysis.
+A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, and automatic data saving.
+
+## 🎉 Version 3.0.2 - Autosave and UI Improvements
+
+This release introduces comprehensive autosave functionality and user interface improvements for enhanced user experience:
+
+### 🚀 Major New Features
+- **Automatic Data Saving**: Comprehensive autosave system that automatically saves data every 2 seconds after changes
+- **Visual Save Status**: Real-time save status indicator in the navbar showing "Saving...", "Saved", or "Ready"
+- **Smart Debouncing**: Prevents excessive save operations by waiting 2 seconds after the last change before saving
+
+### 🎨 User Interface Improvements
+- **Cleaner Paragraph Display**: Removed paragraph numbers (e.g., "#0") from checkboxes for cleaner, less cluttered interface
+- **Enhanced Visual Feedback**: Spinning animation during save operations with professional status indicators
+- **Improved User Experience**: Users no longer need to manually save data - everything is preserved automatically
+
+### 🔧 Technical Improvements
+- **Reactive Autosave System**: Uses Svelte's `$effect()` to watch for data changes and trigger automatic saves
+- **Debounced Save Operations**: Intelligent debouncing prevents excessive file I/O operations
+- **Multiple Data Types**: Autosave works for assessment data, subject/student data, and all user interactions
+- **Error Handling**: Graceful handling of save failures with console logging
+- **Status Tracking**: Real-time tracking of save state with visual feedback
 
 ## 🎉 Version 3.0.1 - Bug Fix Release
 

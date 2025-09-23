@@ -2,6 +2,37 @@
 
 ## Version History
 
+### v3.0.2 - Autosave and UI Improvements - January 2025
+
+#### 🚀 Major New Features
+- **Automatic Data Saving**: Comprehensive autosave system that automatically saves data every 2 seconds after changes
+- **Visual Save Status**: Real-time save status indicator in the navbar showing "Saving...", "Saved", or "Ready"
+- **Smart Debouncing**: Prevents excessive save operations by waiting 2 seconds after the last change before saving
+
+#### 🎨 User Interface Improvements
+- **Cleaner Paragraph Display**: Removed paragraph numbers (e.g., "#0") from checkboxes for cleaner, less cluttered interface
+- **Enhanced Visual Feedback**: Spinning animation during save operations with professional status indicators
+- **Improved User Experience**: Users no longer need to manually save data - everything is preserved automatically
+
+#### 🔧 Technical Improvements
+- **Reactive Autosave System**: Uses Svelte's `$effect()` to watch for data changes and trigger automatic saves
+- **Debounced Save Operations**: Intelligent debouncing prevents excessive file I/O operations
+- **Multiple Data Types**: Autosave works for assessment data, subject/student data, and all user interactions
+- **Error Handling**: Graceful handling of save failures with console logging
+- **Status Tracking**: Real-time tracking of save state with visual feedback
+
+#### 🎯 User Experience Enhancements
+- **Seamless Workflow**: Users can focus on content creation without worrying about saving
+- **Real-time Feedback**: Always know when your work is being saved with visual status indicators
+- **Reduced Cognitive Load**: No need to remember to save manually - the system handles it automatically
+- **Professional Interface**: Clean, uncluttered paragraph display without distracting numbers
+
+#### 🛡️ Data Integrity Improvements
+- **Continuous Backup**: Data is continuously saved, reducing risk of data loss
+- **Automatic Persistence**: All changes are automatically persisted without user intervention
+- **Reliable State Management**: Enhanced state management ensures data consistency
+- **Cross-Platform Compatibility**: Works reliably in both Tauri desktop and browser environments
+
 ### v3.0.1 - Bug Fix Release - January 2025
 
 #### 🐛 Critical Bug Fixes
