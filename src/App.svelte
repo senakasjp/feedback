@@ -1902,21 +1902,6 @@
 					</span>
 				</li>
 				<li class="nav-item">
-					<!-- Autosave Status Indicator -->
-					<span class="navbar-text me-3" title="Autosave Status">
-						{#if isSaving}
-							<i class="bi bi-arrow-clockwise text-warning" style="animation: spin 1s linear infinite;"></i>
-							<span class="ms-1">Saving...</span>
-						{:else if lastSaved}
-							<i class="bi bi-check-circle text-success"></i>
-							<span class="ms-1">Saved</span>
-						{:else}
-							<i class="bi bi-circle text-muted"></i>
-							<span class="ms-1">Ready</span>
-						{/if}
-					</span>
-				</li>
-				<li class="nav-item">
 					<button 
 						class="btn btn-outline-light btn-sm ms-2" 
 						onclick={toggleDarkMode}
