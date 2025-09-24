@@ -297,6 +297,20 @@
 		})
 	}
 
+	// Ensure categories have order field (migration function for existing data)
+	function ensureCategoriesHaveOrder(categories) {
+		if (!categories) return categories
+		return categories.map((category, index) => {
+			if (category.order === undefined) {
+				return {
+					...category,
+					order: index
+				}
+			}
+			return category
+		})
+	}
+
 
 	async function loadSubjects() {
 		try {
@@ -325,6 +339,15 @@
 				console.error('Failed to load from localStorage:', localError)
 			}
 		}
+		
+		// Migrate categories to have order field
+		subjects.forEach(subject => {
+			subject.assessments?.forEach(assessment => {
+				if (assessment.categories) {
+					assessment.categories = ensureCategoriesHaveOrder(assessment.categories)
+				}
+			})
+		})
 	}
 
 	async function saveSubjects() {
@@ -674,7 +697,8 @@
 				id: Date.now().toString(),
 				name: newCategoryName.trim(),
 				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined,
-				allocatedMarks: newCategoryAllocatedMarks ? parseFloat(newCategoryAllocatedMarks) : undefined
+				allocatedMarks: newCategoryAllocatedMarks ? parseFloat(newCategoryAllocatedMarks) : undefined,
+				order: currentAssessment.categories.length // Set order as the next index
 			}
 			
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
@@ -714,6 +738,104 @@
 					}
 				}
 			}
+		}
+	}
+
+	// Category reordering functions
+	function moveCategoryUp(categoryId) {
+		if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
+		
+		const categories = currentAssessment.categories
+		const currentCategory = categories.find(cat => cat.id === categoryId)
+		if (!currentCategory) return
+		
+		const currentOrder = currentCategory.order || 0
+		const previousCategory = categories.find(cat => (cat.order || 0) === currentOrder - 1)
+		
+		if (previousCategory) {
+			// Swap order values
+			const tempOrder = currentCategory.order
+			currentCategory.order = previousCategory.order
+			previousCategory.order = tempOrder
+			
+			// Update the current subject's assessments
+			if (currentSubject) {
+				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+				if (subjectIndex !== -1) {
+					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+					if (assessmentIndex !== -1) {
+						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+						saveSubjects()
+					}
+				}
+			}
+		}
+	}
+
+	function moveCategoryDown(categoryId) {
+		if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
+		
+		const categories = currentAssessment.categories
+		const currentCategory = categories.find(cat => cat.id === categoryId)
+		if (!currentCategory) return
+		
+		const currentOrder = currentCategory.order || 0
+		const nextCategory = categories.find(cat => (cat.order || 0) === currentOrder + 1)
+		
+		if (nextCategory) {
+			// Swap order values
+			const tempOrder = currentCategory.order
+			currentCategory.order = nextCategory.order
+			nextCategory.order = tempOrder
+			
+			// Update the current subject's assessments
+			if (currentSubject) {
+				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+				if (subjectIndex !== -1) {
+					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+					if (assessmentIndex !== -1) {
+						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+						saveSubjects()
+					}
+				}
+			}
+		}
+	}
+
+	// Paragraph reordering functions
+	function moveParagraphUp(paragraphIndex) {
+		if (currentStudentId) return // Only in assignment mode
+		
+		if (paragraphIndex > 0) {
+			// Swap with previous paragraph
+			[paragraphs[paragraphIndex], paragraphs[paragraphIndex - 1]] = [paragraphs[paragraphIndex - 1], paragraphs[paragraphIndex]]
+			
+			// Update order values
+			paragraphs.forEach((para, index) => {
+				if (typeof para === 'object' && para.id) {
+					para.order = index
+				}
+			})
+			
+			saveAssessmentData()
+		}
+	}
+
+	function moveParagraphDown(paragraphIndex) {
+		if (currentStudentId) return // Only in assignment mode
+		
+		if (paragraphIndex < paragraphs.length - 1) {
+			// Swap with next paragraph
+			[paragraphs[paragraphIndex], paragraphs[paragraphIndex + 1]] = [paragraphs[paragraphIndex + 1], paragraphs[paragraphIndex]]
+			
+			// Update order values
+			paragraphs.forEach((para, index) => {
+				if (typeof para === 'object' && para.id) {
+					para.order = index
+				}
+			})
+			
+			saveAssessmentData()
 		}
 	}
 
@@ -1723,8 +1845,15 @@
 		const grouped = {}
 		
 		// First, initialize all categories from the assessment (even if they have no paragraphs)
+		// Sort categories by order field if available
 		if (currentAssessment?.categories) {
-			currentAssessment.categories.forEach(category => {
+			const sortedCategories = [...currentAssessment.categories].sort((a, b) => {
+				const orderA = a.order !== undefined ? a.order : 999
+				const orderB = b.order !== undefined ? b.order : 999
+				return orderA - orderB
+			})
+			
+			sortedCategories.forEach(category => {
 				const groupKey = category.name
 				if (!grouped[groupKey]) {
 					grouped[groupKey] = {
@@ -2549,7 +2678,7 @@
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
-													{#each currentAssessment.categories as category}
+													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category, index}
 														<div class="d-flex align-items-center bg-light border rounded px-1 py-0 small">
 															<span class="text-muted me-1">
 																{category.name}
@@ -2557,13 +2686,13 @@
 																	<span class="text-primary fw-bold">({category.allocatedMarks})</span>
 																{/if}
 															</span>
-																	<button 
+															<button 
 																class="btn btn-sm p-0 border-0 text-danger" style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
-																		onclick={() => removeCategory(category.id)}
-																		title="Delete category"
-																	>
+																onclick={() => removeCategory(category.id)}
+																title="Delete category"
+															>
 																×
-																	</button>
+															</button>
 														</div>
 													{/each}
 												</div>
@@ -2597,7 +2726,7 @@
 																	bind:value={selectedCategory}
 																>
 																	<option value="">Choose a category...</option>
-																	{#each currentAssessment.categories as category}
+																	{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category}
 																		<option value={category.name}>{category.name}</option>
 																	{/each}
 																</select>
@@ -2703,7 +2832,7 @@
 										type="number" 
 										class="form-control form-control-sm w-auto" 
 										id="marks-{group.category}"
-										style="width: 80px;"
+										style="width: 60px;"
 										placeholder="0"
 										value={categoryMarks[group.category] || ''}
 										oninput={(e) => updateCategoryMarks(group.category, e.currentTarget.value)}
@@ -2714,6 +2843,31 @@
 																		<span class="text-white fw-bold" style="font-size: 0.9rem;">
 																			{currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
 																		</span>
+																	{/if}
+																	<!-- Category reordering buttons (only in assignment mode) -->
+																	{#if !currentStudentId}
+																		{@const categoryObj = currentAssessment.categories.find(cat => cat.name === group.category)}
+																		{@const categoryIndex = currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999)).findIndex(cat => cat.name === group.category)}
+																		<div class="d-flex flex-column">
+																			<button 
+																				class="btn btn-sm btn-outline-light" 
+																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
+																				onclick={() => moveCategoryUp(categoryObj.id)}
+																				title="Move category up"
+																				disabled={categoryIndex === 0}
+																			>
+																				<i class="bi bi-chevron-up"></i>
+																			</button>
+																			<button 
+																				class="btn btn-sm btn-outline-light" 
+																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
+																				onclick={() => moveCategoryDown(categoryObj.id)}
+																				title="Move category down"
+																				disabled={categoryIndex === currentAssessment.categories.length - 1}
+																			>
+																				<i class="bi bi-chevron-down"></i>
+																			</button>
+																		</div>
 																	{/if}
 																</div>
 															{/if}
@@ -2819,6 +2973,27 @@
 																					<i class="bi bi-x"></i>
 																				</button>
 																			{:else}
+																				<!-- Paragraph reordering buttons (only in assignment mode) -->
+																				{#if !currentStudentId}
+																					<button 
+																						class="btn btn-outline-secondary btn-sm" 
+																						onclick={() => moveParagraphUp(originalIndex)}
+																						title="Move paragraph up"
+																						aria-label="Move paragraph up"
+																						disabled={originalIndex === 0}
+																					>
+																						<i class="bi bi-chevron-up"></i>
+																					</button>
+																					<button 
+																						class="btn btn-outline-secondary btn-sm" 
+																						onclick={() => moveParagraphDown(originalIndex)}
+																						title="Move paragraph down"
+																						aria-label="Move paragraph down"
+																						disabled={originalIndex === paragraphs.length - 1}
+																					>
+																						<i class="bi bi-chevron-down"></i>
+																					</button>
+																				{/if}
 																				<button 
 																					class="btn btn-outline-primary btn-sm" 
 																					onclick={() => startEditParagraph(originalIndex)}

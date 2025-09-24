@@ -26,6 +26,7 @@ export interface Category {
 	description?: string;
 	knowledgeArea?: string;
 	allocatedMarks?: number;
+	order?: number;
 }
 
 export interface Paragraph {
