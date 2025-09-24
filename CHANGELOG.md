@@ -2,6 +2,73 @@
 
 ## Version History
 
+### v3.0.7 - Strict Saving Criteria and Student Photo Removal - January 2025
+
+#### 🔒 **CRITICAL FIXES: Data Contamination Prevention**
+- **Fixed Dataset Contamination**: Implemented strict saving criteria to prevent student data from contaminating assessment files
+- **Enhanced Save Validation**: Added multiple layers of validation to ensure data is saved to correct location
+- **Removed Student Photo System**: Completely removed student photo functionality - only header photos for assessments
+- **Strict Routing Logic**: Autosave system now strictly routes data based on student selection state
+
+#### 📋 **STRICT SAVING CRITERIA IMPLEMENTED**
+The application now enforces two strict saving rules:
+
+1. **Assessment Saving Rule**: Strictly save anything to Assessment if only a student is NOT selected
+   - Enhanced `saveAssessmentData()` with strict validation
+   - Returns early if student is selected
+   - Assignment files remain completely clean
+   - Console logging for verification
+
+2. **Student Saving Rule**: Strictly save anything to Student if only a student IS selected
+   - Enhanced `saveStudentEvaluation()` with strict validation
+   - Returns early if no student is selected
+   - Student files contain only student-specific data
+   - Console logging for verification
+
+#### 🖼️ **Student Photo System Removal**
+- **Complete Removal**: All `studentImage` references removed from codebase
+- **Header Photo Only**: Only assessment header photos are supported
+- **Clean Data Structure**: No photo data in student files
+- **Simplified UI**: Removed student photo upload functionality
+
+#### 🐛 Critical Bug Fixes
+- **Fixed Identical Paragraph Merging**: Resolved issue where identical assignment and student paragraphs were being displayed as separate versions
+- **Enhanced Text Normalization**: Improved paragraph comparison to handle whitespace and line ending differences
+- **Optimized Merging Logic**: Identical paragraphs now show only one version instead of duplicates
+
+### v3.0.6 - Strict Data Separation Policy Implementation - January 2025
+
+#### 📋 **STRICT DATA SEPARATION RULES**
+The application now follows three strict rules to prevent data confusion:
+
+1. **Assignment Data Rule**: Paragraphs when no student selected are assignment data
+   - Only assignment-level paragraphs are saved to assessment files
+   - Student-specific information is never stored in assignment data
+   - Assignment data remains clean and reusable across all students
+
+2. **Student Data Rule**: Anything saved when student is selected are student data
+   - All paragraphs, selections, and marks are saved to student-specific files
+   - Student data includes merged assignment + student-specific paragraphs
+   - Complete student evaluation data is preserved independently
+
+3. **Persistent Student Data Rule**: Student data should be saved even if not selected
+   - Autosave system automatically saves student data when student is selected
+   - Student evaluations persist regardless of current selection state
+   - Data integrity maintained across all application states
+
+#### 🔧 Technical Implementation
+- **Enhanced Autosave Logic**: Dual autosave system - assignment data when no student, student data when student selected
+- **Strict Save Validation**: `saveAssessmentData()` only saves when no student is selected
+- **Assignment Data Purity**: Assignment files never contain student-specific information
+- **Student Data Persistence**: Student evaluations saved automatically and independently
+- **Data Contamination Prevention**: Multiple validation layers prevent cross-contamination
+
+#### 🎯 User Experience Enhancements
+- **Clear Data Boundaries**: No confusion between assignment and student data
+- **Reliable Data Persistence**: Student work is always saved, regardless of selection state
+- **Clean Assignment Views**: Assignment data remains pure and reusable
+- **Consistent Behavior**: Predictable data flow across all application states
+
 ### v3.0.5 - Complete Data Separation and Contamination Prevention - January 2025
 
 #### 🐛 Critical Bug Fixes

@@ -1,6 +1,54 @@
-# Feedback Manager v3.0.5
+# Feedback Manager v3.0.7
 
-A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, and intelligent paragraph merging.
+A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, and contamination prevention.
+
+## 🎉 Version 3.0.7 - Strict Saving Criteria and Student Photo Removal
+
+This release implements critical fixes to prevent data contamination and removes the student photo system:
+
+### 🔒 **CRITICAL FIXES: Data Contamination Prevention**
+- **Fixed Dataset Contamination**: Implemented strict saving criteria to prevent student data from contaminating assessment files
+- **Enhanced Save Validation**: Added multiple layers of validation to ensure data is saved to correct location
+- **Removed Student Photo System**: Completely removed student photo functionality - only header photos for assessments
+- **Strict Routing Logic**: Autosave system now strictly routes data based on student selection state
+
+### 📋 **STRICT SAVING CRITERIA**
+The application now enforces two strict saving rules:
+
+1. **Assessment Saving Rule**: Strictly save anything to Assessment if only a student is NOT selected
+2. **Student Saving Rule**: Strictly save anything to Student if only a student IS selected
+
+### 🖼️ **Student Photo System Removal**
+- **Complete Removal**: All student photo references removed from codebase
+- **Header Photo Only**: Only assessment header photos are supported
+- **Clean Data Structure**: No photo data in student files
+
+## 🎉 Version 3.0.6 - Strict Data Separation Policy Implementation
+
+This release implements three strict rules to prevent data confusion and ensure clean data management:
+
+### 📋 **STRICT DATA SEPARATION RULES**
+
+1. **Assignment Data Rule**: Paragraphs when no student selected are assignment data
+   - Only assignment-level paragraphs are saved to assessment files
+   - Student-specific information is never stored in assignment data
+   - Assignment data remains clean and reusable across all students
+
+2. **Student Data Rule**: Anything saved when student is selected are student data
+   - All paragraphs, selections, and marks are saved to student-specific files
+   - Student data includes merged assignment + student-specific paragraphs
+   - Complete student evaluation data is preserved independently
+
+3. **Persistent Student Data Rule**: Student data should be saved even if not selected
+   - Autosave system automatically saves student data when student is selected
+   - Student evaluations persist regardless of current selection state
+   - Data integrity maintained across all application states
+
+### 🔧 Technical Implementation
+- **Enhanced Autosave Logic**: Dual autosave system - assignment data when no student, student data when student selected
+- **Strict Save Validation**: `saveAssessmentData()` only saves when no student is selected
+- **Assignment Data Purity**: Assignment files never contain student-specific information
+- **Student Data Persistence**: Student evaluations saved automatically and independently
 
 ## 🎉 Version 3.0.5 - Complete Data Separation and Contamination Prevention
 

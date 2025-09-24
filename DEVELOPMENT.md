@@ -1,5 +1,46 @@
 # Development Guide
 
+## Latest Updates (v3.0.7)
+
+### Critical Data Contamination Prevention
+- **Fixed Dataset Contamination**: Implemented strict saving criteria to prevent student data from contaminating assessment files
+- **Enhanced Save Validation**: Added multiple layers of validation to ensure data is saved to correct location
+- **Strict Routing Logic**: Autosave system now strictly routes data based on student selection state
+- **Console Logging**: Added comprehensive logging for verification and debugging
+
+### Strict Saving Criteria Implementation
+The application now enforces two strict saving rules:
+
+1. **Assessment Saving Rule**: Strictly save anything to Assessment if only a student is NOT selected
+2. **Student Saving Rule**: Strictly save anything to Student if only a student IS selected
+
+### Student Photo System Removal
+- **Complete Removal**: All `studentImage` references removed from codebase
+- **Header Photo Only**: Only assessment header photos are supported
+- **Clean Data Structure**: No photo data in student files
+- **Simplified UI**: Removed student photo upload functionality
+
+### Key Technical Changes
+- **Enhanced saveAssessmentData()**: Strict validation prevents saving when student is selected
+- **Enhanced saveStudentEvaluation()**: Strict validation requires student to be selected
+- **Dual Autosave System**: Assignment data when no student, student data when student selected
+- **Assignment Data Purity**: Assignment files never contain student-specific information
+- **Data Contamination Prevention**: Multiple validation layers prevent cross-contamination
+
+## Previous Updates (v3.0.6)
+
+### Strict Data Separation Policy Implementation
+The application now follows three strict rules to prevent data confusion:
+
+1. **Assignment Data Rule**: Paragraphs when no student selected are assignment data
+2. **Student Data Rule**: Anything saved when student is selected are student data  
+3. **Persistent Student Data Rule**: Student data should be saved even if not selected
+
+### Identical Paragraph Merging Fix
+- **Enhanced Text Normalization**: Improved paragraph comparison to handle whitespace and line ending differences
+- **Duplicate Prevention**: Identical assignment and student paragraphs now show only one version
+- **Smart Comparison**: Normalizes text before comparison to catch minor formatting differences
+
 ## Development Setup
 
 ### Environment Requirements

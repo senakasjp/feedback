@@ -4,6 +4,75 @@
 
 The Feedback Manager implements a sophisticated dual storage system that separates assignment-level paragraph storage from student-specific paragraph collections, enabling comprehensive feedback management across multiple assignments while maintaining data integrity.
 
+## Strict Data Separation Policy
+
+The application follows three strict rules to prevent data confusion and ensure clean data management:
+
+### Rule 1: Assignment Data Rule
+- **Definition**: Paragraphs when no student selected are assignment data
+- **Implementation**: Only assignment-level paragraphs are saved to assessment files
+- **Technical**: Assignment files never contain student-specific information
+- **Benefits**: Assignment data remains clean and reusable across all students
+
+### Rule 2: Student Data Rule
+- **Definition**: Anything saved when student is selected are student data
+- **Implementation**: All paragraphs, selections, and marks are saved to student-specific files
+- **Technical**: Student data includes merged assignment + student-specific paragraphs
+- **Benefits**: Complete student evaluation data is preserved independently
+
+### Rule 3: Persistent Student Data Rule
+- **Definition**: Student data should be saved even if not selected
+- **Implementation**: Autosave system automatically saves student data when student is selected
+- **Technical**: Data integrity maintained across all application states
+- **Benefits**: Student work is always saved, regardless of selection state
+
+### Implementation Details
+- **Dual Autosave System**: Assignment data when no student, student data when student selected
+- **Strict Save Validation**: `saveAssessmentData()` only saves when no student is selected
+- **Data Contamination Prevention**: Multiple validation layers prevent cross-contamination
+- **Assignment Data Purity**: Assignment files never contain student-specific information
+
+## Strict Saving Criteria Implementation (v3.0.7)
+
+### Critical Data Contamination Prevention
+The application now implements strict saving criteria to prevent dataset contamination:
+
+#### Assessment Saving Rule
+```javascript
+async function saveAssessmentData() {
+    // STRICT SAVING CRITERIA 1: Only save to Assessment if student is NOT selected
+    if (currentStudentId) {
+        console.log('STRICT SAVING CRITERIA: Cannot save assessment data when student is selected')
+        return
+    }
+    
+    // STRICT VALIDATION: Ensure no student-specific data is being saved to assessment
+    console.log('STRICT SAVING CRITERIA: Saving to assessment file - no student selected')
+    // ... save logic
+}
+```
+
+#### Student Saving Rule
+```javascript
+async function saveStudentEvaluation() {
+    // STRICT SAVING CRITERIA 2: Only save to Student if student IS selected
+    console.log('STRICT SAVING CRITERIA: Saving to student file - student selected')
+    
+    // STRICT VALIDATION: Ensure student is actually selected
+    if (!currentStudentId) {
+        console.log('STRICT SAVING CRITERIA: Cannot save student data when no student is selected')
+        return
+    }
+    // ... save logic
+}
+```
+
+### Student Photo System Removal
+- **Complete Removal**: All `studentImage` references removed from codebase
+- **Header Photo Only**: Only assessment header photos are supported
+- **Clean Data Structure**: No photo data in student files
+- **Simplified Architecture**: Removed student photo upload and storage functionality
+
 ## Application Structure
 
 ```
@@ -451,8 +520,9 @@ async function loadStudentEvaluation() {
 
 **Helper Functions**:
 ```javascript
-// Merge assignment and student paragraphs with index-based comparison
-// If paragraphs at the same index differ, include both versions
+// Merge assignment and student paragraphs with enhanced identical detection
+// If paragraphs at the same index differ, include both versions with source tracking
+// If paragraphs are identical (after normalization), show only one version
 function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
   const merged = []
   const maxLength = Math.max(assignmentParagraphs.length, studentParagraphs.length)
@@ -468,8 +538,17 @@ function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
     
     if (assignmentText && studentText) {
       // Both paragraphs exist at this index
-      if (assignmentText !== studentText) {
-        // Paragraphs are different - include both versions
+      // Normalize texts for comparison (trim whitespace and normalize line endings)
+      const normalizedAssignmentText = assignmentText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+      const normalizedStudentText = studentText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+      
+      if (normalizedAssignmentText !== normalizedStudentText) {
+        // Paragraphs are different - include both versions with source tracking
+        console.log(`Different paragraphs at index ${i}:`, {
+          assignment: normalizedAssignmentText,
+          student: normalizedStudentText
+        })
+        
         // Add assignment version with source marking
         merged.push({
           ...assignmentPara,
@@ -483,7 +562,8 @@ function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
           _source: 'student'
         })
       } else {
-        // Paragraphs are identical - add only one version
+        // Paragraphs are identical - add only one version (no duplicates)
+        console.log(`Identical paragraphs at index ${i} - showing only one version`)
         merged.push(assignmentPara)
       }
     } else if (assignmentText) {

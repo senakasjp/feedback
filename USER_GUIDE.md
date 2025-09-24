@@ -1,5 +1,48 @@
 # User Guide
 
+## Understanding Data Separation
+
+The Feedback Manager follows strict data separation rules to ensure clean and organized data management:
+
+### 📋 **Strict Saving Criteria (v3.0.7)**
+
+#### **Rule 1: Assessment Saving Rule**
+- **Strictly save anything to Assessment if only a student is NOT selected**
+- Assignment files remain completely clean and uncontaminated
+- No student data can ever be saved to assignment files
+- Enhanced validation prevents cross-contamination
+
+#### **Rule 2: Student Saving Rule**
+- **Strictly save anything to Student if only a student IS selected**
+- Student files contain only student-specific data
+- No assignment data can be saved to student files
+- Strict routing ensures data isolation
+
+### 📋 **Data Separation Rules (v3.0.6)**
+
+#### **Rule 1: Assignment Data**
+- When **no student is selected**, all paragraphs and data are saved to the **assignment file**
+- Assignment data remains clean and reusable across all students
+- No student-specific information is stored in assignment files
+
+#### **Rule 2: Student Data**
+- When **a student is selected**, all paragraphs and data are saved to the **student's specific file**
+- Student data includes both assignment paragraphs and student-specific modifications
+- Each student's work is preserved independently
+
+#### **Rule 3: Persistent Student Data**
+- Student data is **automatically saved** when a student is selected
+- Student work persists regardless of current selection state
+- Data integrity is maintained across all application states
+
+### **What This Means for You:**
+- **Assignment View**: When no student is selected, you see only assignment-level content
+- **Student View**: When a student is selected, you see merged assignment + student content
+- **Automatic Saving**: Your work is always saved to the appropriate location
+- **Data Isolation**: Assignment and student data never mix or contaminate each other
+- **No Student Photos**: Only assessment header photos are supported (student photo system removed)
+- **Clean Data**: No photo data in student files, simplified data structure
+
 ## Getting Started
 
 ### First Launch

@@ -1,5 +1,36 @@
 # Feedback Application Architecture Diagram
 
+## Latest Architecture Updates (v3.0.7)
+
+### Critical Data Contamination Prevention Architecture
+The application now implements strict saving criteria to prevent dataset contamination:
+
+1. **Assessment Saving Flow**: Data flows to assignment files ONLY when no student is selected
+2. **Student Saving Flow**: Data flows to student files ONLY when a student is selected
+3. **Strict Validation**: Multiple layers of validation prevent cross-contamination
+4. **Enhanced Routing**: Autosave system strictly routes data based on student selection state
+
+### Student Photo System Removal
+- **Complete Removal**: All `studentImage` references removed from architecture
+- **Header Photo Only**: Only assessment header photos are supported in data structure
+- **Clean Data Flow**: No photo data flows to student files
+- **Simplified Architecture**: Removed student photo upload and storage components
+
+## Previous Architecture Updates (v3.0.6)
+
+### Strict Data Separation Architecture
+The application now implements a strict data separation policy with three core rules:
+
+1. **Assignment Data Flow**: When no student is selected, data flows only to assignment files
+2. **Student Data Flow**: When a student is selected, data flows to student-specific files
+3. **Dual Autosave System**: Automatic routing of data to appropriate storage locations
+
+### Enhanced Paragraph Merging System
+- **Smart Comparison**: Normalized text comparison prevents duplicate identical paragraphs
+- **Source Tracking**: Each paragraph marked with origin (assignment vs student)
+- **Conflict Resolution**: Modified IDs prevent conflicts between assignment and student versions
+- **Visual Indicators**: Clear UI badges show paragraph source and differences
+
 ## File and Function Relationships
 
 ```

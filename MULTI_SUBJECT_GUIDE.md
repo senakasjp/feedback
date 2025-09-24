@@ -4,6 +4,39 @@
 
 The Feedback Manager has been enhanced to support multiple subjects, each containing multiple assessments. This allows for better organization of feedback data and separate PDF generation for different contexts.
 
+## Latest Data Separation Features (v3.0.7)
+
+### Critical Data Contamination Prevention
+- **Fixed Dataset Contamination**: Implemented strict saving criteria to prevent student data from contaminating assessment files
+- **Enhanced Save Validation**: Added multiple layers of validation to ensure data is saved to correct location
+- **Strict Routing Logic**: Autosave system now strictly routes data based on student selection state
+
+### Strict Saving Criteria Implementation
+The application now enforces two strict saving rules:
+
+1. **Assessment Saving Rule**: Strictly save anything to Assessment if only a student is NOT selected
+2. **Student Saving Rule**: Strictly save anything to Student if only a student IS selected
+
+### Student Photo System Removal
+- **Complete Removal**: All student photo references removed from codebase
+- **Header Photo Only**: Only assessment header photos are supported
+- **Clean Data Structure**: No photo data in student files
+
+## Previous Data Separation Features (v3.0.6)
+
+### Strict Data Separation Policy
+The application now follows three strict rules to ensure clean data management:
+
+1. **Assignment Data Rule**: When no student is selected, all data is saved to assignment files
+2. **Student Data Rule**: When a student is selected, all data is saved to student-specific files
+3. **Persistent Student Data Rule**: Student data is automatically saved and persists regardless of selection state
+
+### Enhanced Data Organization
+- **Assignment-Level Storage**: Clean, reusable assignment data across all students
+- **Student-Specific Storage**: Individual student modifications preserved independently
+- **Automatic Data Separation**: System prevents cross-contamination between assignment and student data
+- **Smart Paragraph Merging**: Identical paragraphs show only one version, different paragraphs show both with source indicators
+
 ## New Features
 
 ### 1. Hierarchical Structure

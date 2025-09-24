@@ -1,5 +1,40 @@
 # API Reference
 
+## Strict Data Separation Policy
+
+The application follows strict rules to prevent data confusion and contamination:
+
+### Strict Saving Criteria (v3.0.7)
+
+#### Rule 1: Assessment Saving Rule
+- **Definition**: Strictly save anything to Assessment if only a student is NOT selected
+- **Implementation**: Enhanced `saveAssessmentData()` with strict validation
+- **Technical**: Returns early if student is selected, prevents cross-contamination
+- **Validation**: Multiple layers of protection against data contamination
+
+#### Rule 2: Student Saving Rule
+- **Definition**: Strictly save anything to Student if only a student IS selected
+- **Implementation**: Enhanced `saveStudentEvaluation()` with strict validation
+- **Technical**: Returns early if no student is selected, ensures data isolation
+- **Validation**: Strict routing based on student selection state
+
+### Data Separation Rules (v3.0.6)
+
+#### Rule 1: Assignment Data Rule
+- **Definition**: Paragraphs when no student selected are assignment data
+- **Implementation**: Only assignment-level paragraphs are saved to assessment files
+- **Technical**: Assignment files never contain student-specific information
+
+#### Rule 2: Student Data Rule
+- **Definition**: Anything saved when student is selected are student data
+- **Implementation**: All paragraphs, selections, and marks are saved to student-specific files
+- **Technical**: Student data includes merged assignment + student-specific paragraphs
+
+#### Rule 3: Persistent Student Data Rule
+- **Definition**: Student data should be saved even if not selected
+- **Implementation**: Autosave system automatically saves student data when student is selected
+- **Technical**: Data integrity maintained across all application states
+
 ## Tauri Backend Commands
 
 ### File System Operations
@@ -1048,7 +1083,7 @@ async function loadStudentEvaluation() {
 }
 ```
 
-#### Merge Paragraphs (Index-Based Comparison)
+#### Merge Paragraphs (Index-Based with Enhanced Identical Detection)
 ```javascript
 function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
   const merged = [];
@@ -1067,8 +1102,17 @@ function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
     
     if (assignmentText && studentText) {
       // Both paragraphs exist at this index
-      if (assignmentText !== studentText) {
-        // Paragraphs are different - include both versions
+      // Normalize texts for comparison (trim whitespace and normalize line endings)
+      const normalizedAssignmentText = assignmentText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const normalizedStudentText = studentText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      
+      if (normalizedAssignmentText !== normalizedStudentText) {
+        // Paragraphs are different - include both versions with source tracking
+        console.log(`Different paragraphs at index ${i}:`, {
+          assignment: normalizedAssignmentText,
+          student: normalizedStudentText
+        });
+        
         // Add assignment version with source marking
         merged.push({
           ...assignmentPara,
@@ -1082,7 +1126,8 @@ function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
           _source: 'student'
         });
       } else {
-        // Paragraphs are identical - add only one version
+        // Paragraphs are identical - add only one version (no duplicates)
+        console.log(`Identical paragraphs at index ${i} - showing only one version`);
         merged.push(assignmentPara);
       }
     } else if (assignmentText) {
