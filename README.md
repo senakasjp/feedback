@@ -1,6 +1,25 @@
-# Feedback Manager v3.0.3
+# Feedback Manager v3.0.5
 
 A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, and intelligent paragraph merging.
+
+## 🎉 Version 3.0.5 - Complete Data Separation and Contamination Prevention
+
+This release completely fixes the issue where both assignment and student versions of paragraphs were being displayed when no student was selected:
+
+### 🐛 Critical Bug Fixes
+- **Fixed Merged Paragraph Display**: Resolved issue where both assignment and student versions of paragraphs were being displayed when no student was selected
+- **Prevented Assessment Data Contamination**: Fixed autosave system that was saving merged paragraphs to assessment files
+- **Added Paragraph Filtering**: Implemented strict filtering to remove student paragraphs from assignment-only views
+- **Enhanced Data Separation**: Complete separation between assignment and student data in all storage operations
+
+## 🎉 Version 3.0.4 - Assessment Data Contamination Fix
+
+This release fixes a critical bug where student data was being loaded when selecting an assessment without selecting a student:
+
+### 🐛 Critical Bug Fixes
+- **Fixed Assessment Data Contamination**: Resolved issue where student data was being loaded when selecting an assessment without selecting a student
+- **Strict Data Separation**: Assessment data files now properly separate assignment-level data from student-specific data
+- **Clean Assessment Loading**: When no student is selected, assessment data loading now ensures student-specific fields are cleared
 
 ## 🎉 Version 3.0.3 - Index-Based Paragraph Merging and Knowledge Area Improvements
 

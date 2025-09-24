@@ -2,6 +2,44 @@
 
 ## Version History
 
+### v3.0.5 - Complete Data Separation and Contamination Prevention - January 2025
+
+#### 🐛 Critical Bug Fixes
+- **Fixed Merged Paragraph Display**: Resolved issue where both assignment and student versions of paragraphs were being displayed when no student was selected
+- **Prevented Assessment Data Contamination**: Fixed autosave system that was saving merged paragraphs to assessment files
+- **Added Paragraph Filtering**: Implemented strict filtering to remove student paragraphs from assignment-only views
+- **Enhanced Data Separation**: Complete separation between assignment and student data in all storage operations
+
+#### 🔧 Technical Improvements
+- **Enhanced Autosave Logic**: Modified autosave to only save assessment data when no student is selected
+- **Strict Save Validation**: Added validation in `saveAssessmentData()` to prevent saving when student is selected
+- **Paragraph Source Filtering**: Added filtering logic to remove paragraphs with `_source: 'student'` or IDs ending with `_student`
+- **Data Contamination Prevention**: Implemented multiple layers of protection against cross-contamination
+
+#### 🎯 User Experience Enhancements
+- **Clean Assignment View**: Selecting an assessment without a student now shows only assignment paragraphs
+- **Proper Data Isolation**: No more mixed assignment/student paragraphs when viewing assignment-only data
+- **Reliable State Management**: Consistent behavior across all data loading and saving operations
+- **Backward Compatibility**: Existing contaminated data is automatically cleaned when loaded
+
+### v3.0.4 - Assessment Data Contamination Fix - January 2025
+
+#### 🐛 Critical Bug Fixes
+- **Fixed Assessment Data Contamination**: Resolved issue where student data was being loaded when selecting an assessment without selecting a student
+- **Strict Data Separation**: Assessment data files now properly separate assignment-level data from student-specific data
+- **Clean Assessment Loading**: When no student is selected, assessment data loading now ensures student-specific fields are cleared
+
+#### 🔧 Technical Improvements
+- **Enhanced `loadAssessmentData()` Function**: Added strict filtering to only load student data when a student is currently selected
+- **Improved `saveAssessmentData()` Function**: Modified to prevent saving student data when no student is selected
+- **Data Integrity Protection**: Prevents cross-contamination between assignment and student data in storage files
+- **Consistent Behavior**: Both Tauri and localStorage implementations now follow the same strict filtering rules
+
+#### 🎯 User Experience Enhancements
+- **Clean Assignment View**: Selecting an assessment without a student now shows only assignment paragraphs and data
+- **Proper Data Isolation**: Student-specific information no longer appears when viewing assignment-only data
+- **Reliable State Management**: Assessment selection now properly resets to clean state without student data interference
+
 ### v3.0.3 - Index-Based Paragraph Merging and Knowledge Area Improvements - January 2025
 
 #### 🚀 Major New Features

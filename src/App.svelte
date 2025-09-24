@@ -133,18 +133,22 @@
 	// Autosave for assessment data
 	$effect(() => {
 		if (autosaveEnabled && currentSubjectId && currentAssessmentId && !isSaving) {
-			// Watch for changes in assessment data
-			const assessmentData = {
-				paragraphs,
-				selectedParagraphs: Array.from(selectedParagraphs),
-				studentName,
-				studentImage,
-				categoryMarks,
-				manualTotalMarks
+			// STRICT FILTER: Only autosave assessment data when no student is selected
+			// When a student is selected, paragraphs contain merged data which should not be saved to assessment file
+			if (!currentStudentId) {
+				// Watch for changes in assessment data
+				const assessmentData = {
+					paragraphs,
+					selectedParagraphs: Array.from(selectedParagraphs),
+					studentName,
+					studentImage,
+					categoryMarks,
+					manualTotalMarks
+				}
+				
+				// Debounce the save operation
+				debouncedAutosave(saveAssessmentData)
 			}
-			
-			// Debounce the save operation
-			debouncedAutosave(saveAssessmentData)
 		}
 	})
 
@@ -163,15 +167,24 @@
 		}
 	})
 
-	// Update student name when currentStudentId changes
-	$effect(() => {
-		if (currentStudentId) {
+	// Handle student selection changes
+	$effect(async () => {
+		if (currentStudentId && currentView === 'feedback' && currentAssessmentId) {
 			const student = students.find(s => s.id === currentStudentId)
 			if (student) {
 				studentName = student.displayName
 			}
-		} else {
+		} else if (!currentStudentId && currentView === 'feedback' && currentAssessmentId) {
+			// Student deselected - ensure we show assignment-only data
+			console.log('STRICT FILTER: Student deselected via reactive effect - loading assignment-only data')
 			studentName = ''
+			studentImage = ''
+			selectedParagraphs = new Set()
+			categoryMarks = {}
+			manualTotalMarks = ''
+			
+			// Reload assignment paragraphs only (no student data)
+			await loadAssessmentData(currentSubjectId, currentAssessmentId, false)
 		}
 	})
 	
@@ -357,14 +370,36 @@
 			const data = await invoke('read_subject_data', { subjectId: `${subjectId}-${assessmentId}` })
 			if (data) {
 				const parsed = JSON.parse(data)
+				let loadedParagraphs = parsed.paragraphs || []
+				
+				// STRICT FILTER: When no student is selected, filter out any student paragraphs
+				// This handles cases where assessment data was previously contaminated with merged paragraphs
+				if (!currentStudentId) {
+					loadedParagraphs = loadedParagraphs.filter(para => {
+						// Filter out paragraphs with _source: 'student' or modified IDs ending with '_student'
+						if (para._source === 'student') return false
+						if (para.id && para.id.endsWith('_student')) return false
+						return true
+					})
+				}
+				
 				// Ensure paragraphs have IDs (migration for existing data)
-				paragraphs = ensureParagraphsHaveIds(parsed.paragraphs || [])
+				paragraphs = ensureParagraphsHaveIds(loadedParagraphs)
 				// Load all paragraphs but don't select any by default (unless preserving selections)
 				if (!preserveSelections) {
 					selectedParagraphs = new Set()
 				}
-				studentName = parsed.studentName || ''
-				studentImage = parsed.studentImage || ''
+				
+				// STRICT FILTER: Only load student data if a student is currently selected
+				if (currentStudentId) {
+					studentName = parsed.studentName || ''
+					studentImage = parsed.studentImage || ''
+				} else {
+					// No student selected - ensure student data is cleared
+					studentName = ''
+					studentImage = ''
+				}
+				
 				// Load assessment header photo if available
 				if (currentAssessment && parsed.headerPhoto) {
 					currentAssessment.headerPhoto = parsed.headerPhoto
@@ -384,14 +419,36 @@
 				const data = localStorage.getItem(key)
 				if (data) {
 					const parsed = JSON.parse(data)
+					let loadedParagraphs = parsed.paragraphs || []
+					
+					// STRICT FILTER: When no student is selected, filter out any student paragraphs
+					// This handles cases where assessment data was previously contaminated with merged paragraphs
+					if (!currentStudentId) {
+						loadedParagraphs = loadedParagraphs.filter(para => {
+							// Filter out paragraphs with _source: 'student' or modified IDs ending with '_student'
+							if (para._source === 'student') return false
+							if (para.id && para.id.endsWith('_student')) return false
+							return true
+						})
+					}
+					
 					// Ensure paragraphs have IDs (migration for existing data)
-					paragraphs = ensureParagraphsHaveIds(parsed.paragraphs || [])
+					paragraphs = ensureParagraphsHaveIds(loadedParagraphs)
 					// Load all paragraphs but don't select any by default (unless preserving selections)
 					if (!preserveSelections) {
 						selectedParagraphs = new Set()
 					}
-					studentName = parsed.studentName || ''
-					studentImage = parsed.studentImage || ''
+					
+					// STRICT FILTER: Only load student data if a student is currently selected
+					if (currentStudentId) {
+						studentName = parsed.studentName || ''
+						studentImage = parsed.studentImage || ''
+					} else {
+						// No student selected - ensure student data is cleared
+						studentName = ''
+						studentImage = ''
+					}
+					
 					// Load assessment header photo if available
 					if (currentAssessment && parsed.headerPhoto) {
 						currentAssessment.headerPhoto = parsed.headerPhoto
@@ -430,12 +487,20 @@
 
 	async function saveAssessmentData() {
 		if (!currentSubjectId || !currentAssessmentId) return
+		
+		// STRICT FILTER: Don't save assessment data when a student is selected
+		// This prevents merged paragraphs from being saved to the assessment file
+		if (currentStudentId) {
+			console.log('STRICT FILTER: Cannot save assessment data when student is selected - use saveStudentEvaluation instead')
+			return
+		}
 
 		const data = {
 			paragraphs,
 			selectedParagraphs: Array.from(selectedParagraphs),
-			studentName,
-			studentImage,
+			// STRICT FILTER: Only save student data if a student is currently selected
+			studentName: currentStudentId ? studentName : '',
+			studentImage: currentStudentId ? studentImage : '',
 			headerPhoto: currentAssessment?.headerPhoto || '',
 			categoryMarks,
 			manualTotalMarks
@@ -880,6 +945,22 @@
 		}
 		
 		currentStudentId = studentId
+		
+		// Handle student deselection (empty studentId)
+		if (!studentId || studentId === '') {
+			console.log('STRICT FILTER: Student deselected - loading assignment-only data')
+			// Clear student-specific data
+			studentName = ''
+			studentImage = ''
+			selectedParagraphs = new Set()
+			categoryMarks = {}
+			manualTotalMarks = ''
+			
+			// Reload assignment paragraphs only (no student data)
+			await loadAssessmentData(currentSubjectId, currentAssessmentId, false)
+			return
+		}
+		
 		const student = students.find(s => s.id === studentId)
 		if (student) {
 			studentName = student.displayName
