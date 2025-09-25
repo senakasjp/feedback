@@ -1,6 +1,16 @@
-# Feedback Manager v3.0.7
+# Feedback Manager v3.0.8
 
 A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, and contamination prevention.
+
+## 🎉 Version 3.0.8 - Critical Data Contamination Fix
+
+This release fixes a **critical data contamination issue** where student paragraphs from other assessments were being loaded:
+
+### 🚨 **CRITICAL DATA CONTAMINATION FIX**
+- **Fixed Cross-Assessment Data Loading**: `loadStudentParagraphs()` now filters paragraphs by current subject and assessment
+- **Added Context to New Paragraphs**: `addParagraph()` now includes `subjectId` and `assessmentId` in new paragraphs
+- **Strict Data Isolation**: Ensures data from other assessments cannot contaminate current assessment view
+- **Requirement Compliance**: Now fully complies with Requirement 7: "Under an assessment, strictly load only the data related to that assessment"
 
 ## 🎉 Version 3.0.7 - Strict Saving Criteria and Student Photo Removal
 
@@ -173,6 +183,35 @@ npm run tauri build
 - **Assessment Weighting**: Percentage-based assessment weights
 - **CSV Export**: Student marks table export functionality
 - **Cross-Platform**: Windows, macOS, and Linux support
+
+## Requirements Implementation Status
+
+### ✅ **Assessment Properties** (FULLY IMPLEMENTED)
+- **Header Photo**: Upload and display assessment header images
+- **Total Marks**: Automatic calculation and manual override support
+- **Categories**: Full CRUD operations for assessment categories
+- **Knowledge Areas**: Manage knowledge areas within assessments
+- **Paragraphs**: Complete paragraph management with editing and reordering
+- **Section Marks**: Individual marks for each category/section
+
+### ✅ **Student Properties** (FULLY IMPLEMENTED)
+- **Selected Paragraph Data**: Track which paragraphs are selected for each student
+- **Student-Specific Data**: All entered data is properly associated with selected students
+
+### ✅ **Data Isolation** (FULLY IMPLEMENTED)
+- **Assessment-Specific Loading**: Only loads data related to current assessment
+- **Student-Specific Loading**: Only loads data related to selected student
+- **Strict Data Separation**: Prevents cross-contamination between assessments and students
+
+### ✅ **Student Data Merging** (FULLY IMPLEMENTED)
+- **Smart Merging**: Merges identical paragraphs to avoid duplicates
+- **Separate Display**: Shows different versions separately when they differ
+- **Source Tracking**: Tracks whether paragraphs come from assignment or student data
+
+### ✅ **PDF Generation** (FULLY IMPLEMENTED)
+- **Selected Paragraphs Only**: Only prints paragraphs selected for the student
+- **Student-Specific**: Requires student selection before PDF generation
+- **Professional Formatting**: Includes student name, subject, assessment, and marks
 
 ## Architecture Overview
 

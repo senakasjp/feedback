@@ -3,32 +3,42 @@
     {
       "id": "mfugjvgtgi1ui58aemi",
       "text": "Sub Learning Objective 1.1: Text",
-      "color": "red"
+      "color": "red",
+      "originalIndex": 0,
+      "fullText": "Sub Learning Objective 1.1: Text"
     },
     {
       "id": "mfugk8jx11u32f3qdmp",
       "text": "Sub Learning Objective 1.2: GitHub is used. Code reviewing ws done evidence were added. Givehub Projects were used to complte the project.",
-      "color": "red"
+      "color": "red",
+      "originalIndex": 1,
+      "fullText": "Sub Learning Objective 1.2: GitHub is used. Code reviewing ws done evidence were added. Givehub Projects were used to complte the project."
     },
     {
       "id": "mfugkloce27ktipl0r",
       "text": "Sub Learning Objective 2.1: Based on customers requirements they have selected methodologies.",
-      "color": "red"
+      "color": "red",
+      "originalIndex": 2,
+      "fullText": "Sub Learning Objective 2.1: Based on customers requirements they have selected methodologies."
     },
     {
       "id": "mfugljm27777izlno3t",
       "text": "Sub Learning Objective 3.1: Discord, WhatsApp, Zoom, and emails as well. The student has added those to the portfolio.",
-      "color": "red"
+      "color": "red",
+      "originalIndex": 3,
+      "fullText": "Sub Learning Objective 3.1: Discord, WhatsApp, Zoom, and emails as well. The student has added those to the portfolio."
     },
     {
       "id": "mfuglv3kbeyz4nb8c2",
       "text": "Sub Learning Objective 3.2: Text",
-      "color": "red"
+      "color": "red",
+      "originalIndex": 4,
+      "fullText": "Sub Learning Objective 3.2: Text"
     }
   ],
   "selectedParagraphs": [],
-  "studentName": "Harikash Senthilkumar (1000115710)",
-  "studentImage": "",
+  "studentName": "",
+  "headerPhoto": "",
   "categoryMarks": {},
   "manualTotalMarks": ""
 }

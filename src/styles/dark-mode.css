@@ -279,9 +279,9 @@
 }
 
 [data-bs-theme="dark"] .paragraph-color-lightgreen {
-  background-color: rgba(144, 238, 144, 0.2) !important;
-  border-color: #90ee90 !important;
-  color: #a5d6a7 !important;
+  background-color: rgba(32, 201, 151, 0.2) !important;
+  border-color: #20c997 !important;
+  color: #20c997 !important;
 }
 
 [data-bs-theme="dark"] .paragraph-color-green {

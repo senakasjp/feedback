@@ -9,6 +9,12 @@
 	import AssessmentManager from './lib/AssessmentManager.svelte'
 	import Breadcrumb from './lib/Breadcrumb.svelte'
 	
+	// Import utility functions
+	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
+	
+	// Import constants
+	import { PDR_CATEGORIES, STUDIO4_CATEGORIES, STUDIO5_CATEGORIES } from './utils/constants.js'
+	
 	// Import CSS
 	import './styles/reset.css'
 	import './styles/design-system.css'
@@ -51,12 +57,7 @@
 	let editingParagraphIndex = $state(null) // Track which paragraph is being edited
 	let editingParagraphText = $state('') // Store text being edited
 
-	// Autosave functionality
-	let autosaveEnabled = $state(true) // Enable/disable autosave
-	let autosaveInterval = $state(2000) // Autosave interval in milliseconds (2 seconds)
-	let lastSaved = $state(null) // Track when data was last saved
-	let isSaving = $state(false) // Track if currently saving
-	let autosaveTimeout = null // Store timeout reference for debouncing
+	// Removed autosave functionality to prevent data contamination
 
 	// UI state
 	let showAddSubject = $state(false)
@@ -107,69 +108,11 @@
 		isDarkMode = !isDarkMode
 	}
 
-	// Autosave functionality
-	function debouncedAutosave(saveFunction, delay = autosaveInterval) {
-		// Clear existing timeout
-		if (autosaveTimeout) {
-			clearTimeout(autosaveTimeout)
-		}
-		
-		// Set new timeout
-		autosaveTimeout = setTimeout(async () => {
-			if (autosaveEnabled && !isSaving) {
-				isSaving = true
-				try {
-					await saveFunction()
-					lastSaved = new Date()
-				} catch (error) {
-					console.error('Autosave failed:', error)
-				} finally {
-					isSaving = false
-				}
-			}
-		}, delay)
-	}
+	// Removed debouncedAutosave function to prevent data contamination
 
-	// Autosave with STRICT SAVING CRITERIA
-	$effect(() => {
-		if (autosaveEnabled && currentSubjectId && currentAssessmentId && !isSaving) {
-			// STRICT SAVING CRITERIA 1: Only save to Assessment if student is NOT selected
-			if (!currentStudentId) {
-				console.log('STRICT SAVING CRITERIA: Autosaving to assessment file - no student selected')
-				// Watch for changes in assignment data only
-				const assessmentData = {
-					paragraphs,
-					selectedParagraphs: Array.from(selectedParagraphs),
-					studentName: '', // Assignment data should never contain student info
-					// No studentImage - only header photo for assessment
-					categoryMarks,
-					manualTotalMarks
-				}
-				
-				// Debounce the save operation
-				debouncedAutosave(saveAssessmentData)
-			} else {
-				// STRICT SAVING CRITERIA 2: Only save to Student if student IS selected
-				console.log('STRICT SAVING CRITERIA: Autosaving to student file - student selected')
-				debouncedAutosave(saveStudentEvaluation)
-			}
-		}
-	})
+	// Removed autosave effect to prevent data contamination
 
-	// Autosave for subject/student data
-	$effect(() => {
-		if (autosaveEnabled && !isSaving) {
-			// Watch for changes in subjects, students, or percentage ranges
-			const mainData = {
-				subjects,
-				students,
-				percentageRanges
-			}
-			
-			// Debounce the save operation
-			debouncedAutosave(saveSubjects)
-		}
-	})
+	// Removed autosave effect for subject/student data to prevent data contamination
 
 	// Handle student selection changes
 	$effect(() => {
@@ -220,96 +163,18 @@
 	let selectedTopic = $state('')
 	let selectedKnowledgeArea = $state('')
 	
-	let pdrCategories = [
-		'Sub Objective 1.1',
-		'Sub Objective 1.2', 
-		'Sub Objective 2.1',
-		'Sub Objective 2.2',
-		'Sub Objective 3.1',
-		'Sub Objective 3.2',
-		'Report',
-		'Decision'
-	]
+	// pdrCategories is now imported from utils/constants.js
 
-	// Category selection for Studio 4 PDR assessments
-	let studio4Categories = [
-		'Sub Learning Objective 1.1',
-		'Sub Learning Objective 1.2',
-		'Sub Learning Objective 2.1',
-		'Sub Learning Objective 2.2',
-		'Report',
-		'Decision'
-	]
+	// studio4Categories is now imported from utils/constants.js
 
-	// Category selection for Studio 5 PDR assessments
-	let studio5Categories = [
-		'Sub Objective 1.1',
-		'Sub Objective 1.2',
-		'Sub Objective 2.1',
-		'Sub Objective 3.1',
-		'Sub Objective 3.2',
-		'Sub Objective 3.3',
-		'Report',
-		'Decision'
-	]
+	// studio5Categories is now imported from utils/constants.js
 
-	// Generate unique ID
-	function generateId(text = '', index = 0) {
-		// Create deterministic ID based on text content and position
-		// This ensures the same paragraph always gets the same ID across sessions
-		const content = text || `paragraph-${index}`
-		let hash = 0
-		for (let i = 0; i < content.length; i++) {
-			const char = content.charCodeAt(i)
-			hash = ((hash << 5) - hash) + char
-			hash = hash & hash // Convert to 32-bit integer
-		}
-		return `para-${Math.abs(hash)}-${index}`
-	}
+	// generateId function is now imported from utils/helpers.js
 
 	// Ensure paragraphs have IDs (migration function for existing data)
-	function ensureParagraphsHaveIds(paragraphs) {
-		return paragraphs.map((para, index) => {
-			if (typeof para === 'string') {
-				return {
-					id: generateId(para, index),
-					text: para,
-					color: undefined,
-					originalIndex: index,
-					fullText: para
-				}
-			} else if (para && !para.id) {
-				return {
-					...para,
-					id: generateId(para.text || para, index),
-					originalIndex: index,
-					fullText: para.text || para
-				}
-			} else if (para && para.id) {
-				// Ensure existing objects have all required fields
-				return {
-					...para,
-					originalIndex: para.originalIndex !== undefined ? para.originalIndex : index,
-					fullText: para.fullText || para.text || para
-				}
-			}
-			return para
-		})
-	}
+	// ensureParagraphsHaveIds function is now imported from utils/helpers.js
 
-	// Ensure categories have order field (migration function for existing data)
-	function ensureCategoriesHaveOrder(categories) {
-		if (!categories) return categories
-		return categories.map((category, index) => {
-			if (category.order === undefined) {
-				return {
-					...category,
-					order: index
-				}
-			}
-			return category
-		})
-	}
+	// ensureCategoriesHaveOrder function is now imported from utils/helpers.js
 
 
 	async function loadSubjects() {
@@ -410,8 +275,39 @@
 					})
 				}
 				
+				// Debug: Check for duplicates before processing
+				console.log('ASSIGNMENT DEBUG: Raw loaded paragraphs:', {
+					count: loadedParagraphs.length,
+					paragraphs: loadedParagraphs.map(p => ({ 
+						text: typeof p === 'string' ? p : p.text, 
+						color: typeof p === 'string' ? '' : p.color,
+						id: typeof p === 'string' ? 'string' : p.id
+					}))
+				})
+				
+				// Check for duplicates by text and color
+				const uniqueParagraphs = []
+				const seen = new Set()
+				loadedParagraphs.forEach(para => {
+					const text = typeof para === 'string' ? para : para.text
+					const color = typeof para === 'string' ? '' : para.color
+					const key = `${text}|${color}`
+					if (!seen.has(key)) {
+						seen.add(key)
+						uniqueParagraphs.push(para)
+					} else {
+						console.log('DUPLICATE FOUND:', { text: text.substring(0, 50) + '...', color })
+					}
+				})
+				
+				console.log('ASSIGNMENT DEBUG: After deduplication:', {
+					originalCount: loadedParagraphs.length,
+					uniqueCount: uniqueParagraphs.length,
+					duplicatesRemoved: loadedParagraphs.length - uniqueParagraphs.length
+				})
+				
 				// Ensure paragraphs have IDs (migration for existing data)
-				paragraphs = ensureParagraphsHaveIds(loadedParagraphs)
+				paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
 				// Load all paragraphs but don't select any by default (unless preserving selections)
 				if (!preserveSelections) {
 					selectedParagraphs = new Set()
@@ -454,8 +350,39 @@
 						})
 					}
 					
+					// Debug: Check for duplicates before processing
+					console.log('ASSIGNMENT DEBUG (localStorage): Raw loaded paragraphs:', {
+						count: loadedParagraphs.length,
+						paragraphs: loadedParagraphs.map(p => ({ 
+							text: typeof p === 'string' ? p : p.text, 
+							color: typeof p === 'string' ? '' : p.color,
+							id: typeof p === 'string' ? 'string' : p.id
+						}))
+					})
+					
+					// Check for duplicates by text and color
+					const uniqueParagraphs = []
+					const seen = new Set()
+					loadedParagraphs.forEach(para => {
+						const text = typeof para === 'string' ? para : para.text
+						const color = typeof para === 'string' ? '' : para.color
+						const key = `${text}|${color}`
+						if (!seen.has(key)) {
+							seen.add(key)
+							uniqueParagraphs.push(para)
+						} else {
+							console.log('DUPLICATE FOUND (localStorage):', { text: text.substring(0, 50) + '...', color })
+						}
+					})
+					
+					console.log('ASSIGNMENT DEBUG (localStorage): After deduplication:', {
+						originalCount: loadedParagraphs.length,
+						uniqueCount: uniqueParagraphs.length,
+						duplicatesRemoved: loadedParagraphs.length - uniqueParagraphs.length
+					})
+					
 					// Ensure paragraphs have IDs (migration for existing data)
-					paragraphs = ensureParagraphsHaveIds(loadedParagraphs)
+					paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
 					// Load all paragraphs but don't select any by default (unless preserving selections)
 					if (!preserveSelections) {
 						selectedParagraphs = new Set()
@@ -672,7 +599,9 @@
 		paragraphs.push({
 			id: generateId(), // Add unique ID for reliable tracking
 			text: paragraphText,
-			color: selectedColor || undefined
+			color: selectedColor || undefined,
+			subjectId: currentSubjectId, // STRICT DATA ISOLATION: Add subject context
+			assessmentId: currentAssessmentId // STRICT DATA ISOLATION: Add assessment context
 		})
 		newParagraph = ''
 		// Keep knowledge area selection intact (like category selection)
@@ -956,6 +885,28 @@
 		}, 0)
 	}
 
+	// Calculate marks range based on color and allocated marks
+	function getMarksRange(color, allocatedMarks) {
+		if (!allocatedMarks || allocatedMarks <= 0) return null
+		
+		// Define percentage ranges for each color
+		const colorRanges = {
+			'green': { min: 0.8, max: 1.0 },      // 80-100%
+			'lightgreen': { min: 0.65, max: 0.79 }, // 65-79%
+			'yellow': { min: 0.5, max: 0.64 },     // 50-64%
+			'orange': { min: 0.4, max: 0.49 },     // 40-49%
+			'red': { min: 0.0, max: 0.39 }         // 0-39%
+		}
+		
+		const range = colorRanges[color]
+		if (!range) return null
+		
+		const minMarks = Math.round(allocatedMarks * range.min * 100) / 100
+		const maxMarks = Math.round(allocatedMarks * range.max * 100) / 100
+		
+		return `${minMarks}-${maxMarks}`
+	}
+
 	function updateTotalMarks(totalMarks) {
 		manualTotalMarks = totalMarks
 		// Autosave will handle saving automatically
@@ -963,9 +914,11 @@
 
 	// Notification Functions
 	function showSuccessNotification(message) {
+		console.log('NOTIFICATION DEBUG: Showing notification:', message)
 		notificationMessage = message
 		showNotification = true
 		setTimeout(() => {
+			console.log('NOTIFICATION DEBUG: Auto-hiding notification')
 			showNotification = false
 		}, 3000) // Auto-hide after 3 seconds
 	}
@@ -1196,13 +1149,106 @@
 		await loadAssessmentData(currentSubjectId, currentAssessmentId, true) // preserveSelections = true
 		const assignmentParagraphs = [...paragraphs]
 
-		// Load student paragraphs for this specific student
-		await loadStudentParagraphs()
-		const studentParagraphs = [...paragraphs]
+		// Load student paragraphs for this specific student (without overwriting assignment paragraphs)
+		const studentParagraphs = await loadStudentParagraphsForMerging()
 
-		// Merge assignment and student paragraphs (handle index-based differences)
-		const mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs)
-		paragraphs = mergedParagraphs
+		console.log('MERGE DEBUG: Before merging:', {
+			assignmentCount: assignmentParagraphs.length,
+			studentCount: studentParagraphs.length,
+			assignmentParagraphs: assignmentParagraphs.map(p => ({ 
+				text: typeof p === 'string' ? p : p.text, 
+				color: typeof p === 'string' ? '' : p.color 
+			})),
+			studentParagraphs: studentParagraphs.map(p => ({ 
+				text: typeof p === 'string' ? p : p.text, 
+				color: typeof p === 'string' ? '' : p.color 
+			}))
+		})
+
+		// Check if student paragraphs are identical to assignment paragraphs
+		let studentHasChanges = false
+		
+		// If no student paragraphs exist, treat as identical (merged)
+		if (studentParagraphs.length === 0) {
+			console.log('MERGE DEBUG: No student paragraphs found - treating as merged with assignment')
+			studentHasChanges = false
+		} else {
+			// CONTENT-BASED COMPARISON: Compare paragraphs by content, not by index
+			console.log('MERGE DEBUG: Starting content-based comparison')
+			
+			// Create normalized versions for comparison
+			const normalizedAssignmentParagraphs = assignmentParagraphs.map(para => {
+				const text = typeof para === 'string' ? para : para.text
+				const color = typeof para === 'object' ? para.color : ''
+				return {
+					text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
+					color: color || '',
+					original: para
+				}
+			})
+			
+			const normalizedStudentParagraphs = studentParagraphs.map(para => {
+				const text = typeof para === 'string' ? para : para.text
+				const color = typeof para === 'object' ? para.color : ''
+				return {
+					text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
+					color: color || '',
+					original: para
+				}
+			})
+			
+			// Check if all assignment paragraphs have matching student paragraphs
+			for (const assignmentPara of normalizedAssignmentParagraphs) {
+				const matchingStudentPara = normalizedStudentParagraphs.find(studentPara => 
+					studentPara.text === assignmentPara.text && studentPara.color === assignmentPara.color
+				)
+				
+				console.log(`MERGE DEBUG: Looking for match for assignment paragraph:`, {
+					assignmentText: assignmentPara.text.substring(0, 50) + '...',
+					assignmentColor: assignmentPara.color,
+					foundMatch: !!matchingStudentPara,
+					studentText: matchingStudentPara ? matchingStudentPara.text.substring(0, 50) + '...' : 'none',
+					studentColor: matchingStudentPara ? matchingStudentPara.color : 'none'
+				})
+				
+				if (!matchingStudentPara) {
+					studentHasChanges = true
+					console.log(`MERGE DEBUG: No matching student paragraph found - student has changes`)
+					break
+				}
+			}
+			
+			// Also check if there are extra student paragraphs not in assignment
+			if (!studentHasChanges) {
+				for (const studentPara of normalizedStudentParagraphs) {
+					const matchingAssignmentPara = normalizedAssignmentParagraphs.find(assignmentPara => 
+						assignmentPara.text === studentPara.text && assignmentPara.color === studentPara.color
+					)
+					
+					if (!matchingAssignmentPara) {
+						studentHasChanges = true
+						console.log(`MERGE DEBUG: Extra student paragraph found - student has changes`)
+						break
+					}
+				}
+			}
+		}
+		
+		let mergedParagraphs
+		if (!studentHasChanges) {
+			console.log('MERGE DEBUG: Student paragraphs are identical to assignment paragraphs - marking as merged')
+			// Mark assignment paragraphs as merged since they're identical to student paragraphs
+			mergedParagraphs = assignmentParagraphs.map(para => ({
+				...para,
+				_source: 'merged'
+			}))
+			paragraphs = mergedParagraphs
+		} else {
+			console.log('MERGE DEBUG: Student has changes - merging paragraphs')
+			// Merge assignment and student paragraphs (handle index-based differences)
+			mergedParagraphs = mergeParagraphs(assignmentParagraphs, studentParagraphs)
+			paragraphs = mergedParagraphs
+		}
 
 		// Load evaluation data to get selections and marks
 		let savedSelectedParagraphs = new Set()
@@ -1252,6 +1298,16 @@
 			}
 		}
 
+		console.log('SELECTION DEBUG: Before mapping:', {
+			savedSelectedParagraphs: Array.from(savedSelectedParagraphs),
+			assignmentCount: assignmentParagraphs.length,
+			studentCount: studentParagraphs.length,
+			mergedCount: mergedParagraphs.length,
+			assignmentIds: assignmentParagraphs.map(p => p?.id),
+			studentIds: studentParagraphs.map(p => p?.id),
+			mergedIds: mergedParagraphs.map(p => p?.id)
+		})
+
 		// Map saved selections to merged paragraph IDs
 		const mappedSelections = mapSelectionsToMergedParagraphs(
 			savedSelectedParagraphs, 
@@ -1259,6 +1315,11 @@
 			studentParagraphs, 
 			mergedParagraphs
 		)
+
+		console.log('SELECTION DEBUG: After mapping:', {
+			mappedSelections: Array.from(mappedSelections),
+			mappedCount: mappedSelections.size
+		})
 
 		// Apply the mapped selections and marks
 		selectedParagraphs = mappedSelections
@@ -1270,133 +1331,210 @@
 
 		// Selection mapping is now handled by mapSelectionsToMergedParagraphs above
 
-		if (savedSelectedParagraphs.size > 0 || Object.keys(savedCategoryMarks).length > 0) {
+		// Only show notification if we actually loaded some data
+		const hasLoadedData = savedSelectedParagraphs.size > 0 || Object.keys(savedCategoryMarks).length > 0 || savedStudentName || savedManualTotalMarks
+		
+		if (hasLoadedData) {
 			showSuccessNotification('Student evaluation data loaded successfully!')
 		} else {
-			showSuccessNotification('No saved data found for this student and assessment.')
+			// Don't show notification for empty data - this is normal for new students
+			console.log('No saved data found for this student and assessment - this is normal for new students')
 		}
 	}
 
 	// Helper function to merge assignment and student paragraphs
-	// If paragraphs at the same index differ, include both versions
+	// Uses content-based comparison instead of index-based comparison
 	function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
 		const merged = []
-		const maxLength = Math.max(assignmentParagraphs.length, studentParagraphs.length)
 		
-		// Process each index position
-		for (let i = 0; i < maxLength; i++) {
-			const assignmentPara = assignmentParagraphs[i]
-			const studentPara = studentParagraphs[i]
-			
-			// Get paragraph texts for comparison
-			const assignmentText = assignmentPara ? (typeof assignmentPara === 'string' ? assignmentPara : assignmentPara.text) : null
-			const studentText = studentPara ? (typeof studentPara === 'string' ? studentPara : studentPara.text) : null
-			
-			if (assignmentText && studentText) {
-				// Both paragraphs exist at this index
-				// Normalize texts for comparison (trim whitespace and normalize line endings)
-				const normalizedAssignmentText = assignmentText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-				const normalizedStudentText = studentText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-				
-				if (normalizedAssignmentText !== normalizedStudentText) {
-					// Paragraphs are different - include both versions
-					console.log(`Different paragraphs at index ${i}:`, {
-						assignment: normalizedAssignmentText,
-						student: normalizedStudentText
-					})
-					// Add assignment version with original ID
-					if (assignmentPara && typeof assignmentPara === 'object') {
-						merged.push({
-							...assignmentPara,
-							// Mark as assignment version for clarity
-							_source: 'assignment'
-						})
-					} else {
-						merged.push({
-							id: generateId(assignmentText, i),
-							text: assignmentText,
-							_source: 'assignment'
-						})
-					}
-					
-					// Add student version with modified ID to avoid conflicts
-					if (studentPara && typeof studentPara === 'object') {
-						merged.push({
-							...studentPara,
-							id: studentPara.id + '_student', // Modify ID to avoid conflicts
-							_source: 'student'
-						})
-					} else {
-						merged.push({
-							id: generateId(studentText, i) + '_student',
-							text: studentText,
-							_source: 'student'
-						})
-					}
-				} else {
-					// Paragraphs are identical - add only one version
-					console.log(`Identical paragraphs at index ${i} - showing only one version`)
-					if (assignmentPara && typeof assignmentPara === 'object') {
-						merged.push(assignmentPara)
-					} else {
-						merged.push({
-							id: generateId(assignmentText, i),
-							text: assignmentText
-						})
-					}
-				}
-			} else if (assignmentText) {
-				// Only assignment paragraph exists at this index
-				if (assignmentPara && typeof assignmentPara === 'object') {
-					merged.push(assignmentPara)
-				} else {
-					merged.push({
-						id: generateId(assignmentText, i),
-						text: assignmentText
-					})
-				}
-			} else if (studentText) {
-				// Only student paragraph exists at this index
-				if (studentPara && typeof studentPara === 'object') {
-					merged.push(studentPara)
-				} else {
-					merged.push({
-						id: generateId(studentText, i),
-						text: studentText
-					})
-				}
+		console.log('MERGE DEBUG: Starting content-based merge with:', {
+			assignmentCount: assignmentParagraphs.length,
+			studentCount: studentParagraphs.length,
+			assignmentParagraphs: assignmentParagraphs.map(p => ({ 
+				text: typeof p === 'string' ? p : p.text, 
+				color: typeof p === 'string' ? '' : p.color 
+			})),
+			studentParagraphs: studentParagraphs.map(p => ({ 
+				text: typeof p === 'string' ? p : p.text, 
+				color: typeof p === 'string' ? '' : p.color 
+			}))
+		})
+		
+		// Create normalized versions for comparison
+		const normalizedAssignmentParagraphs = assignmentParagraphs.map(para => {
+			const text = typeof para === 'string' ? para : para.text
+			const color = typeof para === 'object' ? para.color : ''
+			return {
+				text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
+				color: color || '',
+				original: para
 			}
-		}
+		})
 		
-		// Add any additional student paragraphs that don't have corresponding assignment paragraphs
-		for (let i = maxLength; i < studentParagraphs.length; i++) {
-			const studentPara = studentParagraphs[i]
-			const studentText = typeof studentPara === 'string' ? studentPara : studentPara.text
+		const normalizedStudentParagraphs = studentParagraphs.map(para => {
+			const text = typeof para === 'string' ? para : para.text
+			const color = typeof para === 'object' ? para.color : ''
+			return {
+				text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
+				color: color || '',
+				original: para
+			}
+		})
+		
+		// Process each assignment paragraph
+		for (let i = 0; i < normalizedAssignmentParagraphs.length; i++) {
+			const assignmentPara = normalizedAssignmentParagraphs[i]
 			
-			// Check if this paragraph already exists in merged array
-			const exists = merged.some(mergedPara => {
-				const mergedText = typeof mergedPara === 'string' ? mergedPara : mergedPara.text
-				return mergedText === studentText
+			// Find matching student paragraph by content
+			const matchingStudentIndex = normalizedStudentParagraphs.findIndex(studentPara => 
+				studentPara.text === assignmentPara.text && studentPara.color === assignmentPara.color
+			)
+			
+			console.log(`MERGE DEBUG: Processing assignment paragraph ${i}:`, {
+				assignmentText: assignmentPara.text.substring(0, 50) + '...',
+				assignmentColor: assignmentPara.color,
+				matchingStudentIndex,
+				studentText: matchingStudentIndex >= 0 ? normalizedStudentParagraphs[matchingStudentIndex].text.substring(0, 50) + '...' : 'none'
 			})
 			
-			if (!exists) {
-				if (studentPara && typeof studentPara === 'object') {
-					merged.push(studentPara)
+			if (matchingStudentIndex >= 0) {
+				// Found matching student paragraph - merge them
+				console.log(`MERGE DEBUG: Found matching student paragraph - merging`)
+				const assignmentOriginal = assignmentPara.original
+				
+				if (assignmentOriginal && typeof assignmentOriginal === 'object') {
+					merged.push({
+						...assignmentOriginal,
+						_source: 'merged' // Mark as merged content
+					})
 				} else {
 					merged.push({
-						id: generateId(studentText, i),
-						text: studentText
+						id: generateId(assignmentPara.text, i),
+						text: assignmentPara.text,
+						color: assignmentPara.color,
+						_source: 'merged' // Mark as merged content
+					})
+				}
+				
+				// Remove the matched student paragraph from the list
+				normalizedStudentParagraphs.splice(matchingStudentIndex, 1)
+			} else {
+				// No matching student paragraph - add assignment version only
+				console.log(`MERGE DEBUG: No matching student paragraph - adding assignment version only`)
+				const assignmentOriginal = assignmentPara.original
+				
+				if (assignmentOriginal && typeof assignmentOriginal === 'object') {
+					merged.push({
+						...assignmentOriginal,
+						_source: 'assignment'
+					})
+				} else {
+					merged.push({
+						id: generateId(assignmentPara.text, i),
+						text: assignmentPara.text,
+						color: assignmentPara.color,
+						_source: 'assignment'
 					})
 				}
 			}
 		}
 		
-		return merged
+		// Add any remaining student paragraphs (those that don't match any assignment paragraph)
+		for (let i = 0; i < normalizedStudentParagraphs.length; i++) {
+			const studentPara = normalizedStudentParagraphs[i]
+			console.log(`MERGE DEBUG: Adding unmatched student paragraph:`, {
+				studentText: studentPara.text.substring(0, 50) + '...',
+				studentColor: studentPara.color
+			})
+			
+			const studentOriginal = studentPara.original
+			if (studentOriginal && typeof studentOriginal === 'object') {
+				merged.push({
+					...studentOriginal,
+					id: studentOriginal.id + '_student', // Modify ID to avoid conflicts
+					_source: 'student'
+				})
+			} else {
+				merged.push({
+					id: generateId(studentPara.text, i) + '_student',
+					text: studentPara.text,
+					color: studentPara.color,
+					_source: 'student'
+				})
+			}
+		}
+		
+		console.log('MERGE DEBUG: Final merged result:', {
+			totalMerged: merged.length,
+			assignmentVersions: merged.filter(p => p._source === 'assignment').length,
+			studentVersions: merged.filter(p => p._source === 'student').length,
+			mergedVersions: merged.filter(p => p._source === 'merged').length,
+			mergedParagraphs: merged.map(p => ({ 
+				text: typeof p === 'string' ? p : p.text, 
+				color: typeof p === 'string' ? '' : p.color,
+				source: p._source || 'no-source',
+				id: typeof p === 'string' ? 'string' : p.id
+			})),
+			allIds: merged.map(p => typeof p === 'string' ? 'string' : p.id),
+			uniqueIds: [...new Set(merged.map(p => typeof p === 'string' ? 'string' : p.id))],
+			duplicateIds: merged.map(p => typeof p === 'string' ? 'string' : p.id).filter((id, index, arr) => arr.indexOf(id) !== index)
+		})
+		
+		// Check for duplicates in merged result
+		const mergedTexts = merged.map(p => typeof p === 'string' ? p : p.text)
+		const duplicateTexts = mergedTexts.filter((text, index) => mergedTexts.indexOf(text) !== index)
+		if (duplicateTexts.length > 0) {
+			console.error('MERGE DEBUG: DUPLICATES FOUND IN MERGED RESULT:', duplicateTexts)
+		}
+		
+		// CRITICAL FIX: Ensure all paragraphs have unique IDs
+		const uniqueIds = new Set()
+		const fixedMerged = merged.map((para, index) => {
+			let currentId = typeof para === 'string' ? generateId(para, index) : para.id
+			
+			// If ID already exists, generate a new unique one
+			if (uniqueIds.has(currentId)) {
+				currentId = generateId(typeof para === 'string' ? para : para.text, index + 1000) // Add offset to ensure uniqueness
+				console.log(`MERGE DEBUG: Fixed duplicate ID for paragraph ${index}:`, currentId)
+			}
+			
+			uniqueIds.add(currentId)
+			
+			if (typeof para === 'string') {
+				return {
+					id: currentId,
+					text: para,
+					color: '',
+					originalIndex: index,
+					fullText: para
+				}
+			} else {
+				return {
+					...para,
+					id: currentId
+				}
+			}
+		})
+		
+		console.log('MERGE DEBUG: After ID fix:', {
+			totalParagraphs: fixedMerged.length,
+			uniqueIds: [...uniqueIds],
+			allIds: fixedMerged.map(p => p.id)
+		})
+		
+		return fixedMerged
 	}
 
 	// Helper function to map saved selections to merged paragraph IDs
 	function mapSelectionsToMergedParagraphs(savedSelections, assignmentParagraphs, studentParagraphs, mergedParagraphs) {
 		const mappedSelections = new Set()
+		
+		console.log('DEBUG: mapSelectionsToMergedParagraphs called with:', {
+			savedSelections: Array.from(savedSelections),
+			assignmentParagraphs: assignmentParagraphs.length,
+			studentParagraphs: studentParagraphs.length,
+			mergedParagraphs: mergedParagraphs.length
+		})
 		
 		// Create maps to find paragraph by ID
 		const assignmentParagraphMap = new Map()
@@ -1420,14 +1558,26 @@
 			}
 		})
 		
+		console.log('DEBUG: Paragraph maps created:', {
+			assignmentMapSize: assignmentParagraphMap.size,
+			studentMapSize: studentParagraphMap.size,
+			mergedMapSize: mergedParagraphMap.size,
+			mergedParagraphIds: Array.from(mergedParagraphMap.keys())
+		})
+		
 		// Map each saved selection (now treating as IDs)
 		for (const savedId of savedSelections) {
+			console.log(`DEBUG: Checking saved ID: ${savedId}`)
 			// Check if this ID exists in the merged paragraphs
 			if (mergedParagraphMap.has(savedId)) {
+				console.log(`DEBUG: Found saved ID ${savedId} in merged paragraphs`)
 				mappedSelections.add(savedId)
+			} else {
+				console.log(`DEBUG: Saved ID ${savedId} NOT found in merged paragraphs`)
 			}
 		}
 		
+		console.log('DEBUG: Final mapped selections:', Array.from(mappedSelections))
 		return mappedSelections
 	}
 
@@ -1456,8 +1606,26 @@
 		}
 
 		// Add current paragraphs to student paragraphs (avoid duplicates)
-		const currentParagraphs = [...paragraphs]
-		const combinedParagraphs = [...existingStudentParagraphs]
+		const currentParagraphs = paragraphs.map(para => ({
+			...para,
+			subjectId: currentSubjectId, // STRICT DATA ISOLATION: Add subject context
+			assessmentId: currentAssessmentId // STRICT DATA ISOLATION: Add assessment context
+		}))
+		
+		// Migrate legacy paragraphs by adding missing subjectId/assessmentId
+		const migratedExistingParagraphs = existingStudentParagraphs.map(para => {
+			if (!para.subjectId || !para.assessmentId) {
+				console.log('MIGRATION: Adding subjectId/assessmentId to legacy paragraph:', para.text?.substring(0, 50))
+				return {
+					...para,
+					subjectId: currentSubjectId,
+					assessmentId: currentAssessmentId
+				}
+			}
+			return para
+		})
+		
+		const combinedParagraphs = [...migratedExistingParagraphs]
 		
 		// Add new paragraphs that don't already exist in student storage
 		currentParagraphs.forEach(para => {
@@ -1497,10 +1665,32 @@
 			})
 			if (data) {
 				const studentData = JSON.parse(data)
-				// Load ALL student paragraphs (replace current paragraphs)
-				const studentParagraphs = studentData.paragraphs || []
+				const allStudentParagraphs = studentData.paragraphs || []
+				
+				// STRICT DATA ISOLATION: Filter paragraphs by current subject and assessment
+				// CRITICAL FIX: Only include paragraphs that match current context
+				const filteredParagraphs = allStudentParagraphs.filter(para => {
+					// If paragraph has subjectId and assessmentId, use strict filtering
+					if (para.subjectId && para.assessmentId) {
+						const matches = para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+						if (!matches) {
+							console.log('FILTERED OUT: Paragraph from different assignment:', {
+								paraSubjectId: para.subjectId,
+								paraAssessmentId: para.assessmentId,
+								currentSubjectId,
+								currentAssessmentId,
+								text: para.text?.substring(0, 50)
+							})
+						}
+						return matches
+					}
+					// CRITICAL FIX: Exclude legacy paragraphs without context to prevent contamination
+					console.log('FILTERED OUT: Legacy paragraph without subjectId/assessmentId:', para.text?.substring(0, 50))
+					return false
+				})
+				
 				// Ensure paragraphs have IDs (migration for existing data)
-				paragraphs = ensureParagraphsHaveIds(studentParagraphs)
+				paragraphs = ensureParagraphsHaveIds(filteredParagraphs)
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -1508,11 +1698,88 @@
 			const data = localStorage.getItem(key)
 			if (data) {
 				const studentData = JSON.parse(data)
-				const studentParagraphs = studentData.paragraphs || []
+				const allStudentParagraphs = studentData.paragraphs || []
+				
+				// STRICT DATA ISOLATION: Filter paragraphs by current subject and assessment
+				// For legacy data without subjectId/assessmentId, include them (migration fallback)
+				const filteredParagraphs = allStudentParagraphs.filter(para => {
+					// If paragraph has subjectId and assessmentId, use strict filtering
+					if (para.subjectId && para.assessmentId) {
+						return para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+					}
+					// For legacy paragraphs without context, include them (will be migrated on next save)
+					console.log('LEGACY DATA: Including paragraph without subjectId/assessmentId for migration:', para.text?.substring(0, 50))
+					return true
+				})
+				
 				// Ensure paragraphs have IDs (migration for existing data)
-				paragraphs = ensureParagraphsHaveIds(studentParagraphs)
+				paragraphs = ensureParagraphsHaveIds(filteredParagraphs)
 			}
 		}
+	}
+
+	// Load student paragraphs for merging (without overwriting paragraphs variable)
+	async function loadStudentParagraphsForMerging() {
+		if (!currentStudentId) return []
+
+		try {
+			const data = await invoke('read_student_paragraphs', { 
+				studentId: currentStudentId
+			})
+			if (data) {
+				const studentData = JSON.parse(data)
+				const allStudentParagraphs = studentData.paragraphs || []
+				
+				// STRICT DATA ISOLATION: Filter paragraphs by current subject and assessment
+				// CRITICAL FIX: Only include paragraphs that match current context
+				const filteredParagraphs = allStudentParagraphs.filter(para => {
+					// If paragraph has subjectId and assessmentId, use strict filtering
+					if (para.subjectId && para.assessmentId) {
+						const matches = para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+						if (!matches) {
+							console.log('MERGE FILTERED OUT: Paragraph from different assignment:', {
+								paraSubjectId: para.subjectId,
+								paraAssessmentId: para.assessmentId,
+								currentSubjectId,
+								currentAssessmentId,
+								text: para.text?.substring(0, 50)
+							})
+						}
+						return matches
+					}
+					// CRITICAL FIX: Exclude legacy paragraphs without context to prevent contamination
+					console.log('MERGE FILTERED OUT: Legacy paragraph without subjectId/assessmentId:', para.text?.substring(0, 50))
+					return false
+				})
+				
+				// Ensure paragraphs have IDs (migration for existing data)
+				return ensureParagraphsHaveIds(filteredParagraphs)
+			}
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-paragraphs-${currentStudentId}`
+			const data = localStorage.getItem(key)
+			if (data) {
+				const studentData = JSON.parse(data)
+				const allStudentParagraphs = studentData.paragraphs || []
+				
+				// STRICT DATA ISOLATION: Filter paragraphs by current subject and assessment
+				// For legacy data without subjectId/assessmentId, include them (migration fallback)
+				const filteredParagraphs = allStudentParagraphs.filter(para => {
+					// If paragraph has subjectId and assessmentId, use strict filtering
+					if (para.subjectId && para.assessmentId) {
+						return para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+					}
+					// For legacy paragraphs without context, include them (will be migrated on next save)
+					console.log('LEGACY DATA: Including paragraph without subjectId/assessmentId for migration:', para.text?.substring(0, 50))
+					return true
+				})
+				
+				// Ensure paragraphs have IDs (migration for existing data)
+				return ensureParagraphsHaveIds(filteredParagraphs)
+			}
+		}
+		return []
 	}
 
 	// Helper function to check if current assessment is Studio 6 PDR
@@ -1575,25 +1842,31 @@
 		
 		// Fallback to hardcoded categories for specific PDR assessments
 		if (isStudio6PDR()) {
-			return pdrCategories
+			return PDR_CATEGORIES
 		} else if (isStudio4PDR()) {
-			return studio4Categories
+			return STUDIO4_CATEGORIES
 		} else if (isStudio5PDR()) {
-			return studio5Categories
+			return STUDIO5_CATEGORIES
 		}
 		return []
 	}
 
-	function toggleParagraph(index) {
-		const paragraphId = paragraphs[index]?.id
+	function toggleParagraph(paragraphId) {
 		if (!paragraphId) return
+		
+		console.log('DEBUG: toggleParagraph called with ID:', paragraphId)
+		console.log('DEBUG: Current selectedParagraphs:', Array.from(selectedParagraphs))
 		
 		if (selectedParagraphs.has(paragraphId)) {
 			selectedParagraphs.delete(paragraphId)
+			console.log('DEBUG: Removed paragraph ID:', paragraphId)
 		} else {
 			selectedParagraphs.add(paragraphId)
+			console.log('DEBUG: Added paragraph ID:', paragraphId)
 		}
 		selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
+		
+		console.log('DEBUG: Updated selectedParagraphs:', Array.from(selectedParagraphs))
 		
 		// Update warnings for all categories with marks
 		Object.keys(categoryMarks).forEach(category => {
@@ -1665,91 +1938,11 @@
 		}
 	}
 
-	// Helper function to extract main text from paragraph (without prefixes)
-	function extractMainTextFromParagraph(paragraphText) {
-		let text = paragraphText
-		
-		// Remove category prefix (format: "Category: text")
-		if (text.includes(': ')) {
-			const parts = text.split(': ')
-			if (parts.length >= 2) {
-				text = parts.slice(1).join(': ')
-			}
-		}
-		
-		// Remove knowledge area suffix (format: "text - Knowledge Area")
-		if (text.includes(' - ')) {
-			const parts = text.split(' - ')
-			if (parts.length >= 2) {
-				// Check if the last part looks like a knowledge area (not a category)
-				const lastPart = parts[parts.length - 1]
-				if (!lastPart.includes(':')) {
-					text = parts.slice(0, -1).join(' - ')
-				}
-			}
-		}
-		
-		return text
-	}
+	// extractMainTextFromParagraph function is now imported from utils/helpers.js
 
-	// Helper function to reconstruct paragraph text with original prefixes
-	function reconstructParagraphText(originalText, newMainText) {
-		let categoryPrefix = ''
-		let knowledgeAreaSuffix = ''
-		
-		// Extract category prefix from original text
-		if (originalText.includes(': ')) {
-			const parts = originalText.split(': ')
-			if (parts.length >= 2) {
-				categoryPrefix = parts[0] + ': '
-			}
-		}
-		
-		// Extract knowledge area suffix from original text
-		if (originalText.includes(' - ')) {
-			const parts = originalText.split(' - ')
-			if (parts.length >= 2) {
-				// Check if the last part looks like a knowledge area (not a category)
-				const lastPart = parts[parts.length - 1]
-				if (!lastPart.includes(':')) {
-					knowledgeAreaSuffix = ' - ' + lastPart
-				}
-			}
-		}
-		
-		// Reconstruct: Category: MainText - KnowledgeArea
-		return categoryPrefix + newMainText + knowledgeAreaSuffix
-	}
+	// reconstructParagraphText function is now imported from utils/helpers.js
 
-	function getSectionOrder(paragraph) {
-		// Check for Sub Objective patterns (Studio 6 and Studio 5) and extract numbers
-		const subObjectiveMatch = paragraph.match(/^Sub Objective (\d)\.(\d):/i)
-		if (subObjectiveMatch) {
-			const major = parseInt(subObjectiveMatch[1])
-			const minor = parseInt(subObjectiveMatch[2])
-			// Create numeric order: 1.1=11, 1.2=12, 2.1=21, 2.2=22, 3.1=31, 3.2=32, 3.3=33
-			return major * 10 + minor
-		}
-
-		// Check for Sub Learning Objective patterns (Studio 4) and extract numbers
-		const subLearningObjectiveMatch = paragraph.match(/^Sub Learning Objective (\d)\.(\d):/i)
-		if (subLearningObjectiveMatch) {
-			const major = parseInt(subLearningObjectiveMatch[1])
-			const minor = parseInt(subLearningObjectiveMatch[2])
-			// Create numeric order: 1.1=11, 1.2=12, 2.1=21, 2.2=22
-			return major * 10 + minor
-		}
-		
-		// Check for Report and Decision
-		if (paragraph.match(/^Report:/i)) {
-			return 100 // After all sub objectives
-		}
-		if (paragraph.match(/^Decision:/i)) {
-			return 101 // After Report
-		}
-		
-		return 999 // Paragraphs without sections go to the end
-	}
+	// getSectionOrder function is now imported from utils/helpers.js
 
 	function getOrderedParagraphs() {
 		const ordered = paragraphs
@@ -1786,59 +1979,13 @@
 		return ordered
 	}
 
-	function getColorBadgeClass(color) {
-		switch(color) {
-			case 'red': return 'bg-danger'
-			case 'orange': return 'bg-warning'
-			case 'yellow': return 'bg-warning text-dark'
-			case 'lightgreen': return 'bg-light text-success border border-success'
-			case 'green': return 'bg-success'
-			case '': return 'bg-light text-muted border'
-			default: return 'bg-secondary'
-		}
-	}
+	// getColorBadgeClass function is now imported from utils/helpers.js
 
-	function getColorHex(color) {
-		switch(color) {
-			case 'red': return '#dc3545'
-			case 'orange': return '#fd7e14'
-			case 'yellow': return '#ffc107'
-			case 'lightgreen': return '#90EE90'
-			case 'green': return '#198754'
-			default: return '#6c757d'
-		}
-	}
+	// getColorHex function is now imported from utils/helpers.js
 
-	function cleanParagraphTextForDisplay(text) {
-		// Remove knowledge area suffix (format: "text - Knowledge Area")
-		if (text.includes(' - ')) {
-			const parts = text.split(' - ')
-			if (parts.length >= 2) {
-				// Check if the last part looks like a knowledge area (not a category)
-				// Categories have format "Category: text", knowledge areas are just "Knowledge Area"
-				const lastPart = parts[parts.length - 1]
-				if (!lastPart.includes(':')) {
-					return parts.slice(0, -1).join(' - ')
-				}
-			}
-		}
-		return text
-	}
+	// cleanParagraphTextForDisplay function is now imported from utils/helpers.js
 
-	function extractKnowledgeArea(text) {
-		// Extract knowledge area from paragraph text (format: "text - Knowledge Area")
-		if (text.includes(' - ')) {
-			const parts = text.split(' - ')
-			if (parts.length >= 2) {
-				// Check if the last part looks like a knowledge area (not a category)
-				const lastPart = parts[parts.length - 1]
-				if (!lastPart.includes(':')) {
-					return lastPart
-				}
-			}
-		}
-		return null
-	}
+	// extractKnowledgeArea function is now imported from utils/helpers.js
 
 	function getGroupedParagraphs() {
 		const ordered = getOrderedParagraphs()
@@ -2507,7 +2654,7 @@
 												<div class="mt-2">
 													<div class="alert alert-info py-2 mb-0">
 														<i class="bi bi-person-check me-2"></i>
-														<strong>Selected Student:</strong> {studentName || 'Loading...'}
+														<strong>Selected Student:</strong> {getCurrentStudent()?.displayName || 'Loading...'}
 													</div>
 												</div>
 											{/if}
@@ -2903,15 +3050,22 @@
 																<div class="border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
 																	<div class="d-flex align-items-start">
 																		{#if currentStudentId}
-																			<div class="form-check me-3">
+																			<div class="form-check me-3 d-flex align-items-center">
 																				<input 
-																					class="form-check-input form-check-input-lg" 
+																					class="form-check-input" 
 																					type="checkbox" 
-																					id="paragraph-{originalIndex}"
+																					id="paragraph-{id}"
 																					checked={selectedParagraphs.has(id)}
-																					onchange={() => toggleParagraph(originalIndex)}
+																					onchange={() => {
+																						console.log('CHECKBOX DEBUG: Clicked checkbox with ID:', id)
+																						console.log('CHECKBOX DEBUG: Current selectedParagraphs:', Array.from(selectedParagraphs))
+																						console.log('CHECKBOX DEBUG: Is this ID selected?', selectedParagraphs.has(id))
+																						toggleParagraph(id)
+																					}}
+																					style="width: 1.2rem; height: 1.2rem; margin-top: 0;"
 																				>
-																				<label class="form-check-label fw-bold" for="paragraph-{originalIndex}">
+																				<label class="form-check-label fw-bold ms-2" for="paragraph-{id}">
+																					Select
 																				</label>
 																			</div>
 																		{/if}
@@ -2924,6 +3078,18 @@
 																			<div class="me-3 d-flex align-items-center">
 																				<div class="rounded border bg-light" style="width: 16px; height: 16px;" title="No Color"></div>
 																			</div>
+																		{/if}
+																		<!-- Marks range display based on color and category allocated marks -->
+																		{#if currentStudentId && color}
+																			{@const categoryObj = currentAssessment?.categories?.find(cat => cat.name === group.category)}
+																			{@const marksRange = getMarksRange(color, categoryObj?.allocatedMarks)}
+																			{#if marksRange}
+																				<div class="me-3 d-flex align-items-center">
+																					<span class="badge bg-secondary text-white small" title="Marks range for {color} color">
+																						{marksRange}
+																					</span>
+																				</div>
+																			{/if}
 																		{/if}
 																		<div class="flex-grow-1 me-3">
 																			{#if editingParagraphIndex === originalIndex}
@@ -2938,7 +3104,7 @@
 																					<div class="flex-grow-1">
 																						<p class="mb-0 fs-6 lh-base">{text}</p>
 																					</div>
-																					{#if source}
+																					{#if source && source !== undefined}
 																						<div class="ms-2">
 																							{#if source === 'assignment'}
 																								<span class="badge bg-primary" title="Assignment version">
@@ -2947,6 +3113,10 @@
 																							{:else if source === 'student'}
 																								<span class="badge bg-success" title="Student version">
 																									<i class="bi bi-person me-1"></i>Student
+																								</span>
+																							{:else if source === 'merged'}
+																								<span class="badge bg-info" title="Merged content (identical assignment and student versions)">
+																									<i class="bi bi-arrow-down-up me-1"></i>Merged
 																								</span>
 																							{/if}
 																						</div>
@@ -3405,3 +3575,4 @@
 		</div>
 	</div>
 {/if}
+

@@ -4,54 +4,54 @@
 	import { generateCSVContent } from './printUtils.js'
 	import jsPDF from 'jspdf'
 
-	// Types
-	type Assessment = {
-		id: string;
-		name: string;
-		topics?: Topic[];
-		categories?: Category[];
-		weight?: number;
-		headerPhoto?: string;
-	}
+  // Types
+  type Assessment = {
+    id: string;
+    name: string;
+    topics?: Topic[];
+    categories?: Category[];
+    weight?: number;
+    headerPhoto?: string;
+  }
 
-	type Topic = {
-		id: string;
-		name: string;
-	}
+  type Topic = {
+    id: string;
+    name: string;
+  }
 
-	type Category = {
-		id: string;
-		name: string;
-		description?: string;
-	}
+  type Category = {
+    id: string;
+    name: string;
+    description?: string;
+  }
 
-	// Props
-	let { 
-		assessments = [], 
-		students = [],
-		subjectName = 'Unknown Subject',
-		onSelectAssessment, 
-		onUpdateAssessments,
+  // Props
+  let { 
+    assessments = [], 
+    students = [],
+    subjectName = 'Unknown Subject',
+    onSelectAssessment, 
+    onUpdateAssessments,
 		showAddAssessment = false,
 		newAssessmentName = '',
 		onAddAssessment
-	}: {
-		assessments?: Assessment[];
-		students?: any[];
-		subjectName?: string;
-		onSelectAssessment: (assessment: Assessment) => void;
-		onUpdateAssessments: (assessments: Assessment[]) => void;
+  }: {
+    assessments?: Assessment[];
+    students?: any[];
+    subjectName?: string;
+    onSelectAssessment: (assessment: Assessment) => void;
+    onUpdateAssessments: (assessments: Assessment[]) => void;
 		showAddAssessment?: boolean;
 		newAssessmentName?: string;
 		onAddAssessment?: (name: string) => void;
-	} = $props()
+  } = $props()
 
 	// Sort assessments alphabetically by name
 	let sortedAssessments = $derived(
 		[...assessments].sort((a, b) => a.name.localeCompare(b.name))
 	)
 
-	// Local state
+  // Local state
 	let showDeleteConfirm = $state(false);
 	let assessmentToDelete = $state(null);
 	let showStudentDeleteConfirm = $state(false);
@@ -80,9 +80,9 @@
 
 	// Functions
 	// Ensure all assessments have categories array initialized
-	$effect(() => {
-		assessments.forEach(assessment => {
-			if (!assessment.categories) {
+  $effect(() => {
+    assessments.forEach(assessment => {
+      if (!assessment.categories) {
 				assessment.categories = [];
 			}
 		});
@@ -154,8 +154,8 @@
 	}
 
 	// Load evaluations when component mounts or when students/assessments change
-	$effect(() => {
-		if (students.length > 0 && assessments.length > 0) {
+  $effect(() => {
+    if (students.length > 0 && assessments.length > 0) {
 			loadStudentEvaluations();
 		}
 	});
@@ -430,7 +430,7 @@
 			doc.save(filename);
 			return true;
 			
-		} catch (error) {
+    } catch (error) {
 			console.error('Error generating PDF:', error);
 			throw error;
 		}
@@ -984,7 +984,7 @@
 			
 			// Show success notification
 			showSuccessNotification('CSV file downloaded successfully!');
-		} catch (error) {
+      } catch (error) {
 			console.error('Error exporting CSV:', error);
 			showSuccessNotification('Error exporting CSV: ' + error.message);
 		}
@@ -1319,7 +1319,7 @@
 			showStudentDeleteConfirm = false;
 			studentToDelete = null;
 			alert(`${studentToDelete?.name || 'Student'} has been successfully removed from this subject.`);
-		} catch (error) {
+    } catch (error) {
 			console.error('Error deleting student from subject:', error);
 			alert('Error removing student from subject. Please try again.');
 		}
@@ -1368,7 +1368,7 @@
 						<h5 class="card-title mb-0">
 							<i class="bi bi-plus-circle me-2"></i>Add New Assessment
 						</h5>
-					</div>
+    </div>
 					<div class="card-body">
 						<div class="row">
 							<div class="col-12">
@@ -1384,13 +1384,13 @@
 							</div>
 						</div>
 						<div class="mt-3">
-							<button 
+      <button 
 								class="btn btn-success"
 								onclick={addAssessment}
 								disabled={!localNewAssessmentName.trim()}
 							>
 								<i class="bi bi-plus-circle me-1"></i>Add Assessment
-							</button>
+      </button>
 						</div>
 					</div>
 				</div>
@@ -1408,14 +1408,14 @@
 								<i class="bi bi-clipboard-check text-primary me-2" style="font-size: 1.5rem;"></i>
 								<h6 class="mb-0">Assessment</h6>
 							</div>
-						<button 
+      <button 
 							class="btn btn-sm btn-outline-danger border-0"
 							onclick={() => removeAssessment(assessment.id)}
 							title="Delete assessment"
 							aria-label="Delete assessment"
 						>
 							<i class="bi bi-x"></i>
-						</button>
+      </button>
 					</div>
 					
 					<!-- Content Section -->
@@ -1430,9 +1430,9 @@
 								<i class="bi bi-tags me-1"></i>
 								{assessment.categories?.length || 0} categories
 							</span>
-						</div>
-					</div>
-					
+    </div>
+  </div>
+
 					<!-- Action Section -->
 					<div class="flex-shrink-0">
 						<button 
@@ -1441,7 +1441,7 @@
 						>
 							<i class="bi bi-arrow-right me-2"></i>Open Feedback
 						</button>
-					</div>
+    </div>
 				</div>
 			{/each}
 		</div>
@@ -1457,7 +1457,7 @@
 									<i class="bi bi-people me-2"></i>Students with Marks
 								</h5>
 								<p class="text-muted mb-0 small">Students who have marks for assessments in this subject</p>
-							</div>
+    </div>
 							<div class="btn-group" role="group">
 								<!-- Test button - always enabled -->
 								<button 
@@ -1475,7 +1475,7 @@
 							>
 								<i class="bi bi-download me-1"></i>Export CSV
 							</button>
-							</div>
+        </div>
 						</div>
 						<div class="card-body p-0">
 							<div class="table-responsive">
@@ -1524,7 +1524,7 @@
 																aria-label="Weight percentage"
 																data-assessment-id={assessment.id}
 															>
-															<button 
+          <button 
 																class="btn btn-sm btn-success p-1"
 																onclick={() => saveWeight(assessment.id)}
 																title="Save"
@@ -1541,8 +1541,8 @@
 																style="font-size: 0.7rem;"
 															>
 																<i class="bi bi-x"></i>
-															</button>
-														</div>
+          </button>
+        </div>
 													{:else}
 														<div class="d-flex align-items-center justify-content-center gap-1">
 															<small class="text-muted">{assessment.weight || 0}%</small>
@@ -1555,7 +1555,7 @@
 																role="button"
 																tabindex="0"
 															></i>
-														</div>
+      </div>
 													{/if}
 												</th>
 											{/each}
@@ -1572,12 +1572,12 @@
 													<div class="d-flex align-items-center">
 														<div class="me-3" style="width: 20px; font-weight: 600;">
 															{index + 1}.
-														</div>
+    </div>
 														<div class="flex-grow-1">
 															<div class="d-flex align-items-center justify-content-between">
 																<div class="d-flex align-items-center">
 																	<span>{student.name}</span>
-																</div>
+  </div>
 																<div class="d-flex gap-1">
 																	<button 
 																		class="btn btn-sm btn-outline-secondary p-1" 
@@ -1649,7 +1649,7 @@
 																			aria-valuemin="0" 
 																			aria-valuemax={effectiveMaxMarks}
 																		></div>
-																	</div>
+      </div>
 																	<small class="text-muted">{weighted.displayValue}</small>
 																{:else}
 																	<div class="progress" style="height: 8px;">
@@ -1660,7 +1660,7 @@
 															</div>
 														</div>
 													</td>
-												{/each}
+    {/each}
 												<!-- Grades Column -->
 												<td class="align-middle text-center">
 													{#if getFinalGrade(student.id) !== "N/A"}
@@ -1681,8 +1681,8 @@
 						</div>
 					</div>
 				</div>
-			</div>
-			
+  </div>
+
 			<!-- Performance Highlights Cards for Each Assessment -->
 			<div class="row mt-4">
 				{#each assessments as assessment}
@@ -1850,7 +1850,7 @@
 	{:else}
 		<div class="row">
 			<div class="col-12">
-				<div class="text-center py-5">
+    <div class="text-center py-5">
 					<div class="card border-0 shadow-sm">
 						<div class="card-body py-5">
 							<i class="bi bi-clipboard-check text-muted mb-3" style="font-size: 4rem;"></i>
@@ -1860,21 +1860,21 @@
 					</div>
 				</div>
 			</div>
-		</div>
-	{/if}
+    </div>
+  {/if}
 </div>
 
 <!-- Custom Delete Confirmation Dialog -->
 {#if showDeleteConfirm && assessmentToDelete}
 	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
 		<div class="modal-dialog modal-dialog-centered">
-			<div class="modal-content">
+        <div class="modal-content">
 				<div class="modal-header bg-danger text-white">
 					<h5 class="modal-title">
 						<i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
 					</h5>
-				</div>
-				<div class="modal-body">
+          </div>
+          <div class="modal-body">
 					<div class="d-flex align-items-center mb-3">
 						<i class="bi bi-clipboard-check text-danger me-3" style="font-size: 2rem;"></i>
 						<div>
@@ -1887,31 +1887,31 @@
 						<strong>Warning:</strong> This will permanently delete the assessment and all its data. This action cannot be undone.
 					</div>
 					<p class="mb-0">Are you sure you want to delete this assessment?</p>
-				</div>
-				<div class="modal-footer">
+          </div>
+          <div class="modal-footer">
 					<button type="button" class="btn btn-secondary" onclick={cancelDelete}>
 						<i class="bi bi-x-circle me-2"></i>Cancel
 					</button>
 					<button type="button" class="btn btn-danger" onclick={confirmDelete}>
 						<i class="bi bi-trash me-2"></i>Delete Assessment
 					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
 <!-- Student Delete Confirmation Dialog -->
 {#if showStudentDeleteConfirm && studentToDelete}
 	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
 		<div class="modal-dialog modal-dialog-centered">
-			<div class="modal-content">
+        <div class="modal-content">
 				<div class="modal-header bg-danger text-white">
 					<h5 class="modal-title">
 						<i class="bi bi-exclamation-triangle me-2"></i>Remove Student from Subject
 					</h5>
-				</div>
-				<div class="modal-body">
+          </div>
+          <div class="modal-body">
 					<div class="d-flex align-items-center mb-3">
 						<i class="bi bi-person-x text-danger me-3" style="font-size: 2rem;"></i>
 						<div>
@@ -1928,32 +1928,32 @@
 						<strong>Note:</strong> The student will remain in the global student list and can be added to other subjects.
 					</div>
 					<p class="mb-0">Are you sure you want to remove this student from this subject?</p>
-				</div>
-				<div class="modal-footer">
+          </div>
+          <div class="modal-footer">
 					<button type="button" class="btn btn-secondary" onclick={cancelStudentDelete}>
 						<i class="bi bi-x-circle me-2"></i>Cancel
 					</button>
 					<button type="button" class="btn btn-danger" onclick={confirmStudentDelete}>
 						<i class="bi bi-person-x me-2"></i>Remove Student
 					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
 <!-- Success Notification Toast -->
-{#if showNotification}
+  {#if showNotification}
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
 		<div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
 			<div class="toast-header bg-success text-white">
 				<i class="bi bi-check-circle me-2"></i>
 				<strong class="me-auto">Success</strong>
 				<button type="button" class="btn-close btn-close-white" aria-label="Close notification" onclick={() => showNotification = false}></button>
-			</div>
-			<div class="toast-body">
-				{notificationMessage}
-			</div>
-		</div>
-	</div>
+      </div>
+      <div class="toast-body">
+        {notificationMessage}
+      </div>
+    </div>
+</div>
 {/if}

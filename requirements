@@ -1,0 +1,9 @@
+This system is to provide feedback for students
+
+One subject has many asessements
+One assessment has meny pragraphs
+Header photo, total marks, categories, knowladge area, paragraphs, marks for sections, are properties of assessments.
+When select a student, selected paragraph data and whatever enter with selected student are properties of student.
+Under an assessment, strictly load only the data related to that assessment with assessment or studnet.
+When load students, merge if both versions are same, unless show separately. 
+Print to PDF only selected paragraph under the student.

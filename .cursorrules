@@ -3,6 +3,7 @@ Read .md files if you need information for any implementation.
 Do the absolute minimal code change for the request to prevent breaking other features/codes.
 Any confirmation/popup dialog should be bootstrap 5.
 Make the code modular and with proper comments so that a human can edit it later.
+New implementation should go as new files to protect maintainability.
 Do not change any other methods or anything in the files I sent unless it's absolutely necessary for what I ask for to work. 
 Do not do refactoring of code unless I explicitly ask to do it.
 Do not fix style in the existing code unless I ask for that. 

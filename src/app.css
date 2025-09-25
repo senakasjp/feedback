@@ -78,3 +78,41 @@ button.btn-outline-danger {
   outline: none !important;
   box-shadow: none !important;
 }
+
+/* Fix checkbox styling and check mark positioning */
+.form-check-input {
+  width: 1.2rem !important;
+  height: 1.2rem !important;
+  margin-top: 0 !important;
+  vertical-align: middle !important;
+  position: relative !important;
+}
+
+.form-check-input:checked {
+  background-color: #0d6efd !important;
+  border-color: #0d6efd !important;
+}
+
+.form-check-input:checked::after {
+  content: "✓" !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  color: white !important;
+  font-size: 0.8rem !important;
+  font-weight: bold !important;
+  line-height: 1 !important;
+}
+
+/* Ensure proper alignment for form-check containers */
+.form-check {
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 0 !important;
+}
+
+.form-check-label {
+  margin-left: 0.5rem !important;
+  margin-bottom: 0 !important;
+}
