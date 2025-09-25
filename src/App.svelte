@@ -2227,7 +2227,9 @@
 			reader.onload = function(e) {
 				if (typeof e.target.result === 'string' && currentAssessment) {
 					currentAssessment.headerPhoto = e.target.result
-					// Save the updated assessment data
+					// Save the updated assessment data - header photo is part of assessment, not subject
+					saveAssessmentData()
+					// Also save subjects to persist the header photo in the assessment object
 					saveSubjects()
 				}
 			}
@@ -2428,7 +2430,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.0.0</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
