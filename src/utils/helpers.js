@@ -1,5 +1,5 @@
 // Utility helper functions extracted from App.svelte
-export function generateId(text = '', index = 0) {
+export function generateId(text = '', index = 0, uniqueSuffix = '') {
   // Create deterministic ID based on text content and position
   const content = text || `paragraph-${index}`
   let hash = 0
@@ -8,7 +8,12 @@ export function generateId(text = '', index = 0) {
     hash = ((hash << 5) - hash) + char
     hash = hash & hash // Convert to 32-bit integer
   }
-  return `para-${Math.abs(hash)}-${index}`
+  
+  // Add timestamp and random component to ensure uniqueness
+  const timestamp = Date.now()
+  const random = Math.floor(Math.random() * 10000)
+  
+  return `para-${Math.abs(hash)}-${index}-${timestamp}-${random}${uniqueSuffix}`
 }
 
 export function sortByProperty(array, property, ascending = true) {

@@ -2,6 +2,60 @@
 
 ## Version History
 
+### v3.1.0 - Major Bug Fixes Release - January 2025
+
+#### 🚨 **CRITICAL BUG FIXES**
+Fixed multiple critical issues that were affecting user experience:
+
+**Multiple Checkbox Ticking Issue**:
+- **Problem**: Clicking one checkbox caused multiple checkboxes to appear ticked
+- **Root Cause**: Duplicate paragraph IDs causing multiple DOM elements with same ID
+- **Solution**: Enhanced ID generation with timestamp and random components for true uniqueness
+- **Impact**: Checkbox selection now works correctly with one-to-one mapping
+
+**Data Contamination Prevention**:
+- **Problem**: Paragraphs from other assessments were being loaded
+- **Root Cause**: Legacy paragraphs without `subjectId`/`assessmentId` properties
+- **Solution**: Strict filtering and automatic migration of legacy data
+- **Impact**: Clean data separation between assessments
+
+#### 🔧 **VISUAL DEBUG PANEL**
+Introduced a comprehensive visual debugging system for Tauri applications:
+
+**Features**:
+- **Real-time Monitoring**: Live tracking of paragraph IDs, selections, and DOM elements
+- **Duplicate Detection**: Automatic warnings when multiple paragraphs share same ID
+- **ID Regeneration Tool**: One-click fix for duplicate ID issues
+- **Tauri-Friendly**: Designed specifically for debugging where console access is limited
+- **Toggle Button**: Checkbox icon (☑️) in navbar to open/close debug panel
+
+**Debug Panel Components**:
+1. **State Variables**: `showCheckboxDebug` and `checkboxDebugInfo`
+2. **Debug Message Function**: `addCheckboxDebug()` with timestamp and message limit
+3. **Toggle Button**: Navbar button to show/hide debug panel
+4. **Debug Panel UI**: Comprehensive panel with real-time monitoring
+5. **ID Regeneration Function**: `regenerateParagraphIds()` to fix duplicate IDs
+6. **Debug Calls**: Integrated into checkbox click handlers
+
+**Usage Instructions**:
+1. Click checkbox icon (☑️) in top navigation bar
+2. Navigate to assessment and click checkboxes
+3. Watch real-time debug messages for issues
+4. Use "Fix Duplicate IDs" button if duplicates detected
+5. Use "Clear Debug Log" to reset messages
+
+#### 📋 **TECHNICAL IMPROVEMENTS**
+- **Enhanced ID Generation**: `generateId()` function now includes timestamp and random components
+- **Legacy Data Migration**: Automatic migration of old paragraphs without context properties
+- **Strict Data Filtering**: Prevents cross-contamination between assessments
+- **Visual Feedback**: Real-time monitoring of paragraph states and selections
+
+#### 🎯 **USER EXPERIENCE ENHANCEMENTS**
+- **Reliable Checkbox Selection**: One-click selection works correctly
+- **Visual Debugging**: Easy-to-use debug panel for troubleshooting
+- **Data Integrity**: Clean separation of data between assessments
+- **Error Prevention**: Automatic detection and fixing of duplicate IDs
+
 ### v3.0.8 - Critical Data Contamination Fix - January 2025
 
 #### 🚨 **CRITICAL DATA CONTAMINATION FIX**

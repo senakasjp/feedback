@@ -1,5 +1,42 @@
 # User Guide
 
+## Version 3.1.0 - Major Bug Fixes Release
+
+### 🔧 **Visual Debug Panel**
+
+The application now includes a powerful visual debugging system to help troubleshoot issues:
+
+#### **Accessing the Debug Panel**
+1. Click the checkbox icon (☑️) in the top navigation bar
+2. The debug panel will appear below the main content
+3. Click the checkbox icon again to close the panel
+
+#### **Using the Debug Panel**
+- **Real-time Monitoring**: Watch live updates as you interact with checkboxes
+- **Duplicate Detection**: Automatic warnings if duplicate paragraph IDs are found
+- **ID Regeneration**: Use "Fix Duplicate IDs" button to resolve duplicate ID issues
+- **Clear Logs**: Use "Clear Debug Log" button to reset debug messages
+- **Visual Feedback**: See all paragraph IDs with their selection status
+
+#### **Debug Panel Features**
+- **Paragraph Selection Events**: Click tracking with timestamps
+- **Duplicate ID Detection**: Automatic warnings for duplicate paragraph IDs
+- **DOM Element Monitoring**: Detection of multiple DOM elements with same ID
+- **Selection State Tracking**: Live count of selected vs total paragraphs
+- **ID Regeneration**: One-click fix for existing duplicate ID issues
+
+### 🚨 **Critical Bug Fixes**
+
+#### **Multiple Checkbox Ticking Issue**
+- **Problem**: Clicking one checkbox caused multiple checkboxes to appear ticked
+- **Solution**: Enhanced ID generation ensures each paragraph has a unique ID
+- **Result**: Checkbox selection now works correctly with one-to-one mapping
+
+#### **Data Contamination Prevention**
+- **Problem**: Paragraphs from other assessments were being loaded
+- **Solution**: Strict filtering prevents cross-contamination between assessments
+- **Result**: Clean data separation between assessments
+
 ## Understanding Data Separation
 
 The Feedback Manager follows strict data separation rules to ensure clean and organized data management:

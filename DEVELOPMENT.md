@@ -1,6 +1,188 @@
 # Development Guide
 
-## Latest Updates (v3.0.7)
+## Latest Updates (v3.1.0)
+
+### Visual Debug Panel Implementation
+- **Checkbox Debug Panel**: Added comprehensive visual debugging for checkbox selection issues
+- **Real-time Monitoring**: Live tracking of paragraph IDs, selections, and DOM elements
+- **Duplicate Detection**: Automatic detection and warnings for duplicate paragraph IDs
+- **ID Regeneration Tool**: One-click fix for duplicate ID issues
+- **Tauri-Friendly**: Designed specifically for debugging in Tauri desktop app where console access is limited
+
+### Critical Bug Fixes
+- **Duplicate ID Resolution**: Fixed multiple checkbox ticking issue caused by duplicate paragraph IDs
+- **Enhanced ID Generation**: Improved `generateId()` function with timestamp and random components for true uniqueness
+- **Data Contamination Prevention**: Strict filtering prevents paragraphs from other assessments being loaded
+- **Legacy Data Migration**: Automatic migration of old paragraphs without `subjectId`/`assessmentId` properties
+
+### Visual Debug Panel Features
+The debug panel provides real-time monitoring of:
+- **Paragraph Selection Events**: Click tracking with timestamps
+- **Duplicate ID Detection**: Automatic warnings when multiple paragraphs share same ID
+- **DOM Element Monitoring**: Detection of multiple DOM elements with same ID
+- **Selection State Tracking**: Live count of selected vs total paragraphs
+- **ID Regeneration**: One-click fix for existing duplicate ID issues
+
+### How to Add Visual Debug Panel (If Needed)
+To re-implement the visual debug panel in future versions:
+
+1. **Add State Variables**:
+```javascript
+let showCheckboxDebug = $state(false)
+let checkboxDebugInfo = $state([])
+```
+
+2. **Add Debug Message Function**:
+```javascript
+function addCheckboxDebug(message) {
+    const timestamp = new Date().toLocaleTimeString()
+    checkboxDebugInfo = [...checkboxDebugInfo, `[${timestamp}] ${message}`]
+    if (checkboxDebugInfo.length > 20) {
+        checkboxDebugInfo = checkboxDebugInfo.slice(-20)
+    }
+}
+```
+
+3. **Add Debug Toggle Button** (in navbar):
+```html
+<li class="nav-item">
+    <button 
+        class="btn btn-outline-light btn-sm ms-2" 
+        onclick={() => showCheckboxDebug = !showCheckboxDebug}
+        title="Toggle Checkbox Debug"
+        aria-label="Toggle Checkbox Debug"
+    >
+        <i class="bi bi-check-square"></i>
+    </button>
+</li>
+```
+
+4. **Add Debug Panel UI** (before closing `</main>` tag):
+```html
+<!-- Visual Debug Panel for Checkbox Issue -->
+{#if showCheckboxDebug}
+    <div class="container-fluid mt-4 mb-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="card border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="bi bi-check-square me-2"></i>Checkbox Debug Panel
+                            <button 
+                                class="btn btn-sm btn-outline-dark float-end" 
+                                onclick={() => showCheckboxDebug = false}
+                            >
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <button 
+                                    class="btn btn-sm btn-outline-secondary me-2" 
+                                    onclick={() => checkboxDebugInfo = []}
+                                >
+                                    <i class="bi bi-trash me-1"></i>Clear Debug Log
+                                </button>
+                                <button 
+                                    class="btn btn-sm btn-warning" 
+                                    onclick={regenerateParagraphIds}
+                                >
+                                    <i class="bi bi-arrow-clockwise me-1"></i>Fix Duplicate IDs
+                                </button>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <small class="text-muted">
+                                    Selected: {selectedParagraphs.size} | 
+                                    Total Paragraphs: {paragraphs.length}
+                                </small>
+                            </div>
+                        </div>
+                        <div style="max-height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 0.9em;">
+                            {#if checkboxDebugInfo.length === 0}
+                                <p class="text-muted mb-0">No debug messages yet. Try clicking a checkbox.</p>
+                            {:else}
+                                {#each checkboxDebugInfo as message}
+                                    <div class="mb-1">{message}</div>
+                                {/each}
+                            {/if}
+                        </div>
+                        <div class="mt-3">
+                            <h6>Current Paragraph IDs:</h6>
+                            <div style="max-height: 100px; overflow-y: auto; background-color: #e9ecef; padding: 10px; border-radius: 3px; font-family: monospace; font-size: 0.8em;">
+                                {#each paragraphs as para, index}
+                                    <div class="mb-1">
+                                        <span class="badge {selectedParagraphs.has(para.id) ? 'bg-success' : 'bg-secondary'} me-2">
+                                            {selectedParagraphs.has(para.id) ? '✓' : '○'}
+                                        </span>
+                                        {index}: {para.id}
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+```
+
+5. **Add ID Regeneration Function**:
+```javascript
+function regenerateParagraphIds() {
+    addCheckboxDebug(`🔄 Regenerating IDs for ${paragraphs.length} paragraphs`)
+    
+    const beforeIds = paragraphs.map(p => p.id)
+    const duplicateIds = beforeIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+    
+    if (duplicateIds.length > 0) {
+        addCheckboxDebug(`⚠️ Found ${duplicateIds.length} duplicate IDs before regeneration`)
+    }
+    
+    paragraphs = paragraphs.map((para, index) => ({
+        ...para,
+        id: generateId(para.text || para, index)
+    }))
+    
+    const afterIds = paragraphs.map(p => p.id)
+    const afterDuplicateIds = afterIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+    
+    if (afterDuplicateIds.length === 0) {
+        addCheckboxDebug(`✅ All IDs are now unique!`)
+    } else {
+        addCheckboxDebug(`❌ Still have ${afterDuplicateIds.length} duplicate IDs after regeneration`)
+    }
+    
+    selectedParagraphs = new Set()
+    addCheckboxDebug(`🧹 Cleared selections due to ID regeneration`)
+}
+```
+
+6. **Add Debug Calls** (in checkbox click handlers):
+```javascript
+onchange={() => {
+    addCheckboxDebug(`🖱️ Checkbox clicked: ${id}`)
+    addCheckboxDebug(`🔍 Is selected? ${selectedParagraphs.has(id)}`)
+    
+    // Check for duplicate IDs in current paragraphs
+    const duplicateIds = paragraphs.map(p => p.id).filter((pid, index, arr) => arr.indexOf(pid) !== index)
+    if (duplicateIds.length > 0) {
+        addCheckboxDebug(`⚠️ DUPLICATE IDs found: ${duplicateIds.join(', ')}`)
+    }
+    
+    // Check DOM elements
+    const domElements = document.querySelectorAll(`#paragraph-${id}`)
+    if (domElements.length > 1) {
+        addCheckboxDebug(`⚠️ Multiple DOM elements with ID: ${id} (${domElements.length} found)`)
+    }
+    
+    toggleParagraph(id)
+}}
+```
+
+## Previous Updates (v3.0.7)
 
 ### Critical Data Contamination Prevention
 - **Fixed Dataset Contamination**: Implemented strict saving criteria to prevent student data from contaminating assessment files

@@ -67,6 +67,224 @@ button:focus-visible {
   }
 }
 
+/* Remove all button backgrounds but keep colors */
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-success,
+.btn-danger,
+.btn-warning,
+.btn-info,
+.btn-light,
+.btn-dark,
+.btn-outline-primary,
+.btn-outline-secondary,
+.btn-outline-success,
+.btn-outline-danger,
+.btn-outline-warning,
+.btn-outline-info,
+.btn-outline-light,
+.btn-outline-dark,
+button,
+button.btn,
+button.btn-primary,
+button.btn-secondary,
+button.btn-success,
+button.btn-danger,
+button.btn-warning,
+button.btn-info,
+button.btn-light,
+button.btn-dark,
+button.btn-outline-primary,
+button.btn-outline-secondary,
+button.btn-outline-success,
+button.btn-outline-danger,
+button.btn-outline-warning,
+button.btn-outline-info,
+button.btn-outline-light,
+button.btn-outline-dark {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Restore button colors and borders */
+.btn-primary {
+  color: #0d6efd !important;
+  border-color: #0d6efd !important;
+}
+
+.btn-secondary {
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+.btn-success {
+  color: #198754 !important;
+  border-color: #198754 !important;
+}
+
+.btn-danger {
+  color: #dc3545 !important;
+  border-color: #dc3545 !important;
+}
+
+.btn-warning {
+  color: #ffc107 !important;
+  border-color: #ffc107 !important;
+}
+
+.btn-info {
+  color: #0dcaf0 !important;
+  border-color: #0dcaf0 !important;
+}
+
+.btn-light {
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+.btn-dark {
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
+.btn-outline-primary {
+  color: #0d6efd !important;
+  border-color: #0d6efd !important;
+}
+
+.btn-outline-secondary {
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+.btn-outline-success {
+  color: #198754 !important;
+  border-color: #198754 !important;
+}
+
+.btn-outline-danger {
+  color: #dc3545 !important;
+  border-color: #dc3545 !important;
+}
+
+.btn-outline-warning {
+  color: #ffc107 !important;
+  border-color: #ffc107 !important;
+}
+
+.btn-outline-info {
+  color: #0dcaf0 !important;
+  border-color: #0dcaf0 !important;
+}
+
+.btn-outline-light {
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+.btn-outline-dark {
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
+/* Hover states - keep colors but add subtle background */
+.btn-primary:hover {
+  background-color: rgba(13, 110, 253, 0.1) !important;
+  color: #0d6efd !important;
+  border-color: #0d6efd !important;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(108, 117, 125, 0.1) !important;
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+.btn-success:hover {
+  background-color: rgba(25, 135, 84, 0.1) !important;
+  color: #198754 !important;
+  border-color: #198754 !important;
+}
+
+.btn-danger:hover {
+  background-color: rgba(220, 53, 69, 0.1) !important;
+  color: #dc3545 !important;
+  border-color: #dc3545 !important;
+}
+
+.btn-warning:hover {
+  background-color: rgba(255, 193, 7, 0.1) !important;
+  color: #ffc107 !important;
+  border-color: #ffc107 !important;
+}
+
+.btn-info:hover {
+  background-color: rgba(13, 202, 240, 0.1) !important;
+  color: #0dcaf0 !important;
+  border-color: #0dcaf0 !important;
+}
+
+.btn-light:hover {
+  background-color: rgba(248, 249, 250, 0.1) !important;
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+.btn-dark:hover {
+  background-color: rgba(33, 37, 41, 0.1) !important;
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
+.btn-outline-primary:hover {
+  background-color: rgba(13, 110, 253, 0.1) !important;
+  color: #0d6efd !important;
+  border-color: #0d6efd !important;
+}
+
+.btn-outline-secondary:hover {
+  background-color: rgba(108, 117, 125, 0.1) !important;
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+.btn-outline-success:hover {
+  background-color: rgba(25, 135, 84, 0.1) !important;
+  color: #198754 !important;
+  border-color: #198754 !important;
+}
+
+.btn-outline-danger:hover {
+  background-color: rgba(220, 53, 69, 0.1) !important;
+  color: #dc3545 !important;
+  border-color: #dc3545 !important;
+}
+
+.btn-outline-warning:hover {
+  background-color: rgba(255, 193, 7, 0.1) !important;
+  color: #ffc107 !important;
+  border-color: #ffc107 !important;
+}
+
+.btn-outline-info:hover {
+  background-color: rgba(13, 202, 240, 0.1) !important;
+  color: #0dcaf0 !important;
+  border-color: #0dcaf0 !important;
+}
+
+.btn-outline-light:hover {
+  background-color: rgba(248, 249, 250, 0.1) !important;
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+.btn-outline-dark:hover {
+  background-color: rgba(33, 37, 41, 0.1) !important;
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
 /* Override all button borders for delete buttons */
 .btn-danger,
 .btn-outline-danger,

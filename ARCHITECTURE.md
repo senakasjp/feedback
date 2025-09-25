@@ -1,5 +1,30 @@
 # Architecture Documentation
 
+## Version 3.1.0 - Major Bug Fixes Release
+
+### Visual Debug Panel Architecture
+
+The application now includes a comprehensive visual debugging system designed specifically for Tauri desktop applications:
+
+#### Debug Panel Components
+1. **State Management**: `showCheckboxDebug` and `checkboxDebugInfo` state variables
+2. **Message System**: `addCheckboxDebug()` function with timestamp and message limit
+3. **UI Components**: Toggle button in navbar and comprehensive debug panel
+4. **ID Management**: `regenerateParagraphIds()` function for fixing duplicate IDs
+5. **Real-time Monitoring**: Live tracking of paragraph IDs, selections, and DOM elements
+
+#### Enhanced ID Generation System
+- **Problem Solved**: Multiple checkbox ticking caused by duplicate paragraph IDs
+- **Solution**: Enhanced `generateId()` function with timestamp and random components
+- **Architecture**: Deterministic hash + timestamp + random for true uniqueness
+- **Impact**: Eliminates duplicate IDs and ensures one-to-one checkbox mapping
+
+#### Data Contamination Prevention
+- **Problem Solved**: Paragraphs from other assessments being loaded
+- **Solution**: Strict filtering by `subjectId` and `assessmentId`
+- **Architecture**: Legacy data migration with automatic property assignment
+- **Impact**: Clean data separation between assessments
+
 ## Overview
 
 The Feedback Manager implements a sophisticated dual storage system that separates assignment-level paragraph storage from student-specific paragraph collections, enabling comprehensive feedback management across multiple assignments while maintaining data integrity.

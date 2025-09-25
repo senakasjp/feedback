@@ -52,6 +52,40 @@
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
 	let deletingStudentId = $state(null) // Track which student is being deleted
+	
+	// Visual debug for checkbox issue
+	let showCheckboxDebug = $state(false)
+	let checkboxDebugInfo = $state([])
+	
+	// Function to regenerate unique IDs for all paragraphs
+	function regenerateParagraphIds() {
+		addCheckboxDebug(`🔄 Regenerating IDs for ${paragraphs.length} paragraphs`)
+		
+		const beforeIds = paragraphs.map(p => p.id)
+		const duplicateIds = beforeIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+		
+		if (duplicateIds.length > 0) {
+			addCheckboxDebug(`⚠️ Found ${duplicateIds.length} duplicate IDs before regeneration`)
+		}
+		
+		paragraphs = paragraphs.map((para, index) => ({
+			...para,
+			id: generateId(para.text || para, index)
+		}))
+		
+		const afterIds = paragraphs.map(p => p.id)
+		const afterDuplicateIds = afterIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+		
+		if (afterDuplicateIds.length === 0) {
+			addCheckboxDebug(`✅ All IDs are now unique!`)
+		} else {
+			addCheckboxDebug(`❌ Still have ${afterDuplicateIds.length} duplicate IDs after regeneration`)
+		}
+		
+		// Clear selections since IDs have changed
+		selectedParagraphs = new Set()
+		addCheckboxDebug(`🧹 Cleared selections due to ID regeneration`)
+	}
 	let showDeleteConfirmation = $state(false) // Show delete confirmation modal
 	let studentToDelete = $state(null) // Student to be deleted
 	let editingParagraphIndex = $state(null) // Track which paragraph is being edited
@@ -1854,19 +1888,20 @@
 	function toggleParagraph(paragraphId) {
 		if (!paragraphId) return
 		
-		console.log('DEBUG: toggleParagraph called with ID:', paragraphId)
-		console.log('DEBUG: Current selectedParagraphs:', Array.from(selectedParagraphs))
+		addCheckboxDebug(`🔄 Toggle clicked: ${paragraphId}`)
+		addCheckboxDebug(`📋 Current selected: ${Array.from(selectedParagraphs).length} items`)
 		
 		if (selectedParagraphs.has(paragraphId)) {
 			selectedParagraphs.delete(paragraphId)
-			console.log('DEBUG: Removed paragraph ID:', paragraphId)
+			addCheckboxDebug(`❌ Removed: ${paragraphId}`)
 		} else {
 			selectedParagraphs.add(paragraphId)
-			console.log('DEBUG: Added paragraph ID:', paragraphId)
+			addCheckboxDebug(`✅ Added: ${paragraphId}`)
 		}
 		selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
 		
-		console.log('DEBUG: Updated selectedParagraphs:', Array.from(selectedParagraphs))
+		addCheckboxDebug(`📊 Final selected: ${Array.from(selectedParagraphs).length} items`)
+		addCheckboxDebug(`📝 Selected IDs: ${Array.from(selectedParagraphs).join(', ')}`)
 		
 		// Update warnings for all categories with marks
 		Object.keys(categoryMarks).forEach(category => {
@@ -2422,6 +2457,16 @@
 						{:else}
 							<i class="bi bi-moon"></i>
 						{/if}
+					</button>
+				</li>
+				<li class="nav-item">
+					<button 
+						class="btn btn-outline-light btn-sm ms-2" 
+						onclick={() => showCheckboxDebug = !showCheckboxDebug}
+						title="Toggle Checkbox Debug"
+						aria-label="Toggle Checkbox Debug"
+					>
+						<i class="bi bi-check-square"></i>
 					</button>
 				</li>
 			</ul>
@@ -3057,9 +3102,21 @@
 																					id="paragraph-{id}"
 																					checked={selectedParagraphs.has(id)}
 																					onchange={() => {
-																						console.log('CHECKBOX DEBUG: Clicked checkbox with ID:', id)
-																						console.log('CHECKBOX DEBUG: Current selectedParagraphs:', Array.from(selectedParagraphs))
-																						console.log('CHECKBOX DEBUG: Is this ID selected?', selectedParagraphs.has(id))
+																						addCheckboxDebug(`🖱️ Checkbox clicked: ${id}`)
+																						addCheckboxDebug(`🔍 Is selected? ${selectedParagraphs.has(id)}`)
+																						
+																						// Check for duplicate IDs in current paragraphs
+																						const duplicateIds = paragraphs.map(p => p.id).filter((pid, index, arr) => arr.indexOf(pid) !== index)
+																						if (duplicateIds.length > 0) {
+																							addCheckboxDebug(`⚠️ DUPLICATE IDs found: ${duplicateIds.join(', ')}`)
+																						}
+																						
+																						// Check DOM elements
+																						const domElements = document.querySelectorAll(`#paragraph-${id}`)
+																						if (domElements.length > 1) {
+																							addCheckboxDebug(`⚠️ Multiple DOM elements with ID: ${id} (${domElements.length} found)`)
+																						}
+																						
 																						toggleParagraph(id)
 																					}}
 																					style="width: 1.2rem; height: 1.2rem; margin-top: 0;"
@@ -3213,6 +3270,75 @@
 		</div>
 	</div>
 </main>
+
+<!-- Visual Debug Panel for Checkbox Issue -->
+{#if showCheckboxDebug}
+	<div class="container-fluid mt-4 mb-4">
+		<div class="row">
+			<div class="col-12">
+				<div class="card border-warning">
+					<div class="card-header bg-warning text-dark">
+						<h5 class="mb-0">
+							<i class="bi bi-check-square me-2"></i>Checkbox Debug Panel
+							<button 
+								class="btn btn-sm btn-outline-dark float-end" 
+								onclick={() => showCheckboxDebug = false}
+							>
+								<i class="bi bi-x"></i>
+							</button>
+						</h5>
+					</div>
+					<div class="card-body">
+						<div class="row mb-3">
+							<div class="col-md-6">
+								<button 
+									class="btn btn-sm btn-outline-secondary me-2" 
+									onclick={() => checkboxDebugInfo = []}
+								>
+									<i class="bi bi-trash me-1"></i>Clear Debug Log
+								</button>
+								<button 
+									class="btn btn-sm btn-warning" 
+									onclick={regenerateParagraphIds}
+								>
+									<i class="bi bi-arrow-clockwise me-1"></i>Fix Duplicate IDs
+								</button>
+							</div>
+							<div class="col-md-6 text-end">
+								<small class="text-muted">
+									Selected: {selectedParagraphs.size} | 
+									Total Paragraphs: {paragraphs.length}
+								</small>
+							</div>
+						</div>
+						<div style="max-height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 0.9em;">
+							{#if checkboxDebugInfo.length === 0}
+								<p class="text-muted mb-0">No debug messages yet. Try clicking a checkbox.</p>
+							{:else}
+								{#each checkboxDebugInfo as message}
+									<div class="mb-1">{message}</div>
+								{/each}
+							{/if}
+						</div>
+						<div class="mt-3">
+							<h6>Current Paragraph IDs:</h6>
+							<div style="max-height: 100px; overflow-y: auto; background-color: #e9ecef; padding: 10px; border-radius: 3px; font-family: monospace; font-size: 0.8em;">
+								{#each paragraphs as para, index}
+									<div class="mb-1">
+										<span class="badge {selectedParagraphs.has(para.id) ? 'bg-success' : 'bg-secondary'} me-2">
+											{selectedParagraphs.has(para.id) ? '✓' : '○'}
+										</span>
+										{index}: {para.id}
+									</div>
+								{/each}
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 {#if currentView === 'feedback' && selectedParagraphs.size > 0}
 	<div class="container-fluid mt-4 mb-4">

@@ -1,5 +1,61 @@
 # API Reference
 
+## Version 3.1.0 - Major Bug Fixes Release
+
+### Visual Debug Panel API
+
+The application now includes a comprehensive visual debugging system for Tauri applications:
+
+#### Debug Panel State Variables
+```javascript
+let showCheckboxDebug = $state(false)  // Toggle debug panel visibility
+let checkboxDebugInfo = $state([])      // Array of debug messages
+```
+
+#### Debug Message Function
+```javascript
+function addCheckboxDebug(message) {
+    const timestamp = new Date().toLocaleTimeString()
+    checkboxDebugInfo = [...checkboxDebugInfo, `[${timestamp}] ${message}`]
+    if (checkboxDebugInfo.length > 20) {
+        checkboxDebugInfo = checkboxDebugInfo.slice(-20)
+    }
+}
+```
+
+#### ID Regeneration Function
+```javascript
+function regenerateParagraphIds() {
+    // Regenerates unique IDs for all paragraphs
+    // Clears selections since IDs change
+    // Provides debug feedback
+}
+```
+
+#### Enhanced ID Generation
+```javascript
+export function generateId(text = '', index = 0, uniqueSuffix = '') {
+    // Enhanced with timestamp and random components for true uniqueness
+    const timestamp = Date.now()
+    const random = Math.floor(Math.random() * 10000)
+    return `para-${Math.abs(hash)}-${index}-${timestamp}-${random}${uniqueSuffix}`
+}
+```
+
+### Critical Bug Fixes (v3.1.0)
+
+#### Multiple Checkbox Ticking Fix
+- **Problem**: Clicking one checkbox caused multiple checkboxes to appear ticked
+- **Root Cause**: Duplicate paragraph IDs causing multiple DOM elements with same ID
+- **Solution**: Enhanced ID generation with timestamp and random components
+- **Impact**: Checkbox selection now works correctly with one-to-one mapping
+
+#### Data Contamination Prevention
+- **Problem**: Paragraphs from other assessments were being loaded
+- **Root Cause**: Legacy paragraphs without `subjectId`/`assessmentId` properties
+- **Solution**: Strict filtering and automatic migration of legacy data
+- **Impact**: Clean data separation between assessments
+
 ## Strict Data Separation Policy
 
 The application follows strict rules to prevent data confusion and contamination:

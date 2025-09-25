@@ -2,9 +2,29 @@
 
 ## Overview
 
-The Feedback Manager has been enhanced to support multiple subjects, each containing multiple assessments. This allows for better organization of feedback data and separate PDF generation for different contexts.
+The Feedback Manager has been enhanced to support multiple subjects, each containing multiple assessments. This allows for better organization of feedback data, separate PDF generation for different contexts, and comprehensive debugging tools for troubleshooting issues.
 
-## Latest Data Separation Features (v3.0.7)
+## Latest Features (v3.1.0)
+
+### Visual Debug Panel
+- **Multi-Subject Debugging**: Debug panel works across all subjects and assessments
+- **Cross-Assessment Monitoring**: Track paragraph IDs and selections across different assessments
+- **Data Contamination Detection**: Automatic warnings when data from other assessments is detected
+- **ID Management**: Regenerate unique IDs for paragraphs across all subjects
+
+### Critical Bug Fixes
+- **Multiple Checkbox Ticking**: Fixed issue where clicking one checkbox caused multiple checkboxes to appear ticked
+- **Data Contamination Prevention**: Strict filtering prevents paragraphs from other assessments being loaded
+- **Enhanced ID Generation**: Improved ID generation with timestamp and random components for true uniqueness
+- **Legacy Data Migration**: Automatic migration of old paragraphs without context properties
+
+### Debug Panel Features for Multi-Subject Use
+- **Subject-Specific Debugging**: Debug panel shows current subject and assessment context
+- **Cross-Contamination Detection**: Automatic warnings if paragraphs from other subjects are detected
+- **ID Regeneration**: One-click fix for duplicate IDs across all subjects
+- **Visual Feedback**: Real-time display of paragraph states and selections
+
+## Previous Data Separation Features (v3.0.7)
 
 ### Critical Data Contamination Prevention
 - **Fixed Dataset Contamination**: Implemented strict saving criteria to prevent student data from contaminating assessment files

@@ -1,6 +1,38 @@
-# Feedback Manager v3.0.8
+# Feedback Manager v3.1.0
 
-A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, and contamination prevention.
+A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, contamination prevention, and visual debugging tools.
+
+## 🎉 Version 3.1.0 - Major Bug Fixes Release
+
+This release includes critical bug fixes and introduces a powerful visual debugging system:
+
+### 🚨 **CRITICAL BUG FIXES**
+- **Fixed Multiple Checkbox Ticking**: Resolved issue where clicking one checkbox caused multiple checkboxes to appear ticked
+- **Duplicate ID Resolution**: Enhanced ID generation with timestamp and random components for true uniqueness
+- **Data Contamination Prevention**: Strict filtering prevents paragraphs from other assessments being loaded
+- **Legacy Data Migration**: Automatic migration of old paragraphs without `subjectId`/`assessmentId` properties
+
+### 🔧 **VISUAL DEBUG PANEL**
+- **Real-time Monitoring**: Live tracking of paragraph IDs, selections, and DOM elements
+- **Duplicate Detection**: Automatic warnings when multiple paragraphs share same ID
+- **ID Regeneration Tool**: One-click fix for duplicate ID issues
+- **Tauri-Friendly**: Designed specifically for debugging in Tauri desktop app where console access is limited
+- **Toggle Button**: Checkbox icon (☑️) in navbar to open/close debug panel
+
+### 🎯 **DEBUG PANEL FEATURES**
+- **Paragraph Selection Events**: Click tracking with timestamps
+- **Duplicate ID Detection**: Automatic warnings for duplicate paragraph IDs
+- **DOM Element Monitoring**: Detection of multiple DOM elements with same ID
+- **Selection State Tracking**: Live count of selected vs total paragraphs
+- **ID Regeneration**: One-click fix for existing duplicate ID issues
+- **Visual Paragraph List**: Real-time display of all paragraph IDs with selection status
+
+### 📋 **HOW TO USE DEBUG PANEL**
+1. Click the checkbox icon (☑️) in the top navigation bar
+2. Navigate to an assessment and try clicking checkboxes
+3. Watch real-time debug messages for any issues
+4. Use "Fix Duplicate IDs" button if duplicate IDs are detected
+5. Use "Clear Debug Log" to reset the debug messages
 
 ## 🎉 Version 3.0.8 - Critical Data Contamination Fix
 

@@ -2,9 +2,31 @@
 
 ## Overview
 
-This document provides a complete guide to recreate the UI/UX system used in the Feedback Manager application. The system is built on Bootstrap 5 with custom Svelte components, featuring a modern, professional design with consistent patterns for modals, notifications, cards, and interactive elements.
+This document provides a complete guide to recreate the UI/UX system used in the Feedback Manager application. The system is built on Bootstrap 5 with custom Svelte components, featuring a modern, professional design with consistent patterns for modals, notifications, cards, interactive elements, and comprehensive debugging tools.
 
-## Latest UI/UX Improvements (v3.0.7)
+## Latest UI/UX Improvements (v3.1.0)
+
+### Visual Debug Panel Implementation
+- **Debug Toggle Button**: Checkbox icon (☑️) in navbar for easy access
+- **Real-time Monitoring**: Live tracking of paragraph IDs, selections, and DOM elements
+- **Visual Feedback**: Color-coded badges showing selection status (✓ green, ○ gray)
+- **Warning System**: Automatic alerts for duplicate IDs and multiple DOM elements
+- **One-click Fixes**: "Fix Duplicate IDs" button for immediate problem resolution
+
+### Critical Bug Fixes
+- **Checkbox Reliability**: Fixed multiple checkbox ticking issue for consistent user experience
+- **Data Integrity**: Visual confirmation of clean data separation between assessments
+- **ID Management**: Enhanced ID generation with visual feedback for uniqueness
+- **Error Prevention**: Automatic detection and fixing of duplicate ID issues
+
+### Debug Panel Design System
+- **Bootstrap Integration**: Uses Bootstrap 5 card system with warning color scheme
+- **Responsive Layout**: Adapts to different screen sizes with proper spacing
+- **Monospace Font**: Debug messages use monospace font for better readability
+- **Scrollable Content**: Limited height with scroll for long debug logs
+- **Clear Actions**: Prominent buttons for clearing logs and fixing issues
+
+## Previous UI/UX Improvements (v3.0.7)
 
 ### Data Contamination Prevention
 - **Strict Saving Criteria**: Clear visual feedback when data is being saved to correct location

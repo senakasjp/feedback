@@ -374,6 +374,224 @@
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
 }
 
+/* Remove all button backgrounds in dark mode but keep colors */
+[data-bs-theme="dark"] .btn,
+[data-bs-theme="dark"] .btn-primary,
+[data-bs-theme="dark"] .btn-secondary,
+[data-bs-theme="dark"] .btn-success,
+[data-bs-theme="dark"] .btn-danger,
+[data-bs-theme="dark"] .btn-warning,
+[data-bs-theme="dark"] .btn-info,
+[data-bs-theme="dark"] .btn-light,
+[data-bs-theme="dark"] .btn-dark,
+[data-bs-theme="dark"] .btn-outline-primary,
+[data-bs-theme="dark"] .btn-outline-secondary,
+[data-bs-theme="dark"] .btn-outline-success,
+[data-bs-theme="dark"] .btn-outline-danger,
+[data-bs-theme="dark"] .btn-outline-warning,
+[data-bs-theme="dark"] .btn-outline-info,
+[data-bs-theme="dark"] .btn-outline-light,
+[data-bs-theme="dark"] .btn-outline-dark,
+[data-bs-theme="dark"] button,
+[data-bs-theme="dark"] button.btn,
+[data-bs-theme="dark"] button.btn-primary,
+[data-bs-theme="dark"] button.btn-secondary,
+[data-bs-theme="dark"] button.btn-success,
+[data-bs-theme="dark"] button.btn-danger,
+[data-bs-theme="dark"] button.btn-warning,
+[data-bs-theme="dark"] button.btn-info,
+[data-bs-theme="dark"] button.btn-light,
+[data-bs-theme="dark"] button.btn-dark,
+[data-bs-theme="dark"] button.btn-outline-primary,
+[data-bs-theme="dark"] button.btn-outline-secondary,
+[data-bs-theme="dark"] button.btn-outline-success,
+[data-bs-theme="dark"] button.btn-outline-danger,
+[data-bs-theme="dark"] button.btn-outline-warning,
+[data-bs-theme="dark"] button.btn-outline-info,
+[data-bs-theme="dark"] button.btn-outline-light,
+[data-bs-theme="dark"] button.btn-outline-dark {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Restore button colors and borders for dark mode */
+[data-bs-theme="dark"] .btn-primary {
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-secondary {
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+[data-bs-theme="dark"] .btn-success {
+  color: #75b798 !important;
+  border-color: #75b798 !important;
+}
+
+[data-bs-theme="dark"] .btn-danger {
+  color: #ea868f !important;
+  border-color: #ea868f !important;
+}
+
+[data-bs-theme="dark"] .btn-warning {
+  color: #ffda6a !important;
+  border-color: #ffda6a !important;
+}
+
+[data-bs-theme="dark"] .btn-info {
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-light {
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+[data-bs-theme="dark"] .btn-dark {
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary {
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-success {
+  color: #75b798 !important;
+  border-color: #75b798 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-danger {
+  color: #ea868f !important;
+  border-color: #ea868f !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-warning {
+  color: #ffda6a !important;
+  border-color: #ffda6a !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-info {
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-light {
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-dark {
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
+/* Hover states for dark mode - keep colors but add subtle background */
+[data-bs-theme="dark"] .btn-primary:hover {
+  background-color: rgba(110, 168, 254, 0.1) !important;
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-secondary:hover {
+  background-color: rgba(108, 117, 125, 0.1) !important;
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+[data-bs-theme="dark"] .btn-success:hover {
+  background-color: rgba(117, 183, 152, 0.1) !important;
+  color: #75b798 !important;
+  border-color: #75b798 !important;
+}
+
+[data-bs-theme="dark"] .btn-danger:hover {
+  background-color: rgba(234, 134, 143, 0.1) !important;
+  color: #ea868f !important;
+  border-color: #ea868f !important;
+}
+
+[data-bs-theme="dark"] .btn-warning:hover {
+  background-color: rgba(255, 218, 106, 0.1) !important;
+  color: #ffda6a !important;
+  border-color: #ffda6a !important;
+}
+
+[data-bs-theme="dark"] .btn-info:hover {
+  background-color: rgba(110, 168, 254, 0.1) !important;
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-light:hover {
+  background-color: rgba(248, 249, 250, 0.1) !important;
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+[data-bs-theme="dark"] .btn-dark:hover {
+  background-color: rgba(33, 37, 41, 0.1) !important;
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+  background-color: rgba(110, 168, 254, 0.1) !important;
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+  background-color: rgba(108, 117, 125, 0.1) !important;
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-success:hover {
+  background-color: rgba(117, 183, 152, 0.1) !important;
+  color: #75b798 !important;
+  border-color: #75b798 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-danger:hover {
+  background-color: rgba(234, 134, 143, 0.1) !important;
+  color: #ea868f !important;
+  border-color: #ea868f !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-warning:hover {
+  background-color: rgba(255, 218, 106, 0.1) !important;
+  color: #ffda6a !important;
+  border-color: #ffda6a !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-info:hover {
+  background-color: rgba(110, 168, 254, 0.1) !important;
+  color: #6ea8fe !important;
+  border-color: #6ea8fe !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-light:hover {
+  background-color: rgba(248, 249, 250, 0.1) !important;
+  color: #f8f9fa !important;
+  border-color: #f8f9fa !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-dark:hover {
+  background-color: rgba(33, 37, 41, 0.1) !important;
+  color: #212529 !important;
+  border-color: #212529 !important;
+}
+
 /* Dark mode specific overrides for existing components */
 [data-bs-theme="dark"] .card.border-warning {
   border-color: var(--bs-warning) !important;

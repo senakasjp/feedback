@@ -1,6 +1,29 @@
 # Feedback Application Architecture Diagram
 
-## Latest Architecture Updates (v3.0.7)
+## Latest Architecture Updates (v3.1.0)
+
+### Visual Debug Panel Architecture
+The application now includes a comprehensive visual debugging system:
+
+1. **Debug State Management**: `showCheckboxDebug` and `checkboxDebugInfo` state variables
+2. **Message System**: `addCheckboxDebug()` function with timestamp and message limit
+3. **UI Components**: Toggle button in navbar and comprehensive debug panel
+4. **ID Management**: `regenerateParagraphIds()` function for fixing duplicate IDs
+5. **Real-time Monitoring**: Live tracking of paragraph IDs, selections, and DOM elements
+
+### Enhanced ID Generation System
+- **Problem Solved**: Multiple checkbox ticking caused by duplicate paragraph IDs
+- **Solution**: Enhanced `generateId()` function with timestamp and random components
+- **Architecture**: Deterministic hash + timestamp + random for true uniqueness
+- **Impact**: Eliminates duplicate IDs and ensures one-to-one checkbox mapping
+
+### Data Contamination Prevention Architecture
+- **Problem Solved**: Paragraphs from other assessments being loaded
+- **Solution**: Strict filtering by `subjectId` and `assessmentId`
+- **Architecture**: Legacy data migration with automatic property assignment
+- **Impact**: Clean data separation between assessments
+
+## Previous Architecture Updates (v3.0.7)
 
 ### Critical Data Contamination Prevention Architecture
 The application now implements strict saving criteria to prevent dataset contamination:
