@@ -341,6 +341,21 @@
   color: var(--dark-text-primary) !important;
 }
 
+[data-bs-theme="dark"] .text-dark {
+  color: var(--dark-text-primary) !important;
+}
+
+/* Dark mode overrides for inline styles */
+[data-bs-theme="dark"] [style*="background-color: #f8f9fa"] {
+  background-color: var(--dark-bg-secondary) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+[data-bs-theme="dark"] [style*="background-color: #e9ecef"] {
+  background-color: var(--dark-bg-tertiary) !important;
+  color: var(--dark-text-primary) !important;
+}
+
 [data-bs-theme="dark"] .bg-light {
   background-color: var(--dark-bg-secondary) !important;
 }
@@ -940,19 +955,19 @@
 [data-bs-theme="dark"] .btn-outline-primary:hover {
   background-color: #6ea8fe !important;
   border-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .btn-primary {
   background-color: #6ea8fe !important;
   border-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .btn-primary:hover {
   background-color: #5a9cfe !important;
   border-color: #5a9cfe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .text-primary {
@@ -961,7 +976,7 @@
 
 [data-bs-theme="dark"] .bg-primary {
   background-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .border-primary {
@@ -970,7 +985,7 @@
 
 [data-bs-theme="dark"] .badge.bg-primary {
   background-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 /* Info Color Overrides (also blue-ish) */
@@ -982,19 +997,19 @@
 [data-bs-theme="dark"] .btn-outline-info:hover {
   background-color: #6ea8fe !important;
   border-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .btn-info {
   background-color: #6ea8fe !important;
   border-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .btn-info:hover {
   background-color: #5a9cfe !important;
   border-color: #5a9cfe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .text-info {
@@ -1003,7 +1018,7 @@
 
 [data-bs-theme="dark"] .bg-info {
   background-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .border-info {
@@ -1012,7 +1027,7 @@
 
 [data-bs-theme="dark"] .badge.bg-info {
   background-color: #6ea8fe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 /* Focus States with Dark Mode Blue */
@@ -1040,12 +1055,12 @@
 [data-bs-theme="dark"] .btn-primary.active {
   background-color: #5a9cfe !important;
   border-color: #5a9cfe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 [data-bs-theme="dark"] .btn-info:active,
 [data-bs-theme="dark"] .btn-info.active {
   background-color: #5a9cfe !important;
   border-color: #5a9cfe !important;
-  color: #000 !important;
+  color: #ffffff !important;
 }
