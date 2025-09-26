@@ -2320,6 +2320,7 @@
 				const paragraphsInArea = group.knowledgeAreas[knowledgeArea]
 				console.log(`  Knowledge Area: ${knowledgeArea} with ${paragraphsInArea.length} paragraphs`)
 				
+				// Skip adding knowledge area headings to PDF - just process the paragraphs
 				paragraphsInArea.forEach((paragraphObj, paraIndex) => {
 					// Only process selected paragraphs
 					if (selectedParagraphs.has(paragraphObj.id)) {
@@ -2340,6 +2341,25 @@
 							content = cleanParagraphTextForDisplay(paragraphText)
 						}
 						
+						// Remove knowledge area suffix from content (e.g., "- Security Auditing")
+						// Knowledge areas often appear at the end with a hyphen
+						if (content.includes(' - ')) {
+							const parts = content.split(' - ')
+							if (parts.length >= 2) {
+								const lastPart = parts[parts.length - 1].trim()
+								// Check if the last part looks like a knowledge area (not a category)
+								if (!lastPart.includes('Sub Objective') && 
+									!lastPart.includes('Sub Learning Objective') && 
+									!lastPart.includes('Report') && 
+									!lastPart.includes('Decision') &&
+									!lastPart.includes('Other') &&
+									lastPart.length > 0) {
+									// Remove the knowledge area part from the end
+									content = parts.slice(0, -1).join(' - ').trim()
+								}
+							}
+						}
+						
 						// Add category header if this is the first time we see this category
 						if (!processedCategories.has(categoryName)) {
 							const categoryMarksValue = categoryMarks[categoryName] || 0
@@ -2349,7 +2369,7 @@
 							console.log(`    📝 Added category header: ${categoryName}`)
 						}
 						
-						// Add the content
+						// Add the content (no knowledge area headings)
 						result.push(content)
 						console.log(`    📝 Added content: "${content.substring(0, 50)}..."`)
 					}
@@ -3646,36 +3666,6 @@
 	</div>
 {/if}
 
-{#if currentView === 'feedback' && selectedParagraphs.size > 0}
-	<div class="container-fluid mt-4 mb-4">
-		<div class="row">
-			<div class="col-12">
-				<div class="card">
-					<div class="card-header bg-primary text-white">
-						<h5 class="mb-0">
-							<i class="bi bi-check-square me-2"></i>Selected Paragraphs for {currentAssessment?.name}
-						</h5>
-					</div>
-					<div class="card-body">
-						{#if getTotalMarks() > 0}
-							<div class="alert alert-danger mb-3" role="alert">
-								<i class="bi bi-trophy me-2"></i>
-								<strong>Total Marks: {getTotalMarks()}</strong>
-							</div>
-						{/if}
-						<textarea 
-							class="form-control form-control-sm" 
-							rows="10" 
-							readonly 
-							value={getSelectedText()}
-							style="font-family: 'Roboto', system-ui, sans-serif; font-size: 13px; line-height: 1.3;"
-						></textarea>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
 
 
 <style>
