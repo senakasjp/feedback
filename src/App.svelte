@@ -2377,12 +2377,12 @@
 			})
 		})
 		
-		const finalText = result.join('\n\n')
+		const finalText = result.join('\n\n\n')
 		console.log('🔍 getSelectedTextInVisualOrder result:', {
 			length: finalText.length,
 			text: finalText.substring(0, 200) + (finalText.length > 200 ? '...' : '')
 		})
-		
+
 		return finalText
 	}
 
