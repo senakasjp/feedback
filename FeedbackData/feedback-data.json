@@ -370,7 +370,14 @@
       "name": "Senaka Amarakeerthi",
       "studentId": "1000347710",
       "displayName": "Senaka Amarakeerthi (1000347710)",
-      "createdAt": "2025-09-09T19:23:10.559Z"
+      "createdAt": "2025-09-09T19:23:10.559Z",
+      "selectedParagraphs": {
+        "mf3bwg5g9o5unrif9yi": [
+          "para-1273427782-1-1758847755341-7135",
+          "para-1980166909-9-1758847755341-7033"
+        ]
+      },
+      "updatedAt": "2025-09-26T23:24:56.720Z"
     },
     {
       "id": "mfd20p7oz25busxsmmb",

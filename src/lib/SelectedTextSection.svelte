@@ -1,4 +1,6 @@
 <script>
+	import RichTextEditor from './RichTextEditor.svelte'
+	
 	// Props
 	let { 
 		currentAssessment = null,
@@ -7,6 +9,46 @@
 		onGeneratePDF,
 		onGetSelectedText
 	} = $props()
+
+	// Local state for rich text editing
+	let formattedText = $state('')
+	let isEditing = $state(false)
+
+	// Initialize formatted text
+	$effect(() => {
+		if (selectedParagraphs.size > 0) {
+			formattedText = onGetSelectedText()
+		}
+	})
+
+	// Handle text changes in editor
+	function handleTextChange(newText) {
+		formattedText = newText
+	}
+
+	// Toggle edit mode
+	function toggleEdit() {
+		isEditing = !isEditing
+		if (!isEditing) {
+			// When exiting edit mode, update the formatted text
+			formattedText = onGetSelectedText()
+		}
+	}
+
+	// Copy formatted text to clipboard
+	function copyFormattedText() {
+		// Convert HTML to plain text for clipboard
+		const tempDiv = document.createElement('div')
+		tempDiv.innerHTML = formattedText
+		const plainText = tempDiv.textContent || tempDiv.innerText || ''
+		
+		navigator.clipboard.writeText(plainText).then(() => {
+			// Show success feedback
+			console.log('Text copied to clipboard')
+		}).catch(err => {
+			console.error('Failed to copy text: ', err)
+		})
+	}
 </script>
 
 <!-- Selected Text Section - Only show when in feedback mode with selections -->
@@ -21,21 +63,34 @@
 						</h5>
 					</div>
 					<div class="card-body">
-						<div class="d-flex justify-content-end gap-2 mb-3">
-							<button class="btn btn-success btn-sm" onclick={onCopyToClipboard}>
-								<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
-							</button>
-							<button class="btn btn-danger btn-sm" onclick={onGeneratePDF}>
-								<i class="bi bi-download me-2"></i>Download PDF
-							</button>
+						<div class="d-flex justify-content-between align-items-center mb-3">
+							<div class="d-flex gap-2">
+								<button 
+									class="btn btn-outline-primary btn-sm" 
+									onclick={toggleEdit}
+									class:btn-primary={isEditing}
+									class:btn-outline-primary={!isEditing}
+								>
+									<i class="bi bi-{isEditing ? 'check' : 'pencil'} me-2"></i>
+									{isEditing ? 'Save' : 'Edit'}
+								</button>
+							</div>
+							<div class="d-flex gap-2">
+								<button class="btn btn-success btn-sm" onclick={copyFormattedText}>
+									<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
+								</button>
+								<button class="btn btn-danger btn-sm" onclick={onGeneratePDF}>
+									<i class="bi bi-download me-2"></i>Download PDF
+								</button>
+							</div>
 						</div>
-						<textarea 
-							class="form-control form-control-sm" 
-							rows="10" 
-							readonly 
-							value={onGetSelectedText()}
-							style="font-family: 'Roboto', system-ui, sans-serif; font-size: 13px; line-height: 1.3;"
-						></textarea>
+						<RichTextEditor 
+							value={formattedText}
+							onChange={handleTextChange}
+							readonly={!isEditing}
+							rows={10}
+							placeholder="Selected paragraphs will appear here..."
+						/>
 					</div>
 				</div>
 			</div>

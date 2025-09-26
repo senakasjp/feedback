@@ -8,6 +8,7 @@
 	import SubjectManager from './lib/SubjectManager.svelte'
 	import AssessmentManager from './lib/AssessmentManager.svelte'
 	import Breadcrumb from './lib/Breadcrumb.svelte'
+	import RichTextEditor from './lib/RichTextEditor.svelte'
 	
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
@@ -33,6 +34,7 @@
 	let currentSubjectId = $state(null)
 	let currentAssessmentId = $state(null)
 	let currentSubject = $state(null)
+	
 	let currentAssessment = $state(null)
 	let currentStudentId = $state(null) // Currently selected student
 
@@ -2124,7 +2126,9 @@
 	function startEditParagraph(index) {
 		editingParagraphIndex = index
 		// Extract only the main text content (without category and knowledge area prefixes)
-		editingParagraphText = extractMainTextFromParagraph(paragraphs[index].text)
+		const extractedText = extractMainTextFromParagraph(paragraphs[index].text)
+		// Set as HTML for rich text editor
+		editingParagraphText = extractedText
 	}
 
 	function cancelEditParagraph() {
@@ -2134,9 +2138,12 @@
 
 	function saveEditParagraph() {
 		if (editingParagraphIndex !== null && editingParagraphText.trim()) {
+			// Store HTML content directly for display
+			let textToSave = editingParagraphText
+			
 			// Reconstruct the paragraph text with original prefixes
 			const originalText = paragraphs[editingParagraphIndex].text
-			const newText = reconstructParagraphText(originalText, editingParagraphText.trim())
+			const newText = reconstructParagraphText(originalText, textToSave.trim())
 			paragraphs[editingParagraphIndex].text = newText
 			editingParagraphIndex = null
 			editingParagraphText = ''
@@ -2531,8 +2538,16 @@
 
 	function copyToClipboard() {
 		console.log('📋 copyToClipboard called')
-		const selectedText = getSelectedTextInVisualOrder()
-		console.log('📋 getSelectedTextInVisualOrder result:', {
+		let selectedText = getSelectedTextInVisualOrder()
+		
+		// Convert HTML to plain text for clipboard
+		if (selectedText.includes('<')) {
+			const tempDiv = document.createElement('div')
+			tempDiv.innerHTML = selectedText
+			selectedText = tempDiv.textContent || tempDiv.innerText || ''
+		}
+		
+		console.log('📋 copyToClipboard result:', {
 			length: selectedText.length,
 			text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
 			isEmpty: selectedText.trim() === ''
@@ -2550,8 +2565,16 @@
 
 	function generatePDF() {
 		console.log('📄 generatePDF called')
-		const selectedText = getSelectedTextInVisualOrder()
-		console.log('📄 getSelectedTextInVisualOrder result:', {
+		let selectedText = getSelectedTextInVisualOrder()
+		
+		// Convert HTML to plain text for PDF
+		if (selectedText.includes('<')) {
+			const tempDiv = document.createElement('div')
+			tempDiv.innerHTML = selectedText
+			selectedText = tempDiv.textContent || tempDiv.innerText || ''
+		}
+		
+		console.log('📄 generatePDF result:', {
 			length: selectedText.length,
 			text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
 			isEmpty: selectedText.trim() === ''
@@ -2732,6 +2755,7 @@
 			saveStudentEvaluation()
 		}
 	}
+
 
 	onMount(() => {
 		loadSubjects()
@@ -3464,16 +3488,17 @@
 																		{/if}
 																		<div class="flex-grow-1 me-3">
 																			{#if editingParagraphIndex === originalIndex}
-																				<textarea 
-																					class="form-control form-control-sm" 
-																					bind:value={editingParagraphText}
-																					rows="3"
-																					style="resize: vertical;"
-																				></textarea>
+																				<RichTextEditor 
+																					value={editingParagraphText}
+																					onChange={(newText) => editingParagraphText = newText}
+																					readonly={false}
+																					rows={3}
+																					placeholder="Edit paragraph text..."
+																				/>
 																			{:else}
 																				<div class="d-flex align-items-start">
 																					<div class="flex-grow-1">
-																						<p class="mb-0 fs-6 lh-base">{text}</p>
+																						<div class="mb-0 fs-6 lh-base" style="white-space: pre-wrap;">{@html text}</div>
 																					</div>
 																					{#if source && source !== undefined}
 																						<div class="ms-2">
