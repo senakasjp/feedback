@@ -1,5 +1,100 @@
 # API Reference
 
+## Version 3.2.1 - Duplicate ID Detection & Fixing
+
+### Duplicate ID Management API
+
+#### ID Detection Function
+```javascript
+function checkForDuplicateIds() {
+  const allIds = paragraphs.map(p => p.id)
+  const uniqueIds = [...new Set(allIds)]
+  const duplicateIds = allIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+  
+  console.log('🔍 ID Check:', {
+    totalParagraphs: paragraphs.length,
+    uniqueIds: uniqueIds.length,
+    duplicateIds: duplicateIds.length,
+    duplicateIdsList: [...new Set(duplicateIds)]
+  })
+  
+  if (duplicateIds.length > 0) {
+    addCheckboxDebug(`⚠️ Found ${duplicateIds.length} duplicate IDs: ${[...new Set(duplicateIds)].join(', ')}`)
+    return true
+  } else {
+    addCheckboxDebug(`✅ All ${paragraphs.length} IDs are unique`)
+    return false
+  }
+}
+```
+
+#### Enhanced ID Regeneration Function
+```javascript
+function regenerateParagraphIds() {
+  addCheckboxDebug(`🔄 Regenerating IDs for ${paragraphs.length} paragraphs`)
+  
+  const beforeIds = paragraphs.map(p => p.id)
+  const duplicateIds = beforeIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+  
+  if (duplicateIds.length > 0) {
+    addCheckboxDebug(`⚠️ Found ${duplicateIds.length} duplicate IDs before regeneration`)
+    console.log('🔧 Duplicate IDs found:', [...new Set(duplicateIds)])
+  }
+  
+  // Store current selections before regeneration
+  const currentSelections = Array.from(selectedParagraphs)
+  
+  paragraphs = paragraphs.map((para, index) => ({
+    ...para,
+    id: generateId(para.text || para, index)
+  }))
+  
+  const afterIds = paragraphs.map(p => p.id)
+  const afterDuplicateIds = afterIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+  
+  if (afterDuplicateIds.length === 0) {
+    addCheckboxDebug(`✅ All IDs are now unique!`)
+    console.log('✅ ID regeneration successful - all IDs are now unique')
+  } else {
+    addCheckboxDebug(`❌ Still have ${afterDuplicateIds.length} duplicate IDs after regeneration`)
+    console.log('❌ ID regeneration failed - still have duplicates:', afterDuplicateIds)
+  }
+  
+  // Clear selections since IDs have changed
+  selectedParagraphs = new Set()
+  addCheckboxDebug(`🧹 Cleared selections due to ID regeneration`)
+  console.log('🧹 Cleared selections due to ID regeneration. Previous selections:', currentSelections)
+  
+  // Save the updated paragraphs
+  saveAssessmentData()
+  if (currentStudentId) {
+    saveStudentParagraphs()
+  }
+}
+```
+
+#### Enhanced Debug System
+```javascript
+function addCheckboxDebug(message) {
+  checkboxDebugInfo = [...checkboxDebugInfo, `${new Date().toLocaleTimeString()}: ${message}`]
+  console.log('🔍 DEBUG:', message)
+}
+```
+
+### Integration Points
+
+#### Automatic Detection Integration
+- **Tauri Path**: Integrated into `loadAssessmentData()` function
+- **LocalStorage Path**: Integrated into localStorage fallback
+- **Auto-Fix**: Automatically triggers `regenerateParagraphIds()` when duplicates detected
+
+#### Debug Panel Enhancements
+- **Check Duplicate IDs Button**: Manual verification of ID uniqueness
+- **Fix Duplicate IDs Button**: Manual regeneration of paragraph IDs
+- **Enhanced Logging**: Comprehensive console output for troubleshooting
+
+---
+
 ## Version 3.1.0 - Major Bug Fixes Release
 
 ### Visual Debug Panel API
@@ -465,6 +560,48 @@ Shows a confirmation modal for removing a student from the current subject.
 
 **Parameters**:
 - `studentId`: string - ID of the student to remove from subject
+
+#### Update Student Selected Paragraphs
+```javascript
+function updateStudentSelectedParagraphs(students, studentId, assessmentId, selectedParagraphs) {
+  return students.map(student => {
+    if (student.id === studentId) {
+      return {
+        ...student,
+        selectedParagraphs: {
+          ...student.selectedParagraphs,
+          [assessmentId]: [...selectedParagraphs] // Replace old selection data
+        },
+        updatedAt: new Date().toISOString()
+      }
+    }
+    return student
+  })
+}
+```
+Updates a student's selected paragraphs for a specific assessment, replacing old selection data.
+
+**Parameters**:
+- `students`: Student[] - Array of all students
+- `studentId`: string - ID of the student to update
+- `assessmentId`: string - ID of the assessment
+- `selectedParagraphs`: string[] - Array of selected paragraph IDs
+
+**Returns**: Student[] - Updated students array
+
+#### Get Student Selected Paragraphs
+```javascript
+function getStudentSelectedParagraphs(student, assessmentId) {
+  return student.selectedParagraphs?.[assessmentId] || []
+}
+```
+Retrieves selected paragraphs for a specific assessment from student properties.
+
+**Parameters**:
+- `student`: Student - Student object
+- `assessmentId`: string - ID of the assessment
+
+**Returns**: string[] - Array of selected paragraph IDs
 
 **Usage**:
 ```javascript
@@ -1282,6 +1419,8 @@ interface Student {
   studentId: string;
   displayName: string;
   createdAt: string;
+  updatedAt: string;
+  selectedParagraphs: Record<string, string[]>;  // Assessment ID -> Selected paragraph IDs
 }
 ```
 
@@ -1300,7 +1439,7 @@ interface StudentEvaluationData {
   studentId: string;
   assessmentId: string;
   paragraphs: Paragraph[];
-  selectedParagraphs: string[];  // Now stores paragraph IDs instead of indices
+  selectedParagraphs: string[];  // Legacy field - now stored in student.selectedParagraphs
   studentName: string;
   studentImage: string;
   categoryMarks: Record<string, string>;
@@ -1308,6 +1447,8 @@ interface StudentEvaluationData {
   savedAt: string;
 }
 ```
+
+**Note**: The `selectedParagraphs` field is maintained for backward compatibility. New selections are stored in `student.selectedParagraphs[assessmentId]`.
 
 ### Student Paragraph Data
 ```typescript

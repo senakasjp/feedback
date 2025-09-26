@@ -12,6 +12,9 @@
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
 	
+	// Import data services
+	import { studentsService } from './services/dataService.js'
+	
 	// Import constants
 	import { PDR_CATEGORIES, STUDIO4_CATEGORIES, STUDIO5_CATEGORIES } from './utils/constants.js'
 	
@@ -57,6 +60,60 @@
 	let showCheckboxDebug = $state(false)
 	let checkboxDebugInfo = $state([])
 	
+	// Function to add debug messages
+	function addCheckboxDebug(message) {
+		checkboxDebugInfo = [...checkboxDebugInfo, `${new Date().toLocaleTimeString()}: ${message}`]
+		console.log('🔍 DEBUG:', message)
+	}
+	
+	// Debug function to test selection state
+	function debugSelectionState() {
+		console.log('🔍 DEBUG Selection State:', {
+			selectedParagraphs: Array.from(selectedParagraphs),
+			selectedCount: selectedParagraphs.size,
+			totalParagraphs: paragraphs.length,
+			paragraphIds: paragraphs.map(p => p.id),
+			selectedTextResult: getSelectedText(),
+			selectedTextLength: getSelectedText().length
+		})
+		
+		// Test if selectedParagraphs Set is working
+		console.log('🔍 Testing Set operations:')
+		paragraphs.forEach((para, index) => {
+			const isSelected = selectedParagraphs.has(para.id)
+			console.log(`  Paragraph ${index} (${para.id}): ${isSelected ? 'SELECTED' : 'not selected'}`)
+		})
+		
+		// Test direct paragraph lookup
+		console.log('🔍 Testing paragraph lookup:')
+		Array.from(selectedParagraphs).forEach(paraId => {
+			const para = paragraphs.find(p => p.id === paraId)
+			console.log(`  Selected ID ${paraId}: ${para ? 'FOUND' : 'NOT FOUND'}`, para?.text?.substring(0, 50))
+		})
+	}
+
+	// Function to check for duplicate IDs
+	function checkForDuplicateIds() {
+		const allIds = paragraphs.map(p => p.id)
+		const uniqueIds = [...new Set(allIds)]
+		const duplicateIds = allIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+		
+		console.log('🔍 ID Check:', {
+			totalParagraphs: paragraphs.length,
+			uniqueIds: uniqueIds.length,
+			duplicateIds: duplicateIds.length,
+			duplicateIdsList: [...new Set(duplicateIds)]
+		})
+		
+		if (duplicateIds.length > 0) {
+			addCheckboxDebug(`⚠️ Found ${duplicateIds.length} duplicate IDs: ${[...new Set(duplicateIds)].join(', ')}`)
+			return true
+		} else {
+			addCheckboxDebug(`✅ All ${paragraphs.length} IDs are unique`)
+			return false
+		}
+	}
+
 	// Function to regenerate unique IDs for all paragraphs
 	function regenerateParagraphIds() {
 		addCheckboxDebug(`🔄 Regenerating IDs for ${paragraphs.length} paragraphs`)
@@ -66,7 +123,11 @@
 		
 		if (duplicateIds.length > 0) {
 			addCheckboxDebug(`⚠️ Found ${duplicateIds.length} duplicate IDs before regeneration`)
+			console.log('🔧 Duplicate IDs found:', [...new Set(duplicateIds)])
 		}
+		
+		// Store current selections before regeneration
+		const currentSelections = Array.from(selectedParagraphs)
 		
 		paragraphs = paragraphs.map((para, index) => ({
 			...para,
@@ -78,13 +139,22 @@
 		
 		if (afterDuplicateIds.length === 0) {
 			addCheckboxDebug(`✅ All IDs are now unique!`)
+			console.log('✅ ID regeneration successful - all IDs are now unique')
 		} else {
 			addCheckboxDebug(`❌ Still have ${afterDuplicateIds.length} duplicate IDs after regeneration`)
+			console.log('❌ ID regeneration failed - still have duplicates:', afterDuplicateIds)
 		}
 		
 		// Clear selections since IDs have changed
 		selectedParagraphs = new Set()
 		addCheckboxDebug(`🧹 Cleared selections due to ID regeneration`)
+		console.log('🧹 Cleared selections due to ID regeneration. Previous selections:', currentSelections)
+		
+		// Save the updated paragraphs
+		saveAssessmentData()
+		if (currentStudentId) {
+			saveStudentParagraphs()
+		}
 	}
 	let showDeleteConfirmation = $state(false) // Show delete confirmation modal
 	let studentToDelete = $state(null) // Student to be deleted
@@ -342,6 +412,15 @@
 				
 				// Ensure paragraphs have IDs (migration for existing data)
 				paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
+				
+				// Check for duplicate IDs after loading and fixing
+				const hasDuplicates = checkForDuplicateIds()
+				if (hasDuplicates) {
+					console.log('⚠️ Duplicate IDs detected during load - auto-fixing...')
+					addCheckboxDebug('⚠️ Duplicate IDs detected - auto-fixing...')
+					regenerateParagraphIds()
+				}
+				
 				// Load all paragraphs but don't select any by default (unless preserving selections)
 				if (!preserveSelections) {
 					selectedParagraphs = new Set()
@@ -417,6 +496,15 @@
 					
 					// Ensure paragraphs have IDs (migration for existing data)
 					paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
+					
+					// Check for duplicate IDs after loading and fixing
+					const hasDuplicates = checkForDuplicateIds()
+					if (hasDuplicates) {
+						console.log('⚠️ Duplicate IDs detected during load (localStorage) - auto-fixing...')
+						addCheckboxDebug('⚠️ Duplicate IDs detected - auto-fixing...')
+						regenerateParagraphIds()
+					}
+					
 					// Load all paragraphs but don't select any by default (unless preserving selections)
 					if (!preserveSelections) {
 						selectedParagraphs = new Set()
@@ -574,7 +662,7 @@
 				paragraphs = []
 				selectedParagraphs = new Set()
 				studentName = ''
-				studentImage = ''
+				// No studentImage - only header photo for assessment
 			}
 			
 			console.log(`Subject "${subjectToDelete.name}" deleted successfully`)
@@ -1124,11 +1212,31 @@
 			console.log('STRICT SAVING CRITERIA: Cannot save student data when no student is selected')
 			return
 		}
+
+		// Save selected paragraphs under student properties (replace old selection data)
+		console.log('💾 SAVING: Selected paragraphs to student properties:', {
+			studentId: currentStudentId,
+			assessmentId: currentAssessmentId,
+			selectedParagraphs: Array.from(selectedParagraphs)
+		})
+		
+		students = studentsService.updateStudentSelectedParagraphs(
+			students, 
+			currentStudentId, 
+			currentAssessmentId, 
+			Array.from(selectedParagraphs)
+		)
+		
+		// Save updated students data
+		await studentsService.saveStudents(students)
+		console.log('✅ SAVED: Student data updated with new selections')
+
+		// Still save other evaluation data (marks, etc.) in separate file for compatibility
 		const evaluationData = {
 			studentId: currentStudentId,
 			assessmentId: currentAssessmentId,
 			paragraphs: [...paragraphs],
-			selectedParagraphs: [...selectedParagraphs],
+			// selectedParagraphs: removed - now stored in student properties only
 			studentName: studentName,
 			// No studentImage - only header photo for assessment
 			categoryMarks: { ...categoryMarks },
@@ -1291,6 +1399,27 @@
 		let savedCategoryMarks = {}
 		let savedManualTotalMarks = ''
 
+		// First, try to load selected paragraphs from student properties
+		const currentStudent = students.find(s => s.id === currentStudentId)
+		if (currentStudent) {
+			console.log('DEBUG: Current student found:', currentStudent.displayName)
+			console.log('DEBUG: Student selectedParagraphs:', currentStudent.selectedParagraphs)
+			console.log('DEBUG: Looking for assessmentId:', currentAssessmentId)
+			
+			const studentSelectedParagraphs = studentsService.getStudentSelectedParagraphs(currentStudent, currentAssessmentId)
+			console.log('DEBUG: Retrieved student selected paragraphs:', studentSelectedParagraphs)
+			
+			if (studentSelectedParagraphs && studentSelectedParagraphs.length > 0) {
+				savedSelectedParagraphs = new Set(studentSelectedParagraphs)
+				console.log('✅ LOADED: Selected paragraphs from student properties:', Array.from(savedSelectedParagraphs))
+			} else {
+				console.log('⚠️ No selections found in student properties for assessment:', currentAssessmentId)
+			}
+		} else {
+			console.log('❌ ERROR: Current student not found for ID:', currentStudentId)
+		}
+
+		// Then load other evaluation data (marks, etc.) from evaluation file
 		try {
 			const data = await invoke('read_student_evaluation', { 
 				studentId: currentStudentId,
@@ -1305,7 +1434,13 @@
 					return
 				}
 				
-				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
+				// Only use evaluation file selectedParagraphs if not found in student properties (legacy data)
+				if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
+					savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
+					console.log('🔄 LEGACY: Selected paragraphs from evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
+					console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
+				}
+				
 				savedStudentName = evaluationData.studentName || ''
 				// No studentImage - only header photo for assessment
 				savedCategoryMarks = evaluationData.categoryMarks || {}
@@ -1324,7 +1459,13 @@
 					return
 				}
 				
-				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs || [])
+				// Only use evaluation file selectedParagraphs if not found in student properties (legacy data)
+				if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
+					savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
+					console.log('🔄 LEGACY: Selected paragraphs from localStorage evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
+					console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
+				}
+				
 				savedStudentName = evaluationData.studentName || ''
 				// No studentImage - only header photo for assessment
 				savedCategoryMarks = evaluationData.categoryMarks || {}
@@ -1888,20 +2029,34 @@
 	function toggleParagraph(paragraphId) {
 		if (!paragraphId) return
 		
+		console.log('🔄 toggleParagraph called:', {
+			paragraphId,
+			currentSelectedCount: selectedParagraphs.size,
+			currentSelected: Array.from(selectedParagraphs),
+			paragraphExists: paragraphs.find(p => p.id === paragraphId) ? 'YES' : 'NO'
+		})
+		
 		addCheckboxDebug(`🔄 Toggle clicked: ${paragraphId}`)
 		addCheckboxDebug(`📋 Current selected: ${Array.from(selectedParagraphs).length} items`)
 		
 		if (selectedParagraphs.has(paragraphId)) {
 			selectedParagraphs.delete(paragraphId)
 			addCheckboxDebug(`❌ Removed: ${paragraphId}`)
+			console.log('❌ Removed paragraph from selection:', paragraphId)
 		} else {
 			selectedParagraphs.add(paragraphId)
 			addCheckboxDebug(`✅ Added: ${paragraphId}`)
+			console.log('✅ Added paragraph to selection:', paragraphId)
 		}
 		selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
 		
 		addCheckboxDebug(`📊 Final selected: ${Array.from(selectedParagraphs).length} items`)
 		addCheckboxDebug(`📝 Selected IDs: ${Array.from(selectedParagraphs).join(', ')}`)
+		
+		console.log('📊 Final selection state:', {
+			count: selectedParagraphs.size,
+			selected: Array.from(selectedParagraphs)
+		})
 		
 		// Update warnings for all categories with marks
 		Object.keys(categoryMarks).forEach(category => {
@@ -1980,6 +2135,11 @@
 	// getSectionOrder function is now imported from utils/helpers.js
 
 	function getOrderedParagraphs() {
+		console.log('🔍 getOrderedParagraphs called with:', {
+			paragraphsCount: paragraphs.length,
+			paragraphs: paragraphs.map(p => ({ id: p.id, text: p.text?.substring(0, 50) }))
+		})
+		
 		const ordered = paragraphs
 			.map((paragraph, originalIndex) => {
 				// Handle both string and object formats
@@ -2003,12 +2163,10 @@
 				return a.originalIndex - b.originalIndex
 			})
 		
-		// Debug logging to verify order
-		console.log('Ordered paragraphs:')
-		ordered.forEach(({ paragraph, originalIndex }) => {
-			const order = getSectionOrder(paragraph)
-			const preview = paragraph.substring(0, 50) + (paragraph.length > 50 ? '...' : '')
-			console.log(`Order ${order}: ${preview}`)
+		console.log('🔍 getOrderedParagraphs result:', {
+			orderedCount: ordered.length,
+			orderedIds: ordered.map(o => o.id),
+			orderedTexts: ordered.map(o => o.paragraph?.substring(0, 30))
 		})
 		
 		return ordered
@@ -2123,20 +2281,38 @@
 
 	function getSelectedText() {
 		const orderedParagraphs = getOrderedParagraphs()
+		
+		console.log('🔍 DEBUG getSelectedText:', {
+			selectedParagraphs: Array.from(selectedParagraphs),
+			selectedCount: selectedParagraphs.size,
+			totalParagraphs: paragraphs.length,
+			orderedParagraphsCount: orderedParagraphs.length
+		})
+		
 		const selectedOrderedParagraphs = Array.from(selectedParagraphs)
 			.sort((a, b) => {
 				// Find the ordered positions of these paragraph IDs
-				const posA = orderedParagraphs.findIndex(item => paragraphs[item.originalIndex]?.id === a)
-				const posB = orderedParagraphs.findIndex(item => paragraphs[item.originalIndex]?.id === b)
+				const posA = orderedParagraphs.findIndex(item => item.id === a)
+				const posB = orderedParagraphs.findIndex(item => item.id === b)
+				console.log(`🔍 DEBUG sorting: ${a} at position ${posA}, ${b} at position ${posB}`)
 				return posA - posB
 			})
 			.map(paragraphId => {
 				const paragraph = paragraphs.find(p => p.id === paragraphId)
+				console.log(`🔍 DEBUG mapping paragraphId ${paragraphId}:`, paragraph)
+				
+				if (!paragraph) {
+					console.log(`❌ ERROR: Paragraph not found for ID: ${paragraphId}`)
+					return null
+				}
+				
 				// Handle both string and object formats
 				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
-				// Clean the text for PDF (remove knowledge area prefix)
-				return cleanParagraphTextForDisplay(paragraphText)
+				const cleanedText = cleanParagraphTextForDisplay(paragraphText)
+				console.log(`✅ Mapped paragraph ${paragraphId}: "${cleanedText}"`)
+				return cleanedText
 			})
+			.filter(text => text !== null) // Remove null entries
 		
 		// Group paragraphs by category only (not by knowledge area)
 		const groupedSections = {}
@@ -2202,7 +2378,16 @@
 			result.pop()
 		}
 		
-		return result.join('\n\n')
+		const finalText = result.join('\n\n')
+		console.log('🔍 DEBUG getSelectedText final result:', {
+			selectedOrderedParagraphsCount: selectedOrderedParagraphs.length,
+			groupedSections: Object.keys(groupedSections),
+			resultLength: result.length,
+			finalTextLength: finalText.length,
+			finalText: finalText.substring(0, 200) + (finalText.length > 200 ? '...' : '')
+		})
+		
+		return finalText
 	}
 
 	function handleImageUpload(event) {
@@ -2238,15 +2423,35 @@
 	}
 
 	function copyToClipboard() {
-		navigator.clipboard.writeText(getSelectedText())
+		console.log('📋 copyToClipboard called')
+		const selectedText = getSelectedText()
+		console.log('📋 getSelectedText result:', {
+			length: selectedText.length,
+			text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
+			isEmpty: selectedText.trim() === ''
+		})
+		
+		if (selectedText.trim() === '') {
+			showSuccessNotification('No text to copy - no paragraphs selected or text is empty!')
+			return
+		}
+		
+		navigator.clipboard.writeText(selectedText)
 			.then(() => showSuccessNotification('Copied to clipboard!'))
 			.catch(() => showSuccessNotification('Failed to copy to clipboard'))
 	}
 
 	function generatePDF() {
+		console.log('📄 generatePDF called')
 		const selectedText = getSelectedText()
-		if (!selectedText) {
-			showSuccessNotification('No paragraphs selected!')
+		console.log('📄 getSelectedText result:', {
+			length: selectedText.length,
+			text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
+			isEmpty: selectedText.trim() === ''
+		})
+		
+		if (!selectedText || selectedText.trim() === '') {
+			showSuccessNotification('No paragraphs selected or text is empty!')
 			return
 		}
 
@@ -3304,6 +3509,18 @@
 									onclick={regenerateParagraphIds}
 								>
 									<i class="bi bi-arrow-clockwise me-1"></i>Fix Duplicate IDs
+								</button>
+								<button 
+									class="btn btn-sm btn-info ms-2" 
+									onclick={debugSelectionState}
+								>
+									<i class="bi bi-bug me-1"></i>Debug Selection State
+								</button>
+								<button 
+									class="btn btn-sm btn-warning ms-2" 
+									onclick={checkForDuplicateIds}
+								>
+									<i class="bi bi-exclamation-triangle me-1"></i>Check Duplicate IDs
 								</button>
 							</div>
 							<div class="col-md-6 text-end">

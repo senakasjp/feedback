@@ -1,5 +1,150 @@
 # Architecture Documentation
 
+## Version 3.2.1 - Automatic Duplicate ID Detection & Fixing
+
+### Critical Bug Fix: Duplicate Paragraph ID Management
+
+The application now includes a comprehensive system for detecting and automatically fixing duplicate paragraph IDs, which were causing selection tracking failures:
+
+#### Problem Resolution Architecture
+
+**Root Cause Identified**:
+- Multiple paragraphs sharing identical IDs (e.g., `mfq7dqffo4h768js19`)
+- JavaScript `Set` objects can only store unique values
+- Selection tracking failed when multiple paragraphs had same ID
+- Print functions excluded paragraphs with duplicate IDs
+
+**Solution Architecture**:
+- **Automatic Detection**: Real-time duplicate ID detection during data loading
+- **Auto-Fix System**: Automatic ID regeneration with unique identifiers
+- **Enhanced Debug Tools**: Comprehensive debugging and monitoring capabilities
+- **Data Persistence**: Automatic saving of fixed IDs to prevent recurrence
+
+#### Technical Implementation
+
+**ID Detection System**:
+```javascript
+function checkForDuplicateIds() {
+  const allIds = paragraphs.map(p => p.id)
+  const uniqueIds = [...new Set(allIds)]
+  const duplicateIds = allIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+  
+  // Returns true if duplicates found, false if all unique
+  return duplicateIds.length > 0
+}
+```
+
+**Auto-Fix System**:
+```javascript
+function regenerateParagraphIds() {
+  // Generate new unique IDs for all paragraphs
+  paragraphs = paragraphs.map((para, index) => ({
+    ...para,
+    id: generateId(para.text || para, index)
+  }))
+  
+  // Clear selections since IDs have changed
+  selectedParagraphs = new Set()
+  
+  // Save the updated paragraphs
+  saveAssessmentData()
+  if (currentStudentId) {
+    saveStudentParagraphs()
+  }
+}
+```
+
+#### Integration Points
+
+**Automatic Detection Integration**:
+- **Tauri Path**: Integrated into `loadAssessmentData()` function
+- **LocalStorage Path**: Integrated into localStorage fallback
+- **Auto-Fix**: Automatically triggers `regenerateParagraphIds()` when duplicates detected
+
+**Debug Panel Enhancements**:
+- **Check Duplicate IDs Button**: Manual verification of ID uniqueness
+- **Fix Duplicate IDs Button**: Manual regeneration of paragraph IDs
+- **Enhanced Logging**: Comprehensive console output for troubleshooting
+
+#### Data Flow Architecture
+
+1. **Load Process**:
+   - Paragraphs loaded from storage
+   - `checkForDuplicateIds()` automatically called
+   - If duplicates detected, `regenerateParagraphIds()` automatically triggered
+   - Fixed IDs automatically saved to storage
+
+2. **Debug Process**:
+   - User can manually check for duplicates via debug panel
+   - User can manually fix duplicates via debug panel
+   - All actions logged to console and debug panel
+
+3. **Prevention Process**:
+   - All new paragraph IDs generated with unique identifiers
+   - Existing data automatically fixed on load
+   - System maintains ID uniqueness going forward
+
+#### Impact & Benefits
+
+**Immediate Fixes**:
+- ✅ All paragraph selections now work correctly
+- ✅ Print functions include all selected content
+- ✅ Selection counter accurately reflects selected paragraphs
+- ✅ No more missing paragraphs in generated documents
+
+**Long-term Benefits**:
+- ✅ Automatic prevention of future duplicate ID issues
+- ✅ Enhanced debugging capabilities for troubleshooting
+- ✅ Improved system reliability and data integrity
+- ✅ Better user experience with consistent selection behavior
+
+---
+
+## Version 3.2.0 - Student Selection Data Storage System
+
+### New Student-Centric Selection Storage
+
+The application now implements a revolutionary student-centric approach to storing paragraph selections, making data management more organized and efficient:
+
+#### Key Features
+1. **Student Properties Storage**: Selected paragraph data is now stored as properties of each student object
+2. **Assessment-Specific Selections**: Each student maintains separate selections for each assessment
+3. **Data Replacement Policy**: Old selection data is automatically replaced on each save
+4. **Backward Compatibility**: System maintains compatibility with existing evaluation files
+5. **Automatic Loading**: Selection data loads automatically when students are selected
+
+#### Student Data Structure Enhancement
+```javascript
+{
+  id: "student-123",
+  displayName: "John Doe (12345)",
+  createdAt: "2024-01-01T00:00:00.000Z",
+  updatedAt: "2024-01-01T00:00:00.000Z",
+  selectedParagraphs: {
+    "assessment-1": ["para-id-1", "para-id-2"],
+    "assessment-2": ["para-id-3", "para-id-4"],
+    "assessment-3": []
+  }
+}
+```
+
+#### Data Flow Architecture
+1. **Save Process**: 
+   - Selected paragraphs → `student.selectedParagraphs[assessmentId]`
+   - Old selection data → **Replaced** (not merged)
+   - Student data → Saved to main students file
+   - Evaluation data → Saved to separate files (marks, etc.)
+
+2. **Load Process**:
+   - **Primary**: Load from `student.selectedParagraphs[assessmentId]`
+   - **Fallback**: Load from evaluation files (backward compatibility)
+   - **UI Update**: Apply selections to checkboxes automatically
+
+3. **Print/Save Process**:
+   - Uses loaded selection data from student properties
+   - Generates PDFs and copies text based on student selections
+   - Maintains all existing functionality
+
 ## Version 3.1.0 - Major Bug Fixes Release
 
 ### Visual Debug Panel Architecture
@@ -261,12 +406,12 @@ FeedbackData/
 ```
 
 #### 3. Student Evaluation Storage
-**Purpose**: Stores student-specific evaluation data including marks, selections, and metadata for specific assignments.
+**Purpose**: Stores student-specific evaluation data including marks and metadata for specific assignments. **Note**: Selected paragraph data is now stored in student properties (see above).
 
 **File Structure**:
 ```
 FeedbackData/
-├── student-evaluation-{studentId}-{assessmentId}.json  # Student evaluation data
+├── student-evaluation-{studentId}-{assessmentId}.json  # Student evaluation data (marks, etc.)
 ```
 
 **Data Structure**:
@@ -275,7 +420,7 @@ FeedbackData/
   "studentId": "student-123",
   "assessmentId": "assessment-456",
   "paragraphs": [],
-  "selectedParagraphs": [0, 1],
+  "selectedParagraphs": [0, 1],  // Legacy field - now stored in student.selectedParagraphs
   "studentName": "John Doe (12345)",
   "studentImage": "data:image/jpeg;base64...",
   "categoryMarks": {
@@ -286,6 +431,8 @@ FeedbackData/
   "savedAt": "2024-01-01T00:00:00.000Z"
 }
 ```
+
+**Important**: The `selectedParagraphs` field in evaluation files is now maintained for backward compatibility only. New selections are stored in `student.selectedParagraphs[assessmentId]`.
 
 ### Data Flow Logic
 

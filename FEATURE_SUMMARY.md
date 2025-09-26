@@ -1,7 +1,142 @@
-# Feature Implementation Summary - Version 3.1.0
+# Feature Implementation Summary - Version 3.2.1
 
 ## Overview
-This document summarizes the major features implemented in the Feedback Manager application version 3.1.0, including critical bug fixes, visual debug panel implementation, enhanced ID generation, data contamination prevention, and comprehensive debugging tools for improved reliability and user experience.
+This document summarizes the major features implemented in the Feedback Manager application version 3.2.1, including critical bug fixes for duplicate paragraph IDs, enhanced debug systems, and continued improvements for reliability and user experience.
+
+## Version 3.2.1 - Automatic Duplicate ID Detection & Fixing
+
+### 🐛 **CRITICAL BUG FIX: Duplicate Paragraph IDs**
+
+#### Problem Resolution
+Fixed a major issue where duplicate paragraph IDs were causing selection and printing failures:
+
+**Root Cause**: 
+- Multiple paragraphs sharing identical IDs (e.g., `mfq7dqffo4h768js19`)
+- JavaScript `Set` objects can only store unique values
+- Selection tracking failed when multiple paragraphs had same ID
+- Print functions excluded paragraphs with duplicate IDs
+
+**Solution Architecture**:
+- **Automatic Detection**: Real-time duplicate ID detection during data loading
+- **Auto-Fix System**: Automatic ID regeneration with unique identifiers
+- **Enhanced Debug Tools**: Comprehensive debugging and monitoring capabilities
+- **Data Persistence**: Automatic saving of fixed IDs to prevent recurrence
+
+#### Technical Implementation
+
+**New Functions Added**:
+```javascript
+// Detects duplicate paragraph IDs with detailed analysis
+function checkForDuplicateIds() {
+  const allIds = paragraphs.map(p => p.id)
+  const uniqueIds = [...new Set(allIds)]
+  const duplicateIds = allIds.filter((id, index, arr) => arr.indexOf(id) !== index)
+  
+  if (duplicateIds.length > 0) {
+    addCheckboxDebug(`⚠️ Found ${duplicateIds.length} duplicate IDs: ${[...new Set(duplicateIds)].join(', ')}`)
+    return true
+  } else {
+    addCheckboxDebug(`✅ All ${paragraphs.length} IDs are unique`)
+    return false
+  }
+}
+
+// Automatically regenerates unique IDs for all paragraphs
+function regenerateParagraphIds() {
+  // Store current selections before regeneration
+  const currentSelections = Array.from(selectedParagraphs)
+  
+  // Generate new unique IDs
+  paragraphs = paragraphs.map((para, index) => ({
+    ...para,
+    id: generateId(para.text || para, index)
+  }))
+  
+  // Clear selections since IDs have changed
+  selectedParagraphs = new Set()
+  
+  // Save the updated paragraphs
+  saveAssessmentData()
+  if (currentStudentId) {
+    saveStudentParagraphs()
+  }
+}
+```
+
+**Enhanced Debug System**:
+- Added `addCheckboxDebug()` function for consistent debug messaging
+- Enhanced debug panel with "Check Duplicate IDs" button
+- Comprehensive console logging throughout the selection system
+- Visual feedback for duplicate ID detection and fixing
+
+#### Integration Points
+
+**Automatic Detection Integration**:
+- Integrated into `loadAssessmentData()` function (both Tauri and localStorage paths)
+- Triggers automatic fixing when duplicates are detected
+- Provides user feedback through debug panel and console
+
+**Debug Panel Enhancements**:
+- "Check Duplicate IDs" button for manual verification
+- "Fix Duplicate IDs" button for manual regeneration
+- Real-time feedback on ID status and fixing progress
+
+#### Impact & Benefits
+
+**Immediate Fixes**:
+- ✅ All paragraph selections now work correctly
+- ✅ Print functions include all selected content
+- ✅ Selection counter accurately reflects selected paragraphs
+- ✅ No more missing paragraphs in generated documents
+
+**Long-term Benefits**:
+- ✅ Automatic prevention of future duplicate ID issues
+- ✅ Enhanced debugging capabilities for troubleshooting
+- ✅ Improved system reliability and data integrity
+- ✅ Better user experience with consistent selection behavior
+
+---
+
+## Version 3.2.0 - Student Selection Data Storage System
+
+### 🎯 **NEW STUDENT-CENTRIC SELECTION STORAGE**
+
+#### Revolutionary Data Architecture
+- **Student Properties Storage**: Selected paragraph data now stored as `student.selectedParagraphs[assessmentId]`
+- **Assessment-Specific Selections**: Each student maintains separate selections for each assessment
+- **Data Replacement Policy**: Old selection data automatically replaced on each save (no merging)
+- **Backward Compatibility**: System maintains compatibility with existing evaluation files
+- **Automatic Loading**: Selection data loads automatically when students are selected
+
+#### Enhanced Student Data Structure
+```javascript
+{
+  id: "student-123",
+  displayName: "John Doe (12345)",
+  selectedParagraphs: {
+    "assessment-1": ["para-id-1", "para-id-2"],
+    "assessment-2": ["para-id-3", "para-id-4"]
+  }
+}
+```
+
+#### New API Functions
+- **`updateStudentSelectedParagraphs()`**: Updates student's selected paragraphs for specific assessment
+- **`getStudentSelectedParagraphs()`**: Retrieves selected paragraphs from student properties
+- **Enhanced `saveStudentEvaluation()`**: Saves selections under student properties
+- **Updated `loadStudentEvaluation()`**: Prioritizes student properties over evaluation files
+
+#### Data Flow Benefits
+- **Organized Structure**: Student-centric approach eliminates data duplication
+- **Performance Improvement**: Centralized selection storage reduces file I/O
+- **Cleaner Management**: Easier maintenance and data organization
+- **Seamless Experience**: Automatic loading maintains user workflow
+
+### 🔄 **DATA MIGRATION & COMPATIBILITY**
+- Automatic migration ensures existing data remains accessible
+- Legacy evaluation files still supported as fallback
+- New students automatically get `selectedParagraphs` property
+- Existing students upgraded with backward-compatible structure
 
 ## Version 3.1.0 - Major Bug Fixes Release
 

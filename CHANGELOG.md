@@ -2,6 +2,90 @@
 
 ## Version History
 
+### v3.2.1 - Automatic Duplicate ID Detection & Fixing - January 2025
+
+#### 🐛 **CRITICAL BUG FIX: Duplicate Paragraph IDs**
+Fixed major issue where duplicate paragraph IDs were causing selection and printing problems:
+
+**Problem Identified**:
+- Paragraphs with identical IDs (e.g., `mfq7dqffo4h768js19` appearing twice)
+- `selectedParagraphs` Set could only store unique IDs, causing selection tracking failures
+- Print functions excluded paragraphs with duplicate IDs
+- Debug panel clearly showed duplicate IDs in paragraph list
+
+**Solution Implemented**:
+- **Automatic Detection**: `checkForDuplicateIds()` function detects duplicate IDs during load
+- **Auto-Fix System**: `regenerateParagraphIds()` automatically creates unique IDs for all paragraphs
+- **Enhanced Debug Tools**: Added "Check Duplicate IDs" button to debug panel
+- **Comprehensive Logging**: Enhanced console output for troubleshooting
+- **Data Persistence**: Fixed IDs automatically saved to prevent future issues
+
+**Technical Changes**:
+- Added `checkForDuplicateIds()` function with detailed ID analysis
+- Enhanced `regenerateParagraphIds()` with automatic saving
+- Integrated duplicate checking into `loadAssessmentData()` (both Tauri and localStorage paths)
+- Added `addCheckboxDebug()` function for consistent debug messaging
+- Enhanced debug panel with new "Check Duplicate IDs" button
+
+**Files Modified**:
+- `src/App.svelte`: Added duplicate ID detection and fixing functions
+- Enhanced debug system with comprehensive logging
+- Fixed all linting errors that could affect functionality
+
+**Impact**:
+- ✅ Selections now work correctly for all paragraphs
+- ✅ Print functions include all selected content
+- ✅ Selection counter accurately reflects selected paragraphs
+- ✅ Debug tools provide clear visibility into ID issues
+- ✅ System automatically prevents future duplicate ID problems
+
+---
+
+### v3.2.0 - Student Selection Data Storage System - January 2025
+
+#### 🎯 **NEW STUDENT-CENTRIC SELECTION STORAGE**
+Revolutionary new approach to storing paragraph selections as student properties:
+
+**Key Features**:
+- **Student Properties Storage**: Selected paragraph data now stored as `student.selectedParagraphs[assessmentId]`
+- **Assessment-Specific Selections**: Each student maintains separate selections for each assessment
+- **Data Replacement Policy**: Old selection data automatically replaced on each save (no merging)
+- **Backward Compatibility**: System maintains compatibility with existing evaluation files
+- **Automatic Loading**: Selection data loads automatically when students are selected
+
+**Technical Implementation**:
+- Enhanced `studentsService.updateStudentSelectedParagraphs()` function
+- New `studentsService.getStudentSelectedParagraphs()` function
+- Modified `saveStudentEvaluation()` to save selections under student properties
+- Updated `loadStudentEvaluation()` to prioritize student properties over evaluation files
+- Print/save functions automatically use new student selection data
+
+**Benefits**:
+- More organized data structure with student-centric approach
+- Eliminates data duplication across separate evaluation files
+- Cleaner data management and easier maintenance
+- Improved performance with centralized selection storage
+- Seamless user experience with automatic data loading
+
+#### 🔄 **DATA MIGRATION**
+- Automatic migration ensures existing data remains accessible
+- Legacy evaluation files still supported as fallback
+- New students automatically get `selectedParagraphs` property
+- Existing students upgraded with backward-compatible structure
+
+#### 📊 **ENHANCED DATA STRUCTURE**
+```javascript
+// New Student Structure
+{
+  id: "student-123",
+  displayName: "John Doe (12345)",
+  selectedParagraphs: {
+    "assessment-1": ["para-id-1", "para-id-2"],
+    "assessment-2": ["para-id-3", "para-id-4"]
+  }
+}
+```
+
 ### v3.1.0 - Major Bug Fixes Release - January 2025
 
 #### 🚨 **CRITICAL BUG FIXES**

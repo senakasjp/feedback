@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Feedback Manager",
         "width": 1800,
         "height": 1100,
@@ -20,8 +21,6 @@
         "resizable": true,
         "fullscreen": false,
         "center": true,
-        "titleBarStyle": "Visible",
-        "hiddenTitle": false,
         "decorations": true
       }
     ],

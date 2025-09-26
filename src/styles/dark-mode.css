@@ -323,6 +323,21 @@
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
+/* macOS title bar styling for dark mode */
+[data-bs-theme="dark"] body {
+  -webkit-app-region: no-drag;
+}
+
+/* Ensure title bar text is visible */
+[data-bs-theme="dark"] .titlebar {
+  color: var(--dark-text-primary) !important;
+}
+
+/* Override any potential title bar text color issues */
+[data-bs-theme="dark"] * {
+  -webkit-app-region: no-drag;
+}
+
 /* Override transitions for specific elements that shouldn't animate */
 .dark-mode-toggle,
 .delete-btn,

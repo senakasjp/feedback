@@ -87,13 +87,23 @@ export const studentsService = {
       const data = await invoke('read_portable')
       if (data) {
         const parsed = JSON.parse(data)
-        return parsed.students || []
+        const students = parsed.students || []
+        // Ensure all students have selectedParagraphs property for backward compatibility
+        return students.map(student => ({
+          ...student,
+          selectedParagraphs: student.selectedParagraphs || {}
+        }))
       }
       return []
     } catch (error) {
       console.warn('Failed to load students from Tauri, falling back to localStorage:', error)
       const data = localStorage.getItem('students')
-      return data ? JSON.parse(data) : []
+      const students = data ? JSON.parse(data) : []
+      // Ensure all students have selectedParagraphs property for backward compatibility
+      return students.map(student => ({
+        ...student,
+        selectedParagraphs: student.selectedParagraphs || {}
+      }))
     }
   },
 
@@ -119,7 +129,8 @@ export const studentsService = {
       id: studentData.id || generateId(studentData.displayName),
       displayName: studentData.displayName,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      selectedParagraphs: {} // Store selected paragraphs by assessmentId
     }
   },
 
@@ -137,6 +148,28 @@ export const studentsService = {
 
   findStudent(students, studentId) {
     return students.find(student => student.id === studentId)
+  },
+
+  // Update student's selected paragraphs for a specific assessment
+  updateStudentSelectedParagraphs(students, studentId, assessmentId, selectedParagraphs) {
+    return students.map(student => {
+      if (student.id === studentId) {
+        return {
+          ...student,
+          selectedParagraphs: {
+            ...student.selectedParagraphs,
+            [assessmentId]: [...selectedParagraphs] // Replace old selection data
+          },
+          updatedAt: new Date().toISOString()
+        }
+      }
+      return student
+    })
+  },
+
+  // Get student's selected paragraphs for a specific assessment
+  getStudentSelectedParagraphs(student, assessmentId) {
+    return student.selectedParagraphs?.[assessmentId] || []
   }
 }
 
