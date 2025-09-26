@@ -77,6 +77,27 @@
 			selectedTextLength: getSelectedText().length
 		})
 		
+		// Debug paragraph order
+		console.log('🔍 DEBUG Paragraph Order:')
+		paragraphs.forEach((para, index) => {
+			const isSelected = selectedParagraphs.has(para.id)
+			const text = typeof para === 'string' ? para : para.text
+			console.log(`${index}: [${isSelected ? 'SELECTED' : 'NOT SELECTED'}] ID: ${para.id}, Text: "${text?.substring(0, 50)}..."`)
+		})
+		
+		console.log('🔍 DEBUG Visual Order from getGroupedParagraphs:')
+		const grouped = getGroupedParagraphs()
+		grouped.forEach((group, groupIndex) => {
+			console.log(`Group ${groupIndex}: ${group.category}`)
+			Object.keys(group.knowledgeAreas).forEach(knowledgeArea => {
+				const paragraphsInArea = group.knowledgeAreas[knowledgeArea]
+				paragraphsInArea.forEach((paraObj, paraIndex) => {
+					const isSelected = selectedParagraphs.has(paraObj.id)
+					console.log(`  ${groupIndex}.${paraIndex}: [${isSelected ? 'SELECTED' : 'NOT SELECTED'}] ID: ${paraObj.id}, Text: "${paraObj.fullText?.substring(0, 50)}..."`)
+				})
+			})
+		})
+		
 		// Test if selectedParagraphs Set is working
 		console.log('🔍 Testing Set operations:')
 		paragraphs.forEach((para, index) => {
@@ -2279,6 +2300,72 @@
 		return Object.values(grouped)
 	}
 
+	function getSelectedTextInVisualOrder() {
+		console.log('🔍 DEBUG getSelectedTextInVisualOrder:', {
+			selectedParagraphs: Array.from(selectedParagraphs),
+			selectedCount: selectedParagraphs.size,
+			totalParagraphs: paragraphs.length
+		})
+		
+		// Use the EXACT same order as the UI display (getGroupedParagraphs)
+		const groupedParagraphs = getGroupedParagraphs()
+		const result = []
+		const processedCategories = new Set()
+		
+		console.log('🔍 Processing groups in UI order:')
+		groupedParagraphs.forEach((group, groupIndex) => {
+			console.log(`Group ${groupIndex}: ${group.category}`)
+			
+			Object.keys(group.knowledgeAreas).forEach(knowledgeArea => {
+				const paragraphsInArea = group.knowledgeAreas[knowledgeArea]
+				console.log(`  Knowledge Area: ${knowledgeArea} with ${paragraphsInArea.length} paragraphs`)
+				
+				paragraphsInArea.forEach((paragraphObj, paraIndex) => {
+					// Only process selected paragraphs
+					if (selectedParagraphs.has(paragraphObj.id)) {
+						console.log(`    ✅ Processing selected paragraph ${paraIndex}: ${paragraphObj.id}`)
+						
+						const paragraphText = paragraphObj.fullText || paragraphObj.text
+						let categoryName = 'Other'
+						let content = paragraphText
+						
+						// Extract category from paragraph text
+						if (paragraphText.includes(': ')) {
+							const parts = paragraphText.split(': ')
+							if (parts.length >= 2) {
+								categoryName = parts[0]
+								content = parts.slice(1).join(': ')
+							}
+						} else {
+							content = cleanParagraphTextForDisplay(paragraphText)
+						}
+						
+						// Add category header if this is the first time we see this category
+						if (!processedCategories.has(categoryName)) {
+							const categoryMarksValue = categoryMarks[categoryName] || 0
+							const marksText = categoryMarksValue > 0 ? ` [${categoryMarksValue} MARKS]` : ''
+							result.push(`${categoryName}: ${marksText}`)
+							processedCategories.add(categoryName)
+							console.log(`    📝 Added category header: ${categoryName}`)
+						}
+						
+						// Add the content
+						result.push(content)
+						console.log(`    📝 Added content: "${content.substring(0, 50)}..."`)
+					}
+				})
+			})
+		})
+		
+		const finalText = result.join('\n\n')
+		console.log('🔍 getSelectedTextInVisualOrder result:', {
+			length: finalText.length,
+			text: finalText.substring(0, 200) + (finalText.length > 200 ? '...' : '')
+		})
+		
+		return finalText
+	}
+
 	function getSelectedText() {
 		const orderedParagraphs = getOrderedParagraphs()
 		
@@ -2424,8 +2511,8 @@
 
 	function copyToClipboard() {
 		console.log('📋 copyToClipboard called')
-		const selectedText = getSelectedText()
-		console.log('📋 getSelectedText result:', {
+		const selectedText = getSelectedTextInVisualOrder()
+		console.log('📋 getSelectedTextInVisualOrder result:', {
 			length: selectedText.length,
 			text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
 			isEmpty: selectedText.trim() === ''
@@ -2443,8 +2530,8 @@
 
 	function generatePDF() {
 		console.log('📄 generatePDF called')
-		const selectedText = getSelectedText()
-		console.log('📄 getSelectedText result:', {
+		const selectedText = getSelectedTextInVisualOrder()
+		console.log('📄 getSelectedTextInVisualOrder result:', {
 			length: selectedText.length,
 			text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
 			isEmpty: selectedText.trim() === ''
