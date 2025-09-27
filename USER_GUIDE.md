@@ -1,10 +1,34 @@
 # User Guide
 
-## Version 3.1.0 - Major Bug Fixes Release
+## Version 3.2.2 - Rich Text Formatting
+
+### 🎨 **Bold Text Formatting**
+
+The application now includes rich text formatting capabilities for individual paragraphs:
+
+#### **How to Use Bold Formatting**
+1. **Edit a Paragraph**: Click the pencil icon (✏️) next to any paragraph
+2. **Rich Text Editor**: A rich text editor with formatting toolbar will appear
+3. **Select Text**: Highlight the text you want to make bold
+4. **Apply Bold**: Click the bold button (B icon) in the toolbar
+5. **Save Changes**: Click the green checkmark (✓) to save your changes
+6. **View Result**: Bold formatting will be visible in the paragraph display
+
+#### **Formatting Features**
+- **Bold Text**: Emphasize important text with bold formatting
+- **Visual Feedback**: See formatting immediately in the editor
+- **HTML Display**: Formatted text preserved in paragraph view
+- **Export Compatibility**: Copy and PDF functions automatically convert to plain text
+
+#### **Important Notes**
+- **Display Only**: Bold formatting is for visual emphasis in the application
+- **Export Functions**: Copy to clipboard and PDF generation convert HTML to plain text
+- **Data Storage**: HTML content is stored for display formatting
+- **Compatibility**: All existing functionality remains unchanged
 
 ### 🔧 **Visual Debug Panel**
 
-The application now includes a powerful visual debugging system to help troubleshoot issues:
+The application includes a powerful visual debugging system to help troubleshoot issues:
 
 #### **Accessing the Debug Panel**
 1. Click the checkbox icon (☑️) in the top navigation bar

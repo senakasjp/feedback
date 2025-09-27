@@ -11,6 +11,7 @@
 	// Local state
 	let editorRef = $state(null)
 	let isBold = $state(false)
+	let currentFontColor = $state('#000000')
 
 	// Handle text changes
 	function handleInput(event) {
@@ -27,6 +28,15 @@
 		onChange(editorRef.innerHTML)
 	}
 
+	// Handle font color change
+	function changeFontColor(color) {
+		if (readonly) return
+		
+		document.execCommand('foreColor', false, color)
+		updateFontColorState()
+		onChange(editorRef.innerHTML)
+	}
+
 	// Update bold button state
 	function updateBoldState() {
 		if (editorRef) {
@@ -34,10 +44,19 @@
 		}
 	}
 
+	// Update font color state
+	function updateFontColorState() {
+		if (editorRef) {
+			const color = document.queryCommandValue('foreColor')
+			currentFontColor = color || '#000000'
+		}
+	}
+
 	// Handle selection change
 	function handleSelectionChange() {
 		if (editorRef && !readonly) {
 			updateBoldState()
+			updateFontColorState()
 		}
 	}
 
@@ -73,6 +92,20 @@
 			>
 				<i class="bi bi-type-bold"></i>
 			</button>
+			
+			<div class="d-flex align-items-center">
+				<label for="font-color-picker" class="form-label mb-0 me-1" style="font-size: 0.8rem;">Color:</label>
+				<input 
+					id="font-color-picker"
+					type="color"
+					class="form-control form-control-sm"
+					style="width: 40px; height: 32px; padding: 2px;"
+					value={currentFontColor}
+					onchange={(e) => changeFontColor(e.currentTarget.value)}
+					title="Font Color"
+					aria-label="Font Color"
+				/>
+			</div>
 		</div>
 	{/if}
 	

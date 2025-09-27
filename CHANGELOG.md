@@ -2,6 +2,45 @@
 
 ## Version History
 
+### v3.2.2 - Bold Text Formatting in Paragraph Editor - January 2025
+
+#### 🎨 **NEW FEATURE: Rich Text Formatting**
+Added bold text formatting capability to individual paragraph editing:
+
+**Key Features**:
+- **Rich Text Editor**: Replaced plain textarea with rich text editor for paragraph editing
+- **Bold Formatting**: Added bold button (B icon) in toolbar for text formatting
+- **HTML Display**: Bold formatting is preserved and displayed in paragraph view
+- **Smart Conversion**: HTML converted to plain text for clipboard and PDF export
+- **Bootstrap Integration**: Uses Bootstrap 5 styling and Bootstrap Icons
+
+**Technical Implementation**:
+- **RichTextEditor Component**: New component with contentEditable and formatting toolbar
+- **HTML Storage**: Paragraphs store HTML content for display formatting
+- **Export Compatibility**: Copy to clipboard and PDF generation convert HTML to plain text
+- **Minimal Changes**: Preserved all existing functionality while adding formatting
+
+**User Experience**:
+- **Edit Mode**: Click pencil icon to edit paragraph with rich text editor
+- **Formatting**: Select text and click bold button to apply formatting
+- **Visual Feedback**: Bold text appears immediately in paragraph display
+- **Export**: Copy and PDF functions automatically convert to plain text
+
+**Files Modified**:
+- `src/lib/RichTextEditor.svelte`: New rich text editor component
+- `src/App.svelte`: Integrated rich text editor into paragraph editing
+- Updated paragraph display to render HTML content
+- Enhanced copy and PDF functions with HTML-to-text conversion
+
+**Impact**:
+- ✅ Bold text formatting available in paragraph editor
+- ✅ Rich text display preserved in paragraph view
+- ✅ Clipboard and PDF export remain plain text
+- ✅ All existing functionality preserved
+- ✅ Professional text formatting capabilities added
+
+---
+
 ### v3.2.1 - Automatic Duplicate ID Detection & Fixing - January 2025
 
 #### 🐛 **CRITICAL BUG FIX: Duplicate Paragraph IDs**

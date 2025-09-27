@@ -14,13 +14,13 @@
       "text": "Sub Learning Outcome 1.1: The learner is maintaining multiple<b> environments</b> for the project. All environments are working, and it is possible to easily deploy new versions by following the written documentation. The student’s contribution is good enough to achieve the sub-learning objective.\nfollowing the written documentation.\n(Evidence: Git commits, deployment scripts or other\ndeployment setup)",
       "color": "green",
       "originalIndex": 1,
-      "fullText": "Sub Learning Outcome 1.1: The learner is maintaining multiple environments for the project. All environments are working, and it is possible to easily deploy new versions by following the written documentation. The student’s contribution is good enough to achieve the sub-learning objective.\nfollowing the written documentation.\n(Evidence: Git commits, deployment scripts or other\ndeployment setup)",
+      "fullText": "Sub Learning Outcome 1.1: The learner is maintaining multiple<b> environments</b> for the project. All environments are working, and it is possible to easily deploy new versions by following the written documentation. The student’s contribution is good enough to achieve the sub-learning objective.\nfollowing the written documentation.\n(Evidence: Git commits, deployment scripts or other\ndeployment setup)",
       "_source": "assignment",
       "order": 1
     },
     {
       "id": "para-1294242380-2-1758847755341-6194",
-      "text": "Sub Learning Outcome 1.1: The CI/CD server is functional, runs the test suite automatically, and is used for deployments. Code quality and test coverage are visible. Sufficient evidence was provided in the viva and in the relevant documents.",
+      "text": "Sub Learning Outcome 1.1: The CI/CD<font color=\"#ff2600\"> server is functional,</font> runs the test suite automatically, and is used for deployments. Code quality and test coverage are visible. Sufficient evidence was provided in the viva and in the relevant documents.",
       "color": "green",
       "originalIndex": 2,
       "fullText": "Sub Learning Outcome 1.1: The CI/CD server is functional, runs the test suite automatically, and is used for deployments. Code quality and test coverage are visible. Sufficient evidence was provided in the viva and in the relevant documents.",
