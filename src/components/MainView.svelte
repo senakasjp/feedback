@@ -122,6 +122,8 @@
           showMobileSidebar={uiState.showMobileSidebar}
           showCalculator={uiState.showCalculator}
           percentageRanges={percentageRanges}
+          categoryMarks={assessmentData.categoryMarks}
+          getTotalMarks={assessmentData.getTotalMarks}
           onSelectSubject={onSelectSubject}
           onSelectAssessment={onSelectAssessment}
           onGoBackToSubjects={onBackToSubjects}

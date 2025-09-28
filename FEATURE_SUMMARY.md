@@ -1,7 +1,106 @@
-# Feature Implementation Summary - Version 3.2.2
+# Feature Implementation Summary - Version 3.2.3
 
 ## Overview
-This document summarizes the major features implemented in the Feedback Manager application version 3.2.2, including rich text formatting capabilities, bold text editing, and continued improvements for professional text formatting while maintaining compatibility with existing export functions.
+This document summarizes the major features implemented in the Feedback Manager application version 3.2.3, including total marks display functionality, enhanced text formatting with font color support, and continued improvements for professional assessment tracking while maintaining compatibility with existing export functions.
+
+## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
+
+### 🎯 **NEW FEATURE: Total Marks Display**
+
+#### Feature Overview
+Added real-time total marks display in multiple locations for better assessment tracking and monitoring. Users can now see the sum of all category marks instantly in both the sidebar and paragraphs section.
+
+**Key Capabilities**:
+- **Dual Location Display**: Total marks shown in both paragraphs section and Current Session sidebar
+- **Real-time Updates**: Total automatically updates when category marks are changed
+- **Red Color Display**: Total marks displayed in red for visual emphasis
+- **Conditional Display**: Only appears when marks are entered (total > 0)
+- **Assessment Tracking**: Enhanced monitoring of total marks across all categories
+
+#### Technical Implementation
+
+**Sidebar Integration**:
+```javascript
+// Sidebar.svelte - Added total marks display
+- Added categoryMarks and getTotalMarks props
+- Conditional display in Current Session section
+- Red text styling with Bootstrap classes
+- Real-time reactive updates
+```
+
+**Multiple Template Support**:
+```javascript
+// Updated all Sidebar usages across template files
+- App.svelte: Updated Sidebar props
+- MainTemplate.svelte: Updated Sidebar props
+- AppTemplate.svelte: Updated Sidebar props
+- MainView.svelte: Updated Sidebar props
+```
+
+**Paragraphs Section Display**:
+```javascript
+// App.svelte - Added total marks at bottom of paragraphs
+- Conditional display when getTotalMarks() > 0
+- Border separator with Bootstrap styling
+- Red text emphasis for visibility
+- Positioned after selection info
+```
+
+#### User Experience Flow
+
+**Assessment Workflow**:
+1. **Add Category Marks**: Enter marks in category input fields
+2. **Immediate Feedback**: Total marks appears in red in both locations
+3. **Real-time Updates**: Total changes instantly when marks are modified
+4. **Quick Reference**: Use sidebar total for monitoring while working
+5. **Assessment Tracking**: Monitor total marks across all categories
+
+**Display Locations**:
+- **Current Session Sidebar**: Below student information for quick reference
+- **Paragraphs Section**: At bottom after selection info for detailed view
+
+### 🎨 **ENHANCED FEATURE: Font Color Support**
+
+#### Feature Overview
+Enhanced the rich text editor with font color picker functionality, providing users with additional text formatting options while maintaining display-only formatting that doesn't affect PDF exports.
+
+**Key Capabilities**:
+- **Color Picker**: HTML5 color input for selecting text colors
+- **Real-time Preview**: Color picker reflects current selection's color
+- **Display Only**: Colors appear in app; PDF export remains plain text
+- **Bootstrap Integration**: Consistent styling with existing toolbar
+
+#### Technical Implementation
+
+**Rich Text Editor Enhancement**:
+```javascript
+// RichTextEditor.svelte - Added font color functionality
+- HTML5 color input with Bootstrap styling
+- currentFontColor state management
+- changeFontColor() function with document.execCommand
+- updateFontColorState() for selection tracking
+```
+
+**Color Application**:
+```javascript
+// Font color command execution
+function changeFontColor(color) {
+  document.execCommand('foreColor', false, color)
+  updateFontColorState()
+  onChange(editorRef.innerHTML)
+}
+```
+
+#### User Experience Flow
+
+**Color Formatting Process**:
+1. **Edit Paragraph**: Click pencil icon to open rich text editor
+2. **Select Text**: Highlight text to be colored
+3. **Choose Color**: Use color picker in toolbar
+4. **Apply Color**: Color applies immediately to selected text
+5. **Visual Feedback**: Color picker shows current selection's color
+
+---
 
 ## Version 3.2.2 - Bold Text Formatting in Paragraph Editor
 

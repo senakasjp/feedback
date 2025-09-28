@@ -2825,6 +2825,8 @@
 					{showMobileSidebar}
 					{showCalculator}
 					{percentageRanges}
+					{categoryMarks}
+					{getTotalMarks}
 					onSelectSubject={selectSubject}
 					onSelectAssessment={selectAssessment}
 					onGoBackToSubjects={goBackToSubjects}
@@ -3593,6 +3595,16 @@
 													<i class="bi bi-info-circle-fill me-2"></i>
 													<div>
 														<strong>{selectedParagraphs.size}</strong> paragraph{selectedParagraphs.size !== 1 ? 's' : ''} selected
+													</div>
+												</div>
+											{/if}
+
+											<!-- Total Marks Display -->
+											{#if getTotalMarks() > 0}
+												<div class="total-marks-display mt-3 pt-3 border-top">
+													<div class="d-flex justify-content-between align-items-center">
+														<span class="fw-bold">Total Marks:</span>
+														<span class="fw-bold text-danger fs-5">{getTotalMarks()}</span>
 													</div>
 												</div>
 											{/if}

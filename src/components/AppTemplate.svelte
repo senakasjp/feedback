@@ -160,6 +160,8 @@
 					{showMobileSidebar}
 					{showCalculator}
 					{percentageRanges}
+					{categoryMarks}
+					{getTotalMarks}
 					onSelectSubject={selectSubject}
 					onSelectAssessment={selectAssessment}
 					onGoBackToSubjects={goBackToSubjects}
@@ -175,6 +177,8 @@
 					onGeneratePDF={generatePDF}
 					onAddPercentageRange={addPercentageRange}
 					onDeletePercentageRange={deletePercentageRange}
+					currentStudentId={currentStudentId}
+					{studentName}
 				/>
 			</div>
 

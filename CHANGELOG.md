@@ -2,6 +2,74 @@
 
 ## Version History
 
+### v3.2.3 - Total Marks Display & Font Color Support - January 2025
+
+#### 🎯 **NEW FEATURE: Total Marks Display**
+Added real-time total marks display in multiple locations for better assessment tracking:
+
+**Key Features**:
+- **Dual Location Display**: Total marks shown in both paragraphs section and Current Session sidebar
+- **Real-time Updates**: Total automatically updates when category marks are changed
+- **Red Color Display**: Total marks displayed in red for emphasis
+- **Conditional Display**: Only appears when marks are entered (total > 0)
+
+**Technical Implementation**:
+- **Sidebar Integration**: Added `categoryMarks` and `getTotalMarks` props to Sidebar component
+- **Multiple Template Support**: Updated all Sidebar usages across different template files
+- **Reactive Calculation**: Uses existing `getTotalMarks()` function for consistency
+- **Bootstrap Styling**: Red text using `text-danger` class for visual emphasis
+
+**User Experience**:
+- **Current Session Sidebar**: Total marks appears below student information
+- **Paragraphs Section**: Total marks appears at bottom after selection info
+- **Immediate Feedback**: Updates instantly when marks are added/changed
+- **Clean Interface**: Conditional display prevents clutter when no marks entered
+
+**Files Modified**:
+- `src/lib/Sidebar.svelte`: Added total marks display in Current Session
+- `src/App.svelte`: Added total marks display in paragraphs section
+- `src/components/MainTemplate.svelte`: Updated Sidebar props
+- `src/components/AppTemplate.svelte`: Updated Sidebar props
+- `src/components/MainView.svelte`: Updated Sidebar props
+
+**Impact**:
+- ✅ Real-time total marks visibility in sidebar
+- ✅ Consistent total marks display in multiple locations
+- ✅ Enhanced assessment tracking capabilities
+- ✅ All existing functionality preserved
+
+#### 🎨 **ENHANCED FEATURE: Font Color Support**
+Enhanced rich text editor with font color picker for better text formatting:
+
+**Key Features**:
+- **Color Picker**: HTML5 color input for selecting text colors
+- **Real-time Preview**: Color picker reflects current selection's color
+- **Display Only**: Colors appear in app; PDF export remains plain text
+- **Bootstrap Integration**: Consistent styling with existing toolbar
+
+**Technical Implementation**:
+- **Color Input**: HTML5 color picker with Bootstrap styling
+- **State Management**: `currentFontColor` tracks selected color
+- **Command Execution**: Uses `document.execCommand('foreColor')` for color application
+- **Selection Tracking**: Updates color picker based on current text selection
+
+**User Experience**:
+- **Select Text**: Highlight text in the editor
+- **Choose Color**: Use color picker in toolbar
+- **Apply Color**: Color applies to selected text immediately
+- **Visual Feedback**: Color picker shows current selection's color
+
+**Files Modified**:
+- `src/lib/RichTextEditor.svelte`: Added font color picker functionality
+
+**Impact**:
+- ✅ Font color formatting available in rich text editor
+- ✅ Real-time color selection and application
+- ✅ Professional text formatting capabilities
+- ✅ Display-only colors (PDF export unaffected)
+
+---
+
 ### v3.2.2 - Bold Text Formatting in Paragraph Editor - January 2025
 
 #### 🎨 **NEW FEATURE: Rich Text Formatting**

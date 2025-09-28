@@ -1,10 +1,44 @@
 # User Guide
 
-## Version 3.2.2 - Rich Text Formatting
+## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
 
-### 🎨 **Bold Text Formatting**
+### 🎯 **Total Marks Display**
 
-The application now includes rich text formatting capabilities for individual paragraphs:
+The application now shows real-time total marks in multiple locations for better assessment tracking:
+
+#### **Where to Find Total Marks**
+1. **Current Session Sidebar**: Total marks appears below the student information
+2. **Paragraphs Section**: Total marks appears at the bottom after the selection info
+
+#### **How Total Marks Work**
+- **Real-time Updates**: Total automatically updates when you change marks in any category
+- **Red Display**: Total marks are shown in red for emphasis
+- **Conditional Display**: Only appears when you have entered marks (total > 0)
+- **Consistent Calculation**: Same total appears in both locations
+
+#### **Using Total Marks**
+1. **Add Category Marks**: Enter marks in any category input field (e.g., "Project Implementation: 20")
+2. **View Total**: Total marks immediately appears in red in both locations
+3. **Update Marks**: Change any category marks and watch the total update automatically
+4. **Track Progress**: Use the sidebar total for quick reference while working
+
+#### **Total Marks Features**
+- **Dual Location Display**: Visible in both sidebar and paragraphs section
+- **Instant Updates**: Changes immediately when marks are modified
+- **Visual Emphasis**: Red color makes the total stand out
+- **Assessment Tracking**: Helps monitor total marks across all categories
+
+### 🎨 **Enhanced Text Formatting**
+
+The rich text editor now includes both bold formatting and font color support:
+
+#### **Font Color Support**
+1. **Edit a Paragraph**: Click the pencil icon (✏️) next to any paragraph
+2. **Rich Text Editor**: A rich text editor with formatting toolbar will appear
+3. **Select Text**: Highlight the text you want to color
+4. **Choose Color**: Click the color picker in the toolbar and select a color
+5. **Apply Color**: Color applies to the selected text immediately
+6. **Save Changes**: Click the green checkmark (✓) to save your changes
 
 #### **How to Use Bold Formatting**
 1. **Edit a Paragraph**: Click the pencil icon (✏️) next to any paragraph
@@ -20,8 +54,15 @@ The application now includes rich text formatting capabilities for individual pa
 - **HTML Display**: Formatted text preserved in paragraph view
 - **Export Compatibility**: Copy and PDF functions automatically convert to plain text
 
+#### **Text Formatting Features**
+- **Bold Text**: Emphasize important text with bold formatting
+- **Font Colors**: Apply colors to text for better visual organization
+- **Real-time Preview**: See formatting immediately in the editor
+- **HTML Display**: Formatted text preserved in paragraph view
+- **Export Compatibility**: Copy and PDF functions automatically convert to plain text
+
 #### **Important Notes**
-- **Display Only**: Bold formatting is for visual emphasis in the application
+- **Display Only**: Bold and color formatting are for visual emphasis in the application
 - **Export Functions**: Copy to clipboard and PDF generation convert HTML to plain text
 - **Data Storage**: HTML content is stored for display formatting
 - **Compatibility**: All existing functionality remains unchanged

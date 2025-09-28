@@ -57,6 +57,13 @@
             addCategory();
         }
     }
+
+    // Calculate total marks from all categories
+    function getTotalMarks() {
+        return categories.reduce((total, category) => {
+            return total + (category.allocatedMarks || 0);
+        }, 0);
+    }
 </script>
 
 <div class="category-editor">
@@ -161,6 +168,16 @@
         <div class="empty-state text-center py-3">
             <p class="text-muted small mb-0">No categories added yet</p>
             <small class="text-muted">Add categories to organize your feedback</small>
+        </div>
+    {/if}
+
+    <!-- Total Marks Display -->
+    {#if categories.length > 0}
+        <div class="total-marks-display mt-3 pt-3 border-top">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-bold">Total Marks:</span>
+                <span class="fw-bold text-danger fs-5">{getTotalMarks()}</span>
+            </div>
         </div>
     {/if}
 </div>

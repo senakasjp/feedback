@@ -15,6 +15,9 @@
 	export let showMobileSidebar = true;
 	/** @type {any[]} */
 	export let percentageRanges = [];
+	/** @type {any} */
+	export let categoryMarks = {}; // Used in template for total marks display
+	export let getTotalMarks = () => 0;
 	
 	// Event handlers
 	export let onSelectSubject = (subject) => {};
@@ -236,6 +239,11 @@
 											{:else if currentStudentId}
 												<div class="mb-2 text-muted">
 													Student: Loading...
+												</div>
+											{/if}
+											{#if getTotalMarks() > 0}
+												<div class="mb-0">
+													<strong class="text-danger">Total Marks: {getTotalMarks()}</strong>
 												</div>
 											{/if}
 										</div>
