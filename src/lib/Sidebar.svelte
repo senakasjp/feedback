@@ -17,7 +17,15 @@
 	export let percentageRanges = [];
 	/** @type {any} */
 	export let categoryMarks = {}; // Used in template for total marks display
-	export let getTotalMarks = () => 0;
+	
+	// Calculate total marks locally - make it reactive
+	let totalMarks = 0
+	$: {
+		totalMarks = Object.values(categoryMarks).reduce((total, value) => {
+			const numMarks = parseFloat(value) || 0
+			return total + numMarks
+		}, 0)
+	}
 	
 	// Event handlers
 	export let onSelectSubject = (subject) => {};
@@ -241,9 +249,9 @@
 													Student: Loading...
 												</div>
 											{/if}
-											{#if getTotalMarks() > 0}
+											{#if totalMarks > 0}
 												<div class="mb-0">
-													<strong class="text-danger">Total Marks: {getTotalMarks()}</strong>
+													<strong class="text-danger">Total Marks: {totalMarks}</strong>
 												</div>
 											{/if}
 										</div>
