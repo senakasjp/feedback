@@ -87,18 +87,24 @@ export function reconstructParagraphText(originalText, newMainText) {
   let category = ''
   let knowledgeArea = ''
   
+  // First, check for knowledge area suffix (new format: "Category: text - KnowledgeArea")
+  knowledgeArea = extractKnowledgeArea(originalText)
+  
   if (originalText.includes(': ')) {
     const parts = originalText.split(': ')
     if (parts.length >= 2) {
       const firstPart = parts[0]
       if (firstPart.includes(' - ')) {
+        // Old format: "KnowledgeArea - Category: text"
         const oldParts = firstPart.split(' - ')
         if (oldParts.length >= 2) {
           knowledgeArea = oldParts[0].trim()
           category = oldParts[1].trim()
         }
       } else {
+        // New format: "Category: text - KnowledgeArea"
         category = firstPart
+        // Knowledge area was already extracted above using extractKnowledgeArea()
       }
     }
   }

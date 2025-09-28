@@ -12,6 +12,7 @@
 	
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
+	import { getMotivationalMessage } from './utils/motivationalMessages.js'
 	
 	// Import data services
 	import { studentsService } from './services/dataService.js'
@@ -603,14 +604,21 @@
 				subjectId: `${currentSubjectId}-${currentAssessmentId}`, 
 				data: JSON.stringify(data, null, 2) 
 			})
+			
+			// Show motivational message after successful save
+			showSuccessNotification(getMotivationalMessage('assignment'))
 		} catch (error) {
 			console.log('Tauri not available, saving to browser storage')
 			// Fallback to localStorage for web development
 			try {
 				const key = `feedback-assessment-${currentSubjectId}-${currentAssessmentId}`
 				localStorage.setItem(key, JSON.stringify(data))
+				
+				// Show motivational message after successful save
+				showSuccessNotification(getMotivationalMessage('assignment'))
 			} catch (localError) {
 				console.error('Failed to save to localStorage:', localError)
+				showSuccessNotification('❌ Failed to save assignment data. Please try again.')
 			}
 		}
 	}
@@ -1273,12 +1281,12 @@
 				studentId: currentStudentId,
 				assessmentId: currentAssessmentId
 			})
-			showSuccessNotification('Student evaluation data saved successfully!')
+			showSuccessNotification(getMotivationalMessage('student'))
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
 			const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
 			localStorage.setItem(key, JSON.stringify(evaluationData))
-			showSuccessNotification('Student evaluation data saved successfully!')
+			showSuccessNotification(getMotivationalMessage('student'))
 		}
 	}
 
