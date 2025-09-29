@@ -251,7 +251,13 @@
       "name": "Reetika Shresta",
       "studentId": "1000117679",
       "displayName": "Reetika Shresta (1000117679)",
-      "createdAt": "2025-09-08T20:55:24.207Z"
+      "createdAt": "2025-09-08T20:55:24.207Z",
+      "selectedParagraphs": {
+        "1757759039663": [
+          "para-1982502409-2-1759017341290-6690"
+        ]
+      },
+      "updatedAt": "2025-09-28T09:57:16.987Z"
     },
     {
       "id": "mfbpr7mq84nri9b3es3",
@@ -414,17 +420,9 @@
       "displayName": "Kawalpreet Kaur (1000124686)",
       "createdAt": "2025-09-09T21:24:08.424Z",
       "selectedParagraphs": {
-        "mf3bwg5g9o5unrif9yi": [
-          "mfq6v8j2s2mdhcs0ujg",
-          "mfq7b7gp13tu7wzgo5i",
-          "mfq6xve8bguufru2qhv",
-          "mfq7bmzb63z0qcej9ay",
-          "mfq7dqffo4h768js19",
-          "mfq702jtra1jwh5pv1",
-          "mfq6yfpuqyyuxzq18q"
-        ]
+        "mf3bwg5g9o5unrif9yi": []
       },
-      "updatedAt": "2025-09-26T00:14:14.892Z"
+      "updatedAt": "2025-09-29T00:50:29.746Z"
     },
     {
       "id": "mfd2743xj11avt7lazi",

@@ -609,7 +609,7 @@
       "text": "Project Implementation: When a wire is taken off from the breadboard, the student should be able to figure out the circuit and connect it again in the proper place to get the project working. - Circuit Modification",
       "color": "green",
       "originalIndex": 78,
-      "fullText": "Project Implementation: When a wire is taken off from the breadboard, the student should be able to figure out the circuit and connect it again in the proper place to get the project working. - Lovepreet - Circuit Modification",
+      "fullText": "Project Implementation: When a wire is taken off from the breadboard, the student should be able to figure out the circuit and connect it again in the proper place to get the project working. - Circuit Modification",
       "_source": "assignment"
     },
     {
@@ -1144,6 +1144,15 @@
       "color": "green",
       "originalIndex": 156,
       "fullText": "Project Implementation: When a wire is taken off from the breadboard, the student should be able to figure out the circuit and connect it again in the proper place to get the project working. ---"
+    },
+    {
+      "id": "para-660810641-0-1759142598675-3280",
+      "text": "Sub Learning Objective 1.1: The student has sufficiently analysed the processes and methodologies to select the most appropriate approach for the chosen development.",
+      "color": "green",
+      "originalIndex": 0,
+      "fullText": "Sub Learning Objective 1.1: The student has sufficiently analysed the processes and methodologies to select the most appropriate approach for the chosen development.",
+      "subjectId": "1757293726963",
+      "assessmentId": "1757759039663"
     }
   ],
   "selectedParagraphs": [],

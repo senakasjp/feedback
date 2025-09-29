@@ -38,6 +38,7 @@
 	export let onToggleView = () => {};
 	export let onSaveStudentEvaluation = () => {};
 	export let onLoadStudentEvaluation = () => {};
+	export let onTransferStudentData = () => {};
 	export let onSaveAssignmentData = () => {};
 	export let onCopyToClipboard = () => {};
 	export let onGeneratePDF = () => {};
@@ -270,6 +271,9 @@
 										</button>
 										<button class="btn btn-primary btn-sm w-100 mb-2" onclick={onLoadStudentEvaluation}>
 											<i class="bi bi-upload me-2"></i>Load Student Data
+										</button>
+										<button class="btn btn-warning btn-sm w-100 mb-2" onclick={onTransferStudentData}>
+											<i class="bi bi-arrow-left-right me-2"></i>Transfer to Another Student
 										</button>
 									{/if}
 									<button class="btn btn-outline-primary btn-sm w-100 mb-2" onclick={onSaveAssignmentData}>

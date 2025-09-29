@@ -297,3 +297,63 @@ export const percentageRangesService = {
     }
   }
 }
+
+// --- Import Service ---
+export const importService = {
+  /**
+   * Get all available assignments from subjects (excluding current assignment)
+   */
+  getAvailableAssignments(subjects, currentSubjectId, currentAssessmentId) {
+    const assignments = []
+    
+    for (const subject of subjects) {
+      for (const assessment of subject.assessments || []) {
+        // Exclude current assignment
+        if (subject.id !== currentSubjectId || assessment.id !== currentAssessmentId) {
+          assignments.push({
+            subjectId: subject.id,
+            subjectName: subject.name,
+            assessmentId: assessment.id,
+            assessmentName: assessment.name,
+            displayName: `${subject.name} - ${assessment.name}`
+          })
+        }
+      }
+    }
+    
+    return assignments
+  },
+
+  /**
+   * Load paragraphs from a specific assignment
+   */
+  async loadAssignmentParagraphs(subjectId, assessmentId) {
+    try {
+      const data = await assessmentDataService.loadAssessmentData(subjectId, assessmentId)
+      
+      if (data && data.paragraphs) {
+        // Ensure paragraphs have IDs for proper tracking
+        return data.paragraphs.map(para => {
+          if (typeof para === 'string') {
+            return {
+              id: generateId(),
+              text: para,
+              color: undefined
+            }
+          } else if (para && !para.id) {
+            return {
+              ...para,
+              id: generateId()
+            }
+          }
+          return para
+        })
+      }
+      
+      return []
+    } catch (error) {
+      console.error('Error loading assignment paragraphs:', error)
+      throw new Error('Failed to load paragraphs from assignment')
+    }
+  }
+}

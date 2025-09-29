@@ -3,42 +3,42 @@
  * Provides encouraging messages for various actions in the feedback app
  */
 
-// Array of motivational messages for assignment saving
+// Array of meaningful messages for assignment saving
 const assignmentSaveMessages = [
-	"🌟 Great job! Your assignment data has been saved successfully!",
-	"✨ Excellent work! Your progress has been preserved.",
-	"🎯 Perfect! Your assignment is now safely stored.",
-	"🚀 Fantastic! Your hard work has been saved.",
-	"💎 Outstanding! Your assignment data is secure.",
-	"⭐ Amazing! Your progress continues to grow.",
-	"🔥 Incredible! You're making great progress!",
-	"🎨 Beautiful work! Your assignment is saved.",
-	"💪 Keep up the excellent work! Data saved.",
-	"🌈 Wonderful! Your assignment progress is preserved.",
-	"🎪 Spectacular! Your work is safely stored.",
-	"🎵 Harmonious! Your assignment data is saved.",
-	"🎭 Brilliant! Your progress has been captured.",
-	"🎨 Creative work! Your assignment is secure.",
-	"🏆 Champion! Your data has been saved successfully!"
+	"ℹ️ Assignment data saved - paragraphs and categories preserved",
+	"ℹ️ Assignment saved - all feedback content secured",
+	"ℹ️ Assignment stored - ready for student evaluations",
+	"ℹ️ Assignment data saved - knowledge areas organized",
+	"ℹ️ Assignment saved - categories and marks preserved",
+	"ℹ️ Assignment secured - all content backed up",
+	"ℹ️ Assignment data saved - ready for student selection",
+	"ℹ️ Assignment preserved - feedback structure maintained",
+	"ℹ️ Assignment saved - all paragraphs and settings stored",
+	"ℹ️ Assignment data secured - evaluation ready",
+	"ℹ️ Assignment saved - categories and knowledge areas intact",
+	"ℹ️ Assignment stored - feedback framework preserved",
+	"ℹ️ Assignment data saved - student evaluation setup complete",
+	"ℹ️ Assignment secured - all content and structure saved",
+	"ℹ️ Assignment saved - ready for student assessment"
 ];
 
-// Array of motivational messages for student evaluation saving
+// Array of meaningful messages for student evaluation saving
 const studentEvaluationMessages = [
-	"🎓 Excellent feedback provided! Student data saved.",
-	"📚 Great assessment! Student evaluation is secure.",
-	"🎯 Perfect evaluation! Student progress recorded.",
-	"⭐ Outstanding feedback! Student data preserved.",
-	"🌟 Wonderful assessment! Student evaluation saved.",
-	"🚀 Fantastic work! Student progress is secure.",
-	"💎 Brilliant evaluation! Student data is safe.",
-	"🎨 Beautiful feedback! Student assessment saved.",
-	"🔥 Incredible evaluation! Student data preserved.",
-	"💪 Great job! Student progress is recorded.",
-	"🌈 Excellent assessment! Student evaluation saved.",
-	"🎪 Wonderful feedback! Student data is secure.",
-	"🎵 Harmonious evaluation! Student progress saved.",
-	"🎭 Brilliant work! Student assessment preserved.",
-	"🏆 Champion evaluation! Student data is safe!"
+	"ℹ️ Student evaluation saved - selections and marks recorded",
+	"ℹ️ Student data secured - paragraph selections preserved",
+	"ℹ️ Student progress saved - category marks and feedback stored",
+	"ℹ️ Student evaluation preserved - all assessment data backed up",
+	"ℹ️ Student data saved - selections and category marks recorded",
+	"ℹ️ Student assessment secured - feedback and marks preserved",
+	"ℹ️ Student evaluation stored - paragraph selections and marks saved",
+	"ℹ️ Student data saved - assessment progress recorded",
+	"ℹ️ Student evaluation preserved - selections and category marks stored",
+	"ℹ️ Student assessment saved - all evaluation data secured",
+	"ℹ️ Student data recorded - paragraph selections and marks preserved",
+	"ℹ️ Student evaluation saved - assessment progress backed up",
+	"ℹ️ Student data secured - selections and feedback stored",
+	"ℹ️ Student assessment preserved - all evaluation data saved",
+	"ℹ️ Student evaluation stored - selections and marks recorded"
 ];
 
 /**
@@ -71,6 +71,6 @@ export function getMotivationalMessage(saveType) {
 		case 'student':
 			return getStudentEvaluationMessage();
 		default:
-			return "🌟 Great job! Your data has been saved successfully!";
+			return "ℹ️ Data saved - all information preserved";
 	}
 }

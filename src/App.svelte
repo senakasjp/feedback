@@ -9,6 +9,8 @@
 	import AssessmentManager from './lib/AssessmentManager.svelte'
 	import Breadcrumb from './lib/Breadcrumb.svelte'
 	import RichTextEditor from './lib/RichTextEditor.svelte'
+	import StudentTransferModal from './lib/StudentTransferModal.svelte'
+	import ImportParagraphsModal from './lib/ImportParagraphsModal.svelte'
 	
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
@@ -58,6 +60,8 @@
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
 	let deletingStudentId = $state(null) // Track which student is being deleted
+	let showStudentTransferModal = $state(false) // Show student transfer modal
+	let showImportModal = $state(false) // Show import paragraphs modal
 	
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
@@ -768,6 +772,30 @@
 		}
 	}
 
+	/**
+	 * Import paragraphs from other assignments to text box for editing
+	 */
+	function importParagraphs(event) {
+		const { paragraphs: importedParagraphs } = event.detail
+		
+		if (importedParagraphs && importedParagraphs.length > 0) {
+			// Combine all imported paragraphs into text for the text box
+			const combinedText = importedParagraphs.map(para => para.text).join('\n\n')
+			
+			// Add to existing text in the text box (if any)
+			if (newParagraph.trim()) {
+				newParagraph = newParagraph + '\n\n' + combinedText
+			} else {
+				newParagraph = combinedText
+			}
+			
+			// Show success notification
+			notificationMessage = `Imported ${importedParagraphs.length} paragraph${importedParagraphs.length !== 1 ? 's' : ''} to text box for editing`
+			showNotification = true
+			setTimeout(() => showNotification = false, 3000)
+		}
+	}
+
 	function addCategory() {
 		if (newCategoryName.trim() && currentAssessment) {
 			// Ensure categories array exists
@@ -1287,6 +1315,89 @@
 			const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
 			localStorage.setItem(key, JSON.stringify(evaluationData))
 			showSuccessNotification(getMotivationalMessage('student'))
+		}
+	}
+
+	// Transfer student data to another student
+	async function transferStudentData(targetStudentId) {
+		if (!currentStudentId || !targetStudentId || !currentAssessmentId) {
+			showSuccessNotification('❌ Transfer cancelled - missing student or assessment information. Please select both source and target students.')
+			return
+		}
+
+		if (currentStudentId === targetStudentId) {
+			showSuccessNotification('❌ Transfer cancelled - cannot transfer data to the same student. Please select a different target student.')
+			return
+		}
+
+		try {
+			console.log('🔄 TRANSFER: Starting data transfer from', currentStudentId, 'to', targetStudentId)
+
+			// 1. Transfer selected paragraphs (stored in student properties)
+			const sourceStudent = students.find(s => s.id === currentStudentId)
+			let selectedParagraphsToTransfer = []
+			
+			// Get selected paragraphs from current UI state (selectedParagraphs Set)
+			if (selectedParagraphs && selectedParagraphs.size > 0) {
+				selectedParagraphsToTransfer = Array.from(selectedParagraphs)
+				console.log('🔄 TRANSFER: Using current UI selections:', selectedParagraphsToTransfer)
+			} else if (sourceStudent && sourceStudent.selectedParagraphs && sourceStudent.selectedParagraphs[currentAssessmentId]) {
+				// Fallback to stored selections if UI state is empty
+				selectedParagraphsToTransfer = sourceStudent.selectedParagraphs[currentAssessmentId]
+				console.log('🔄 TRANSFER: Using stored selections:', selectedParagraphsToTransfer)
+			}
+			
+			if (selectedParagraphsToTransfer.length > 0) {
+				// Update target student's selected paragraphs
+				students = studentsService.updateStudentSelectedParagraphs(
+					students,
+					targetStudentId,
+					currentAssessmentId,
+					selectedParagraphsToTransfer
+				)
+				console.log('✅ TRANSFER: Selected paragraphs transferred:', selectedParagraphsToTransfer)
+			} else {
+				console.log('⚠️ TRANSFER: No selected paragraphs to transfer')
+			}
+
+			// 2. Transfer evaluation data (marks, etc.)
+			const evaluationData = {
+				studentId: targetStudentId,
+				assessmentId: currentAssessmentId,
+				paragraphs: [...paragraphs],
+				studentName: students.find(s => s.id === targetStudentId)?.name || '',
+				categoryMarks: { ...categoryMarks },
+				manualTotalMarks: manualTotalMarks,
+				savedAt: new Date().toISOString()
+			}
+
+			// Save evaluation data for target student
+			try {
+				await invoke('write_student_evaluation', {
+					data: JSON.stringify(evaluationData),
+					studentId: targetStudentId,
+					assessmentId: currentAssessmentId
+				})
+				console.log('✅ TRANSFER: Evaluation data transferred (Tauri)')
+			} catch (error) {
+				console.log('Tauri not available, using browser storage for evaluation data')
+				const key = `student-evaluation-${targetStudentId}-${currentAssessmentId}`
+				localStorage.setItem(key, JSON.stringify(evaluationData))
+				console.log('✅ TRANSFER: Evaluation data transferred (localStorage)')
+			}
+
+			// 3. Save updated students data
+			await studentsService.saveStudents(students)
+			console.log('✅ TRANSFER: Students data saved')
+
+			// Show success message
+			const sourceName = students.find(s => s.id === currentStudentId)?.name || 'Unknown'
+			const targetName = students.find(s => s.id === targetStudentId)?.name || 'Unknown'
+			showSuccessNotification(`ℹ️ Transfer complete - selections and marks transferred from ${sourceName} to ${targetName}. Switch to ${targetName} to see the transferred data.`)
+
+		} catch (error) {
+			console.error('❌ TRANSFER ERROR:', error)
+			showSuccessNotification('❌ Transfer failed - unable to copy selections and marks. Please check data integrity and try again.')
 		}
 	}
 
@@ -2562,13 +2673,13 @@
 		})
 		
 		if (selectedText.trim() === '') {
-			showSuccessNotification('No text to copy - no paragraphs selected or text is empty!')
+			showSuccessNotification('ℹ️ Copy cancelled - no paragraphs selected or text is empty. Please select paragraphs first.')
 			return
 		}
 		
 		navigator.clipboard.writeText(selectedText)
-			.then(() => showSuccessNotification('Copied to clipboard!'))
-			.catch(() => showSuccessNotification('Failed to copy to clipboard'))
+			.then(() => showSuccessNotification('ℹ️ Text copied to clipboard - selected paragraphs ready for pasting'))
+			.catch(() => showSuccessNotification('❌ Copy failed - unable to access clipboard. Please try again or copy manually.'))
 	}
 
 	function generatePDF() {
@@ -2589,7 +2700,7 @@
 		})
 		
 		if (!selectedText || selectedText.trim() === '') {
-			showSuccessNotification('No paragraphs selected or text is empty!')
+			showSuccessNotification('ℹ️ PDF generation cancelled - no paragraphs selected or text is empty. Please select paragraphs first.')
 			return
 		}
 
@@ -2756,7 +2867,7 @@
 		
 		// Save the PDF
 		doc.save(filename)
-		showSuccessNotification('PDF generated and downloaded successfully!')
+		showSuccessNotification('ℹ️ PDF generated and downloaded - feedback document ready with selected paragraphs and marks')
 		
 		// Auto-save student evaluation data when generating PDF
 		if (currentStudentId) {
@@ -2847,6 +2958,7 @@
 					onGeneratePDF={generatePDF}
 					onSaveStudentEvaluation={saveStudentEvaluation}
 					onLoadStudentEvaluation={loadStudentEvaluation}
+					onTransferStudentData={() => showStudentTransferModal = true}
 					onSaveAssignmentData={saveAssessmentData}
 					onAddPercentageRange={addPercentageRange}
 					onDeletePercentageRange={deletePercentageRange}
@@ -3078,8 +3190,18 @@
 												bind:value={newParagraph} 
 												placeholder="Type your paragraph here..."
 											></textarea>
-											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph}>
+											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph} style="min-width: 120px;">
 												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
+											</button>
+											<div class="mx-1"></div>
+											<button 
+												class="btn btn-outline-info btn-sm" 
+												type="button" 
+												onclick={() => showImportModal = true}
+												title="Import paragraphs from other assignments"
+												style="min-width: 120px;"
+											>
+												<i class="bi bi-download me-2"></i>Import
 											</button>
 										</div>
 									</div>
@@ -3945,6 +4067,26 @@
 		</div>
 	</div>
 {/if}
+
+<!-- Student Transfer Modal -->
+<StudentTransferModal 
+	show={showStudentTransferModal}
+	students={students}
+	currentStudentId={currentStudentId}
+	currentStudentName={studentName}
+	onClose={() => showStudentTransferModal = false}
+	onTransfer={transferStudentData}
+/>
+
+<!-- Import Paragraphs Modal -->
+<ImportParagraphsModal 
+	show={showImportModal}
+	subjects={subjects}
+	currentSubjectId={currentSubjectId}
+	currentAssessmentId={currentAssessmentId}
+	on:close={() => showImportModal = false}
+	on:import={importParagraphs}
+/>
 
 <!-- Success Notification Toast -->
 {#if showNotification}
