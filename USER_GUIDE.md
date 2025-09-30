@@ -4,7 +4,7 @@
 
 ### 🎯 **Total Marks Display**
 
-The application now shows real-time total marks in multiple locations for better assessment tracking:
+The application now shows real-time total marks in multiple locations for better assessment tracking and monitoring:
 
 #### **Where to Find Total Marks**
 1. **Current Session Sidebar**: Total marks appears below the student information
@@ -30,7 +30,7 @@ The application now shows real-time total marks in multiple locations for better
 
 ### 🎨 **Enhanced Text Formatting**
 
-The rich text editor now includes both bold formatting and font color support:
+The rich text editor now includes both bold formatting and font color support for professional text formatting:
 
 #### **Font Color Support**
 1. **Edit a Paragraph**: Click the pencil icon (✏️) next to any paragraph
@@ -38,7 +38,8 @@ The rich text editor now includes both bold formatting and font color support:
 3. **Select Text**: Highlight the text you want to color
 4. **Choose Color**: Click the color picker in the toolbar and select a color
 5. **Apply Color**: Color applies to the selected text immediately
-6. **Save Changes**: Click the green checkmark (✓) to save your changes
+6. **Visual Feedback**: Color picker shows the current selection's color
+7. **Save Changes**: Click the green checkmark (✓) to save your changes
 
 #### **How to Use Bold Formatting**
 1. **Edit a Paragraph**: Click the pencil icon (✏️) next to any paragraph
@@ -56,10 +57,11 @@ The rich text editor now includes both bold formatting and font color support:
 
 #### **Text Formatting Features**
 - **Bold Text**: Emphasize important text with bold formatting
-- **Font Colors**: Apply colors to text for better visual organization
+- **Font Colors**: Apply colors to text for better visual organization and emphasis
 - **Real-time Preview**: See formatting immediately in the editor
-- **HTML Display**: Formatted text preserved in paragraph view
+- **HTML Display**: Formatted text preserved in paragraph view with proper styling
 - **Export Compatibility**: Copy and PDF functions automatically convert to plain text
+- **Professional Formatting**: Enhanced text presentation for better readability
 
 #### **Important Notes**
 - **Display Only**: Bold and color formatting are for visual emphasis in the application

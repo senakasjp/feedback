@@ -1,5 +1,56 @@
 # Troubleshooting Guide
 
+## Version 3.2.3 - Latest Issues and Solutions
+
+### Total Marks Display Issues
+
+#### Issue: Total Marks Not Appearing
+**Symptoms**: Total marks don't show in sidebar or paragraphs section
+**Diagnosis**: Check if marks have been entered in any category
+**Solutions**:
+- Ensure at least one category has marks entered
+- Check that `getTotalMarks()` function is working correctly
+- Verify Sidebar component has `categoryMarks` and `getTotalMarks` props
+- Total marks only appear when total > 0 (conditional display)
+
+#### Issue: Total Marks Not Updating
+**Symptoms**: Total marks don't change when category marks are modified
+**Diagnosis**: Check reactive state updates
+**Solutions**:
+- Ensure `categoryMarks` is properly bound to input fields
+- Verify `getTotalMarks()` function is reactive
+- Check for JavaScript errors in console
+- Refresh the application if reactive updates fail
+
+### Enhanced Text Formatting Issues
+
+#### Issue: Font Colors Not Applying
+**Symptoms**: Color picker doesn't change text color
+**Diagnosis**: Check rich text editor functionality
+**Solutions**:
+- Ensure text is selected before applying color
+- Check if `document.execCommand('foreColor')` is supported
+- Verify color picker is properly bound to `changeFontColor()` function
+- Try refreshing the editor by canceling and re-editing
+
+#### Issue: Formatting Lost on Save
+**Symptoms**: Bold or colored text reverts to plain text
+**Diagnosis**: Check HTML storage and conversion
+**Solutions**:
+- Verify paragraph content is stored as HTML
+- Check `convertHtmlToText()` function for clipboard/PDF exports
+- Ensure `{@html}` directive is used for display
+- Formatting should persist in display but convert to plain text for exports
+
+#### Issue: Color Picker Not Reflecting Current Color
+**Symptoms**: Color picker shows wrong color for selected text
+**Diagnosis**: Check `updateFontColorState()` function
+**Solutions**:
+- Ensure text is properly selected before checking color
+- Verify `rgbToHex()` conversion function is working
+- Check for CSS color inheritance issues
+- Try selecting text again and checking color picker
+
 ## Selection System Issues
 
 ### Quick Diagnostic Checklist
@@ -173,7 +224,9 @@ await loadStudentEvaluation(); // Reload from storage
 ### Support Information
 
 #### Version Check
-Current version: 3.2.0
+Current version: 3.2.3
+- Real-time total marks display
+- Enhanced text formatting with font colors
 - Student-centric selection storage
 - Enhanced debugging
 - Backward compatibility maintained

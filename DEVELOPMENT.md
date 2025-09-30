@@ -1,6 +1,27 @@
 # Development Guide
 
-## Latest Updates (v3.1.0)
+## Latest Updates (v3.2.3)
+
+### Total Marks Display Implementation
+- **Real-time Calculation**: Added `getTotalMarks()` function for reactive total calculation
+- **Component Integration**: Enhanced Sidebar component with `categoryMarks` and `getTotalMarks` props
+- **Multiple Display Locations**: Total marks shown in both sidebar and paragraphs section
+- **Conditional Rendering**: Total marks only appear when marks are entered (total > 0)
+- **Visual Emphasis**: Red text styling using Bootstrap `text-danger` class
+
+### Enhanced Rich Text Editor Features
+- **Font Color Support**: Added HTML5 color picker with real-time color application
+- **State Management**: Implemented `currentFontColor` state and `updateFontColorState()` function
+- **Export Compatibility**: HTML content converted to plain text for clipboard/PDF exports
+- **Bootstrap Integration**: Consistent styling with existing UI components
+
+### Technical Implementation Notes
+- **Reactive Updates**: Total marks automatically update when category marks change
+- **HTML Storage**: Paragraph content stored as HTML for formatting preservation
+- **Color Conversion**: RGB to hex conversion for color picker state management
+- **Export Safety**: Display-only formatting doesn't affect PDF generation
+
+## Previous Updates (v3.1.0)
 
 ### Visual Debug Panel Implementation
 - **Checkbox Debug Panel**: Added comprehensive visual debugging for checkbox selection issues
@@ -292,7 +313,7 @@ npm run build
 ```json
 {
   "name": "feedback-app",
-  "version": "2.5.0",
+  "version": "3.2.3",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -320,7 +341,7 @@ npm run build
 {
   "package": {
     "productName": "Feedback Manager",
-    "version": "2.5.0"
+    "version": "3.2.3"
   },
   "build": {
     "distDir": "../dist",

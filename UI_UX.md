@@ -4,7 +4,23 @@
 
 This document provides a complete guide to recreate the UI/UX system used in the Feedback Manager application. The system is built on Bootstrap 5 with custom Svelte components, featuring a modern, professional design with consistent patterns for modals, notifications, cards, interactive elements, and comprehensive debugging tools.
 
-## Latest UI/UX Improvements (v3.1.0)
+## Latest UI/UX Improvements (v3.2.3)
+
+### Total Marks Display System
+- **Real-time Feedback**: Total marks displayed in red for immediate visual emphasis
+- **Dual Location Display**: Total marks shown in both sidebar and paragraphs section
+- **Conditional Rendering**: Clean interface with marks only appearing when entered
+- **Bootstrap Integration**: Consistent styling with `text-danger` class for emphasis
+- **Responsive Updates**: Total marks update instantly when category marks change
+
+### Enhanced Text Formatting Interface
+- **Color Picker Integration**: HTML5 color input with Bootstrap styling
+- **Real-time Preview**: Color picker reflects current text selection color
+- **Professional Toolbar**: Rich text editor with formatting controls
+- **Visual Feedback**: Immediate color application to selected text
+- **Export Safety**: Display-only formatting preserved for visual emphasis
+
+## Previous UI/UX Improvements (v3.1.0)
 
 ### Visual Debug Panel Implementation
 - **Debug Toggle Button**: Checkbox icon (☑️) in navbar for easy access

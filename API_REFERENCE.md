@@ -1,5 +1,121 @@
 # API Reference
 
+## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
+
+### Total Marks Display API
+
+#### Get Total Marks Function
+```javascript
+function getTotalMarks() {
+  return Object.values(categoryMarks || {})
+    .reduce((total, mark) => total + (parseFloat(mark) || 0), 0)
+}
+```
+Calculates the sum of all category marks for real-time total display.
+
+**Returns**: `number` - Total marks across all categories
+
+**Usage**:
+```javascript
+const total = getTotalMarks()
+console.log(`Total marks: ${total}`)
+```
+
+### Enhanced Rich Text Editor API
+
+#### Font Color Management Functions
+```javascript
+// Change font color for selected text
+function changeFontColor(color) {
+  document.execCommand('foreColor', false, color)
+  updateFontColorState()
+  onChange(editorRef.innerHTML)
+}
+
+// Update font color state based on current selection
+function updateFontColorState() {
+  const selection = window.getSelection()
+  if (selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0)
+    const container = range.commonAncestorContainer
+    const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container
+    const color = window.getComputedStyle(element).color
+    currentFontColor = rgbToHex(color)
+  }
+}
+
+// Convert RGB color to hex format
+function rgbToHex(rgb) {
+  const result = rgb.match(/\d+/g)
+  if (result) {
+    return '#' + result.map(x => parseInt(x).toString(16).padStart(2, '0')).join('')
+  }
+  return '#000000'
+}
+```
+
+#### Rich Text Editor Component Props
+```javascript
+// RichTextEditor component interface
+interface RichTextEditorProps {
+  content: string           // HTML content to display
+  readonly?: boolean        // Read-only mode flag
+  onChange: (content: string) => void  // Content change callback
+  placeholder?: string      // Placeholder text
+}
+```
+
+**Usage**:
+```javascript
+<RichTextEditor 
+  content={paragraphContent}
+  onChange={(newContent) => paragraphContent = newContent}
+  placeholder="Enter paragraph text..."
+/>
+```
+
+#### HTML to Text Conversion
+```javascript
+function convertHtmlToText(htmlContent) {
+  const tempDiv = document.createElement('div')
+  tempDiv.innerHTML = htmlContent
+  return tempDiv.textContent || tempDiv.innerText || ''
+}
+```
+Converts HTML content to plain text for clipboard and PDF export compatibility.
+
+**Parameters**:
+- `htmlContent`: string - HTML content to convert
+
+**Returns**: string - Plain text content
+
+**Usage**:
+```javascript
+const plainText = convertHtmlToText('<b>Bold text</b> and <span style="color: red;">colored text</span>')
+// Returns: "Bold text and colored text"
+```
+
+### Component Integration APIs
+
+#### Sidebar Component Enhanced Props
+```javascript
+interface SidebarProps {
+  // Existing props...
+  categoryMarks: Record<string, string>  // Category marks for total calculation
+  getTotalMarks: () => number            // Total marks calculation function
+  // ... other props
+}
+```
+
+**Usage**:
+```javascript
+<Sidebar 
+  categoryMarks={categoryMarks}
+  getTotalMarks={getTotalMarks}
+  // ... other props
+/>
+```
+
 ## Version 3.2.1 - Duplicate ID Detection & Fixing
 
 ### Duplicate ID Management API

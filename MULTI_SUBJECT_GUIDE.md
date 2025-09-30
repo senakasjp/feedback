@@ -4,7 +4,22 @@
 
 The Feedback Manager has been enhanced to support multiple subjects, each containing multiple assessments. This allows for better organization of feedback data, separate PDF generation for different contexts, and comprehensive debugging tools for troubleshooting issues.
 
-## Latest Features (v3.1.0)
+## Latest Features (v3.2.3)
+
+### Total Marks Display System
+- **Multi-Subject Support**: Total marks display works across all subjects and assessments
+- **Real-time Calculation**: Total marks update instantly when category marks change
+- **Dual Location Display**: Total marks shown in both sidebar and paragraphs section
+- **Assessment Tracking**: Enhanced monitoring of total marks across all categories
+- **Visual Emphasis**: Red color display for immediate feedback on assessment totals
+
+### Enhanced Text Formatting
+- **Rich Text Editor**: Professional text formatting with bold and color support
+- **Font Color Picker**: HTML5 color input for selecting text colors
+- **Export Compatibility**: HTML content converted to plain text for clipboard/PDF
+- **Bootstrap Integration**: Consistent styling with existing UI components
+
+## Previous Features (v3.1.0)
 
 ### Visual Debug Panel
 - **Multi-Subject Debugging**: Debug panel works across all subjects and assessments

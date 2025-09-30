@@ -11,6 +11,7 @@
 	import RichTextEditor from './lib/RichTextEditor.svelte'
 	import StudentTransferModal from './lib/StudentTransferModal.svelte'
 	import ImportParagraphsModal from './lib/ImportParagraphsModal.svelte'
+	import AssignmentExportModal from './lib/AssignmentExportModal.svelte'
 	
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
@@ -62,6 +63,7 @@
 	let deletingStudentId = $state(null) // Track which student is being deleted
 	let showStudentTransferModal = $state(false) // Show student transfer modal
 	let showImportModal = $state(false) // Show import paragraphs modal
+	let showExportModal = $state(false) // Show export assignment settings modal
 	
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
@@ -1659,6 +1661,15 @@
 		}
 	}
 
+	// Export assignment settings to create a new assignment
+	async function exportAssignmentSettings() {
+		// Reload subjects data to ensure we have the latest state
+		await loadSubjects()
+		
+		console.log('Assignment settings export completed. Subjects reloaded.')
+		showSuccessNotification('New assignment created successfully!')
+	}
+
 	// Helper function to merge assignment and student paragraphs
 	// Uses content-based comparison instead of index-based comparison
 	function mergeParagraphs(assignmentParagraphs, studentParagraphs) {
@@ -2213,8 +2224,18 @@
 	}
 
 	function deleteParagraph(index) {
-		// Get the paragraph ID before deletion
-		const deletedParagraphId = paragraphs[index]?.id
+		// Get the paragraph ID and text before deletion
+		const deletedParagraph = paragraphs[index]
+		const deletedParagraphId = deletedParagraph?.id
+		
+		// Extract category from the paragraph text
+		let deletedCategory = ''
+		if (deletedParagraph?.text && deletedParagraph.text.includes(': ')) {
+			const parts = deletedParagraph.text.split(': ')
+			if (parts.length >= 2) {
+				deletedCategory = parts[0].trim()
+			}
+		}
 		
 		// Remove from paragraphs array (assignment level only)
 		paragraphs.splice(index, 1)
@@ -2223,6 +2244,58 @@
 		if (deletedParagraphId) {
 			selectedParagraphs.delete(deletedParagraphId)
 			selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
+		}
+		
+		// Check if this was the last paragraph in the category
+		if (deletedCategory && currentAssessment?.categories) {
+			// Count remaining paragraphs in this category
+			const remainingParagraphsInCategory = paragraphs.filter(para => {
+				if (para.text && para.text.includes(': ')) {
+					const parts = para.text.split(': ')
+					if (parts.length >= 2) {
+						const category = parts[0].trim()
+						return category === deletedCategory
+					}
+				}
+				return false
+			})
+			
+			// If no paragraphs remain in this category, remove the category
+			if (remainingParagraphsInCategory.length === 0) {
+				console.log(`🗑️ No paragraphs remaining in category "${deletedCategory}". Removing category.`)
+				
+				// Remove category from assessment
+				const categoryToRemove = currentAssessment.categories.find(cat => cat.name === deletedCategory)
+				if (categoryToRemove) {
+					currentAssessment.categories = currentAssessment.categories.filter(cat => cat.id !== categoryToRemove.id)
+					
+					// Update the current subject's assessments
+					if (currentSubject) {
+						const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+						if (subjectIndex !== -1) {
+							const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+							if (assessmentIndex !== -1) {
+								subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+								console.log(`✅ Removed category "${deletedCategory}" from assessment. Remaining categories: ${currentAssessment.categories.length}`)
+								saveSubjects()
+							}
+						}
+					}
+					
+					// Remove category marks and warnings
+					if (categoryMarks[deletedCategory] !== undefined) {
+						delete categoryMarks[deletedCategory]
+						categoryMarks = {...categoryMarks} // trigger reactivity
+					}
+					if (categoryWarnings[deletedCategory] !== undefined) {
+						delete categoryWarnings[deletedCategory]
+						categoryWarnings = {...categoryWarnings} // trigger reactivity
+					}
+					
+					// Show notification
+					showSuccessNotification(`Category "${deletedCategory}" was automatically removed as it had no remaining paragraphs.`)
+				}
+			}
 		}
 		
 		// Update warnings for all categories with marks
@@ -2945,7 +3018,6 @@
 					{showCalculator}
 					{percentageRanges}
 					{categoryMarks}
-					{getTotalMarks}
 					onSelectSubject={selectSubject}
 					onSelectAssessment={selectAssessment}
 					onGoBackToSubjects={goBackToSubjects}
@@ -2960,6 +3032,7 @@
 					onLoadStudentEvaluation={loadStudentEvaluation}
 					onTransferStudentData={() => showStudentTransferModal = true}
 					onSaveAssignmentData={saveAssessmentData}
+					onExportAssignmentSettings={() => showExportModal = true}
 					onAddPercentageRange={addPercentageRange}
 					onDeletePercentageRange={deletePercentageRange}
 					currentStudentId={currentStudentId}
@@ -4086,6 +4159,16 @@
 	currentAssessmentId={currentAssessmentId}
 	on:close={() => showImportModal = false}
 	on:import={importParagraphs}
+/>
+
+<!-- Assignment Export Modal -->
+<AssignmentExportModal 
+	showModal={showExportModal}
+	{currentSubject}
+	{currentAssessment}
+	{subjects}
+	onClose={() => showExportModal = false}
+	onExportComplete={exportAssignmentSettings}
 />
 
 <!-- Success Notification Toast -->

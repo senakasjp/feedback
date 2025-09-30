@@ -1,6 +1,26 @@
 # Feedback Application Architecture Diagram
 
-## Latest Architecture Updates (v3.1.0)
+## Latest Architecture Updates (v3.2.3)
+
+### Total Marks Display Architecture
+The application now includes a comprehensive real-time total marks display system:
+
+1. **Calculation Engine**: `getTotalMarks()` function for reactive total calculation
+2. **Component Integration**: Enhanced Sidebar component with `categoryMarks` and `getTotalMarks` props
+3. **Multiple Display Locations**: Total marks shown in both sidebar and paragraphs section
+4. **Conditional Rendering**: Total marks only appear when marks are entered (total > 0)
+5. **Visual Emphasis**: Red text styling using Bootstrap `text-danger` class
+
+### Enhanced Rich Text Editor Architecture
+The application now includes advanced text formatting capabilities:
+
+1. **Font Color System**: HTML5 color picker with real-time color application
+2. **State Management**: `currentFontColor` state and `updateFontColorState()` function
+3. **Export Compatibility**: HTML content converted to plain text for clipboard/PDF
+4. **Bootstrap Integration**: Consistent styling with existing UI components
+5. **Color Conversion**: RGB to hex conversion for color picker state management
+
+## Previous Architecture Updates (v3.1.0)
 
 ### Visual Debug Panel Architecture
 The application now includes a comprehensive visual debugging system:

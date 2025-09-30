@@ -1,5 +1,69 @@
 # Architecture Documentation
 
+## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
+
+### Real-time Total Marks Display System
+
+The application now includes a comprehensive real-time total marks display system that provides instant feedback on assessment totals:
+
+#### Technical Implementation
+```javascript
+// Total marks calculation and display
+function getTotalMarks() {
+  return Object.values(categoryMarks || {})
+    .reduce((total, mark) => total + (parseFloat(mark) || 0), 0)
+}
+
+// Reactive display in multiple locations
+$: totalMarks = getTotalMarks()
+```
+
+#### Component Integration
+- **Sidebar Component**: Added `categoryMarks` and `getTotalMarks` props for real-time display
+- **Multiple Templates**: Updated all Sidebar usages across different template files
+- **Conditional Rendering**: Total marks only appear when marks are entered (total > 0)
+- **Visual Emphasis**: Red text styling using Bootstrap `text-danger` class
+
+#### User Experience Benefits
+- **Dual Location Display**: Total marks visible in both sidebar and paragraphs section
+- **Immediate Feedback**: Real-time updates when category marks change
+- **Assessment Tracking**: Enhanced monitoring of total marks across all categories
+- **Clean Interface**: Conditional display prevents clutter when no marks entered
+
+### Enhanced Rich Text Editor System
+
+The application now includes advanced text formatting capabilities with font color support:
+
+#### Technical Implementation
+```javascript
+// Font color functionality in RichTextEditor component
+function changeFontColor(color) {
+  document.execCommand('foreColor', false, color)
+  updateFontColorState()
+  onChange(editorRef.innerHTML)
+}
+
+// Color picker integration
+<input 
+  type="color" 
+  bind:value={currentFontColor}
+  onchange={() => changeFontColor(currentFontColor)}
+  class="form-control form-control-sm"
+/>
+```
+
+#### Component Architecture
+- **HTML5 Color Input**: Native color picker with Bootstrap styling
+- **Real-time Preview**: Color picker reflects current selection's color
+- **State Management**: `currentFontColor` tracks selected color
+- **Export Compatibility**: HTML content converted to plain text for clipboard/PDF
+
+#### User Experience Benefits
+- **Professional Formatting**: Enhanced text presentation capabilities
+- **Visual Organization**: Color coding for better text organization
+- **Export Safety**: Display-only colors don't affect PDF exports
+- **Bootstrap Integration**: Consistent styling with existing UI
+
 ## Version 3.2.1 - Automatic Duplicate ID Detection & Fixing
 
 ### Critical Bug Fix: Duplicate Paragraph ID Management

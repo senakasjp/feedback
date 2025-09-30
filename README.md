@@ -1,6 +1,22 @@
-# Feedback Manager v3.1.0
+# Feedback Manager v3.2.3
 
-A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, contamination prevention, and visual debugging tools.
+A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, contamination prevention, visual debugging tools, real-time total marks display, and enhanced text formatting capabilities.
+
+## 🎉 Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
+
+This release introduces real-time total marks display and enhanced text formatting capabilities:
+
+### 🎯 **NEW FEATURE: Total Marks Display**
+- **Dual Location Display**: Total marks shown in both paragraphs section and Current Session sidebar
+- **Real-time Updates**: Total automatically updates when category marks are changed
+- **Red Color Display**: Total marks displayed in red for emphasis
+- **Conditional Display**: Only appears when marks are entered (total > 0)
+
+### 🎨 **ENHANCED FEATURE: Font Color Support**
+- **Color Picker**: HTML5 color input for selecting text colors
+- **Real-time Preview**: Color picker reflects current selection's color
+- **Display Only**: Colors appear in app; PDF export remains plain text
+- **Bootstrap Integration**: Consistent styling with existing toolbar
 
 ## 🎉 Version 3.1.0 - Major Bug Fixes Release
 
