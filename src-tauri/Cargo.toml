@@ -26,3 +26,5 @@ tauri-plugin-log = "2"
 tauri-plugin-store = "2"
 tauri-plugin-fs = "2"
 printpdf = { version = "0.7", default-features = false }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"

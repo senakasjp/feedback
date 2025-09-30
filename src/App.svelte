@@ -3131,6 +3131,7 @@
 								showAddAssessment={showAddAssessment}
 								newAssessmentName={newAssessmentName}
 								onAddAssessment={addAssessment}
+								addCheckboxDebug={addCheckboxDebug}
 							/>
 						</div>
 					</div>

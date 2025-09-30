@@ -159,7 +159,18 @@ export function printToDownload(studentsWithMarks, assessments, subjectName, get
  * @returns {string} CSV content
  */
 export function generateCSVContent(studentsWithMarks, assessments, getStudentMarks, getWeightedMarks, getFinalGrade) {
-    if (studentsWithMarks.length === 0 || assessments.length === 0) return '';
+    console.log('🔄 CSV Generation: Starting CSV generation');
+    console.log('📊 CSV Generation: Input data -', {
+        studentsCount: studentsWithMarks.length,
+        assessmentsCount: assessments.length,
+        studentsWithMarks: studentsWithMarks,
+        assessments: assessments
+    });
+    
+    if (studentsWithMarks.length === 0 || assessments.length === 0) {
+        console.log('❌ CSV Generation: No data to generate CSV');
+        return '';
+    }
 
     // Create CSV headers
     const headers = ['Student Name', 'Student ID'];
@@ -169,10 +180,14 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
     });
     headers.push('Grade');
 
+    console.log('📋 CSV Generation: Headers created -', headers);
+
     // Create CSV rows
     const rows = [headers.join(',')];
     
-    studentsWithMarks.forEach(student => {
+    studentsWithMarks.forEach((student, index) => {
+        console.log(`🔄 CSV Generation: Processing student ${index + 1}:`, student);
+        
         const row = [
             `"${student.name}"`,
             `"${student.studentId || 'N/A'}"`
@@ -181,6 +196,12 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
         assessments.forEach(assessment => {
             const marks = getStudentMarks(student.id, assessment.id);
             const weighted = getWeightedMarks(student.id, assessment.id);
+            
+            console.log(`📊 CSV Generation: Student ${student.name}, Assessment ${assessment.name}:`, {
+                marks: marks,
+                weighted: weighted,
+                assessmentWeight: assessment.weight
+            });
             
             if (marks && marks.hasMarks) {
                 row.push(String(marks.total));
@@ -191,9 +212,16 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
             }
         });
         
-        row.push(`"${getFinalGrade(student.id)}"`);
+        const finalGrade = getFinalGrade(student.id);
+        console.log(`📊 CSV Generation: Final grade for ${student.name}:`, finalGrade);
+        row.push(`"${finalGrade}"`);
         rows.push(row.join(','));
     });
 
-    return rows.join('\n');
+    const result = rows.join('\n');
+    console.log('✅ CSV Generation: CSV generated successfully');
+    console.log('📄 CSV Generation: Final result length:', result.length);
+    console.log('📄 CSV Generation: Final result preview:', result.substring(0, 300) + '...');
+    
+    return result;
 }

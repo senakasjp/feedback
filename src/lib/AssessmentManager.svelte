@@ -34,7 +34,8 @@
     onUpdateAssessments,
 		showAddAssessment = false,
 		newAssessmentName = '',
-		onAddAssessment
+		onAddAssessment,
+		addCheckboxDebug = () => {}
   }: {
     assessments?: Assessment[];
     students?: any[];
@@ -44,6 +45,7 @@
 		showAddAssessment?: boolean;
 		newAssessmentName?: string;
 		onAddAssessment?: (name: string) => void;
+		addCheckboxDebug?: (message: string) => void;
   } = $props()
 
 	// Sort assessments alphabetically by name
@@ -938,20 +940,56 @@
 		showSuccessNotification('PDF generated and downloaded successfully!');
 	}
 
-	// Export marks to CSV
-	// Export marks to CSV using modular function with confirmation
-	function exportToCSV() {
-		// Show confirmation dialog
-		const confirmExport = confirm(
-			`Export marks to CSV for ${studentsWithMarks.length} students?\n\n` +
-			`Subject: ${subjectName}\n` +
-			`Assessments: ${assessments.length}\n` +
-			`This will download a CSV file to your device.`
-		);
+	// CSV Export confirmation modal state
+	let showCSVExportModal = $state(false);
+	let csvExportConfirmed = $state(false);
+
+	// Export marks to CSV using Tauri native file system
+	async function exportToCSV() {
+		// Show immediate notification to test if function is called
+		showSuccessNotification('CSV Export function called!');
+		addCheckboxDebug('🔄 CSV Export: Starting export process');
 		
-		if (!confirmExport) return;
+		console.log('🔄 CSV Export: Starting export process');
+		console.log('📊 CSV Export: Data check -', {
+			studentsWithMarks: studentsWithMarks.length,
+			assessments: assessments.length,
+			subjectName: subjectName
+		});
 		
+		addCheckboxDebug(`📊 CSV Export: Data check - Students: ${studentsWithMarks.length}, Assessments: ${assessments.length}, Subject: ${subjectName}`);
+		
+		// Reset confirmation state and show modal
+		csvExportConfirmed = false;
+		showCSVExportModal = true;
+	}
+
+	// Handle CSV export confirmation
+	async function confirmCSVExport() {
+		showCSVExportModal = false;
+		csvExportConfirmed = true;
+		
+		console.log('✅ CSV Export: User confirmed export');
+		addCheckboxDebug('✅ CSV Export: User confirmed export');
+		
+		await performCSVExport();
+	}
+
+	// Cancel CSV export
+	function cancelCSVExport() {
+		showCSVExportModal = false;
+		csvExportConfirmed = false;
+		
+		console.log('❌ CSV Export: User cancelled export');
+		addCheckboxDebug('❌ CSV Export: User cancelled export');
+	}
+
+	// Perform the actual CSV export
+	async function performCSVExport() {
 		try {
+			console.log('🔄 CSV Export: Generating CSV content...');
+			addCheckboxDebug('🔄 CSV Export: Generating CSV content...');
+			
 			const csvContent = generateCSVContent(
 				studentsWithMarks,
 				assessments,
@@ -960,32 +998,59 @@
 				getFinalGrade
 			);
 
+			console.log('📄 CSV Export: Generated content length:', csvContent.length);
+			console.log('📄 CSV Export: Content preview:', csvContent.substring(0, 200) + '...');
+			addCheckboxDebug(`📄 CSV Export: Generated content length: ${csvContent.length}`);
+			addCheckboxDebug(`📄 CSV Export: Content preview: ${csvContent.substring(0, 100)}...`);
+
 			if (!csvContent) {
+				console.log('❌ CSV Export: No content generated');
+				addCheckboxDebug('❌ CSV Export: No content generated');
 				showSuccessNotification('No data to export');
 				return;
 			}
 
-			// Create and download CSV file
-		const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-		const link = document.createElement('a');
-		const url = URL.createObjectURL(blob);
-		link.setAttribute('href', url);
-		
-		// Generate filename with current date
-		const now = new Date();
-		const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD format
-		const safeSubjectName = subjectName.replace(/[^a-zA-Z0-9]/g, '-'); // Replace special chars with dashes
-		link.setAttribute('download', `student-marks-${safeSubjectName}-${dateStr}.csv`);
-		
-		link.style.visibility = 'hidden';
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-			
-			// Show success notification
-			showSuccessNotification('CSV file downloaded successfully!');
+			// Try Tauri first (desktop app)
+			try {
+				console.log('🔄 CSV Export: Attempting Tauri file save...');
+				addCheckboxDebug('🔄 CSV Export: Attempting Tauri file save...');
+				
+				const filePath = await invoke('export_csv_file', { 
+					content: csvContent, 
+					subjectName: subjectName || 'Unknown-Subject' 
+				});
+				
+				console.log('✅ CSV Export: Tauri save successful:', filePath);
+				addCheckboxDebug(`✅ CSV Export: Tauri save successful: ${filePath}`);
+				showSuccessNotification(`CSV file saved successfully to: ${filePath}`);
+			} catch (tauriError) {
+				console.log('⚠️ CSV Export: Tauri failed, falling back to browser:', tauriError);
+				addCheckboxDebug(`⚠️ CSV Export: Tauri failed, falling back to browser: ${tauriError.message}`);
+				
+				// Fallback to browser download for web development
+				const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+				const link = document.createElement('a');
+				const url = URL.createObjectURL(blob);
+				link.setAttribute('href', url);
+				
+				// Generate filename with current date
+				const now = new Date();
+				const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+				const safeSubjectName = (subjectName || 'Unknown-Subject').replace(/[^a-zA-Z0-9]/g, '-'); // Replace special chars with dashes
+				link.setAttribute('download', `student-marks-${safeSubjectName}-${dateStr}.csv`);
+				
+				link.style.visibility = 'hidden';
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
+				
+				console.log('✅ CSV Export: Browser download completed');
+				addCheckboxDebug('✅ CSV Export: Browser download completed');
+				showSuccessNotification('CSV file downloaded successfully!');
+			}
       } catch (error) {
-			console.error('Error exporting CSV:', error);
+			console.error('❌ CSV Export: Error occurred:', error);
+			addCheckboxDebug(`❌ CSV Export: Error occurred: ${error.message}`);
 			showSuccessNotification('Error exporting CSV: ' + error.message);
 		}
 	}
@@ -1955,5 +2020,57 @@
         {notificationMessage}
       </div>
     </div>
+</div>
+{/if}
+
+<!-- CSV Export Confirmation Modal -->
+{#if showCSVExportModal}
+<div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">
+          <i class="bi bi-download me-2"></i>Export CSV Confirmation
+        </h5>
+        <button type="button" class="btn-close btn-close-white" aria-label="Close" onclick={cancelCSVExport}></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-12">
+            <p class="mb-3">Are you sure you want to export marks to CSV?</p>
+            
+            <div class="alert alert-info mb-3">
+              <div class="row">
+                <div class="col-6">
+                  <strong>Students:</strong> {studentsWithMarks.length}
+                </div>
+                <div class="col-6">
+                  <strong>Assessments:</strong> {assessments.length}
+                </div>
+              </div>
+              <div class="row mt-2">
+                <div class="col-12">
+                  <strong>Subject:</strong> {subjectName}
+                </div>
+              </div>
+            </div>
+            
+            <p class="text-muted small mb-0">
+              <i class="bi bi-info-circle me-1"></i>
+              This will save a CSV file to your Downloads folder for analysis in Excel or other spreadsheet applications.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick={cancelCSVExport}>
+          <i class="bi bi-x-circle me-1"></i>Cancel
+        </button>
+        <button type="button" class="btn btn-success" onclick={confirmCSVExport}>
+          <i class="bi bi-download me-1"></i>Export CSV
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 {/if}

@@ -3,7 +3,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file, write_student_evaluation, read_student_evaluation, write_student_paragraphs, read_student_paragraphs, delete_student_evaluation, delete_student_paragraphs, delete_all_student_files])
+        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file, write_student_evaluation, read_student_evaluation, write_student_paragraphs, read_student_paragraphs, delete_student_evaluation, delete_student_paragraphs, delete_all_student_files, export_csv_file])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -270,4 +270,35 @@ fn delete_all_student_files(student_id: String) -> Result<(), String> {
     }
     
     Ok(())
+}
+
+#[tauri::command]
+fn export_csv_file(content: String, subject_name: String) -> Result<String, String> {
+    // Get Downloads directory
+    let downloads_dir = dirs::download_dir()
+        .ok_or("Could not find Downloads directory")?;
+    
+    // Generate filename with current date
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    
+    let date_str = chrono::DateTime::from_timestamp(now as i64, 0)
+        .unwrap_or_default()
+        .format("%Y-%m-%d")
+        .to_string();
+    
+    let safe_subject_name = subject_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>();
+    
+    let filename = format!("student-marks-{}-{}.csv", safe_subject_name, date_str);
+    let csv_path = downloads_dir.join(&filename);
+    
+    // Write CSV content to file
+    std::fs::write(&csv_path, content).map_err(|e| e.to_string())?;
+    
+    Ok(csv_path.to_string_lossy().to_string())
 }
