@@ -12,6 +12,7 @@
 	import StudentTransferModal from './lib/StudentTransferModal.svelte'
 	import ImportParagraphsModal from './lib/ImportParagraphsModal.svelte'
 	import AssignmentExportModal from './lib/AssignmentExportModal.svelte'
+	import AboutModal from './lib/AboutModal.svelte'
 	
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
@@ -64,6 +65,7 @@
 	let showStudentTransferModal = $state(false) // Show student transfer modal
 	let showImportModal = $state(false) // Show import paragraphs modal
 	let showExportModal = $state(false) // Show export assignment settings modal
+	let showAboutModal = $state(false) // Show about modal
 	
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
@@ -2958,7 +2960,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.0.0</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.2.3</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
@@ -2990,13 +2992,23 @@
 					</button>
 				</li>
 				<li class="nav-item">
-					<button 
-						class="btn btn-outline-light btn-sm ms-2" 
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
 						onclick={() => showCheckboxDebug = !showCheckboxDebug}
 						title="Toggle Checkbox Debug"
 						aria-label="Toggle Checkbox Debug"
 					>
 						<i class="bi bi-check-square"></i>
+					</button>
+				</li>
+				<li class="nav-item">
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
+						onclick={() => showAboutModal = true}
+						title="About Feedback Manager"
+						aria-label="About Feedback Manager"
+					>
+						<i class="bi bi-info-circle"></i>
 					</button>
 				</li>
 			</ul>
@@ -4163,13 +4175,19 @@
 />
 
 <!-- Assignment Export Modal -->
-<AssignmentExportModal 
+<AssignmentExportModal
 	showModal={showExportModal}
 	{currentSubject}
 	{currentAssessment}
 	{subjects}
 	onClose={() => showExportModal = false}
 	onExportComplete={exportAssignmentSettings}
+/>
+
+<!-- About Modal -->
+<AboutModal
+	bind:show={showAboutModal}
+	onClose={() => showAboutModal = false}
 />
 
 <!-- Success Notification Toast -->

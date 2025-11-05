@@ -45,7 +45,8 @@
     onDeleteAssessment,
     onBackToSubjects,
     onBackToAssessments,
-    onBackToWelcome
+    onBackToWelcome,
+    onToggleAboutModal
   } = $props()
 
   // Event handlers
@@ -93,13 +94,23 @@
           </button>
         </li>
         <li class="nav-item">
-          <button 
-            class="btn btn-outline-light btn-sm ms-1" 
+          <button
+            class="btn btn-outline-light btn-sm ms-1"
             onclick={() => storeHelpers.toggleCalculator()}
             title={uiState.showCalculator ? 'Hide Calculator' : 'Show Calculator'}
             aria-label={uiState.showCalculator ? 'Hide Calculator' : 'Show Calculator'}
           >
             <i class="bi bi-calculator"></i>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button
+            class="btn btn-outline-light btn-sm ms-1"
+            onclick={onToggleAboutModal}
+            title="About Feedback Manager"
+            aria-label="About Feedback Manager"
+          >
+            <i class="bi bi-info-circle"></i>
           </button>
         </li>
       </ul>
