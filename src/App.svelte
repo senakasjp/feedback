@@ -50,6 +50,7 @@
 	let studentName = $state('')
 	// No studentImage - only header photo for assessment
 	let selectedColor = $state('red')
+	let selectedColorMark = $state('') // Mark for the selected color (fixed mode)
 	let newCategoryName = $state('')
 	let newCategoryKnowledgeArea = $state('')
 	let newCategoryAllocatedMarks = $state('')
@@ -201,6 +202,7 @@
 	let showAddStudent = $state(false)
 	let showStudentManager = $state(false)
 	let showAddCategoryKnowledgeArea = $state(false)
+	let showCategoriesKnowledgeSection = $state(true) // Collapsible section for categories and knowledge areas
 	let newSubjectName = $state('')
 	let newAssessmentName = $state('')
 	let newStudentName = $state('')
@@ -652,7 +654,10 @@
 				name: newAssessmentName.trim(),
 				topics: [],
 				categories: [],
-				knowledgeAreas: []
+				knowledgeAreas: [],
+				totalMarks: 0, // Assessment property for total marks
+				percentageRanges: [], // Assessment-specific percentage ranges
+				markingMode: 'none' // 'none', 'percentage', or 'fixed' - determines how colors get marks
 			}
 			currentSubject.assessments.push(assessment)
 			newAssessmentName = ''
@@ -711,12 +716,27 @@
 	function selectAssessment(assessment) {
 		// STRICT FILTER: Clear ALL data before entering assessment feedback page
 		initializeEmptyData()
-		
+
 		// Set new assessment context
 		currentAssessmentId = assessment.id
 		currentAssessment = assessment
+
+		// Backward compatibility: Initialize markingMode if not present
+		if (!currentAssessment.markingMode) {
+			currentAssessment.markingMode = 'none'
+		}
+
+		// Backward compatibility: Initialize colorMarks for categories if not present
+		if (currentAssessment.categories) {
+			currentAssessment.categories.forEach(category => {
+				if (!category.colorMarks) {
+					category.colorMarks = {}
+				}
+			})
+		}
+
 		currentView = 'feedback'
-		
+
 		// Load ONLY data for this specific assessment
 		loadAssessmentData(currentSubjectId, currentAssessmentId)
 	}
@@ -757,22 +777,31 @@
 				paragraphText = `${paragraphText} - ${selectedKnowledgeArea}`
 			}
 			
-		paragraphs.push({
+		const newPara = {
 			id: generateId(), // Add unique ID for reliable tracking
 			text: paragraphText,
 			color: selectedColor || undefined,
 			subjectId: currentSubjectId, // STRICT DATA ISOLATION: Add subject context
 			assessmentId: currentAssessmentId // STRICT DATA ISOLATION: Add assessment context
-		})
+		}
+
+		// For fixed marking mode, store the mark and category
+		if (currentAssessment?.markingMode === 'fixed' && selectedColorMark && selectedCategory) {
+			newPara.mark = parseFloat(selectedColorMark)
+			newPara.category = selectedCategory
+		}
+
+		paragraphs.push(newPara)
 		newParagraph = ''
+		selectedColorMark = '' // Reset mark input
 		// Keep knowledge area selection intact (like category selection)
 		// selectedKnowledgeArea = '' // Reset knowledge area selection
-			
-			// Save to both assignment and student
-			saveAssessmentData()
-			if (currentStudentId) {
-				saveStudentParagraphs()
-			}
+
+		// Save to both assignment and student
+		saveAssessmentData()
+		if (currentStudentId) {
+			saveStudentParagraphs()
+		}
 		}
 	}
 
@@ -806,15 +835,16 @@
 			if (!currentAssessment.categories) {
 				currentAssessment.categories = []
 			}
-			
+
 			const newCategory = {
 				id: Date.now().toString(),
 				name: newCategoryName.trim(),
 				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined,
 				allocatedMarks: newCategoryAllocatedMarks ? parseFloat(newCategoryAllocatedMarks) : undefined,
-				order: currentAssessment.categories.length // Set order as the next index
+				order: currentAssessment.categories.length, // Set order as the next index
+				colorMarks: {} // For fixed marking mode: { colorName: markValue }
 			}
-			
+
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
 			newCategoryName = ''
 			newCategoryKnowledgeArea = ''
@@ -1235,12 +1265,36 @@
 		return students.find(s => s.id === currentStudentId)
 	}
 
+	// Helper function to calculate mark ranges for a category based on percentage ranges
+	function getCategoryMarkRanges(categoryMarks, percentageRanges) {
+		if (!categoryMarks || !percentageRanges || percentageRanges.length === 0) return []
+
+		return percentageRanges.map(range => {
+			const lower = (categoryMarks * range.lowerPercentage / 100).toFixed(1)
+			const upper = (categoryMarks * range.upperPercentage / 100).toFixed(1)
+			return {
+				color: range.color,
+				range: `${lower}-${upper}`,
+				lower: parseFloat(lower),
+				upper: parseFloat(upper)
+			}
+		}).sort((a, b) => b.lower - a.lower) // Sort from highest to lowest
+	}
+
 	// Percentage range management
 	function addPercentageRange(value, color, lowerPercentage, upperPercentage) {
+		if (!currentAssessment) return
+
 		const calculatedLower = (value * lowerPercentage / 100).toFixed(2)
 		const calculatedUpper = (value * upperPercentage / 100).toFixed(2)
-		
-		percentageRanges = [...percentageRanges, {
+
+		// Ensure percentageRanges array exists on assessment
+		if (!currentAssessment.percentageRanges) {
+			currentAssessment.percentageRanges = []
+		}
+
+		// Add range to current assessment
+		currentAssessment.percentageRanges = [...currentAssessment.percentageRanges, {
 			id: Date.now().toString(),
 			value: value,
 			color: color,
@@ -1249,13 +1303,37 @@
 			calculatedLower: parseFloat(calculatedLower),
 			calculatedUpper: parseFloat(calculatedUpper)
 		}]
-		
-		saveSubjects()
+
+		// Update assessment in subjects array
+		if (currentSubject) {
+			const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+			if (subjectIndex !== -1) {
+				const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+				if (assessmentIndex !== -1) {
+					subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+					saveSubjects()
+				}
+			}
+		}
 	}
 
 	function deletePercentageRange(id) {
-		percentageRanges = percentageRanges.filter(range => range.id !== id)
-		saveSubjects()
+		if (!currentAssessment || !currentAssessment.percentageRanges) return
+
+		// Remove range from current assessment
+		currentAssessment.percentageRanges = currentAssessment.percentageRanges.filter(range => range.id !== id)
+
+		// Update assessment in subjects array
+		if (currentSubject) {
+			const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+			if (subjectIndex !== -1) {
+				const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+				if (assessmentIndex !== -1) {
+					subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+					saveSubjects()
+				}
+			}
+		}
 	}
 
 	// Sort students alphabetically by display name
@@ -3021,14 +3099,14 @@
 		<div class="row">
 			<!-- Sidebar -->
 			<div class="col-lg-3 col-md-4 col-12 mb-4">
-				<Sidebar 
+				<Sidebar
 					{subjects}
 					{currentSubject}
 					{currentAssessment}
 					{currentView}
 					{showMobileSidebar}
 					{showCalculator}
-					{percentageRanges}
+					percentageRanges={currentAssessment?.percentageRanges || []}
 					{categoryMarks}
 					onSelectSubject={selectSubject}
 					onSelectAssessment={selectAssessment}
@@ -3305,23 +3383,57 @@
 										</select>
 										<small class="text-muted">Selected: {selectedColor || 'No Color'} ({selectedColor ? getColorHex(selectedColor) : 'None'})</small>
 									</div>
-									
-									<!-- Knowledge Area Management -->
-									<div class="mb-3">
-										<div class="d-flex justify-content-between align-items-center mb-2">
-											<label class="form-label fw-bold mb-0">Knowledge Areas:</label>
-											<div class="d-flex align-items-center gap-2">
-												<small class="text-muted">{(currentAssessment?.knowledgeAreas || []).length} areas</small>
-												<button 
-													class="btn btn-outline-secondary btn-sm"
-													onclick={() => showAddCategoryKnowledgeArea = !showAddCategoryKnowledgeArea}
-												>
-													<i class="bi bi-plus-circle me-1"></i>Add Category or Knowledge Area
-												</button>
-											</div>
+
+									<!-- Mark Input for Fixed Mode -->
+									{#if currentAssessment?.markingMode === 'fixed' && selectedColor && selectedCategory}
+										<div class="mb-3">
+											<label for="colorMarkInput" class="form-label fw-bold">Mark for this Color:</label>
+											<input
+												id="colorMarkInput"
+												type="number"
+												class="form-control"
+												bind:value={selectedColorMark}
+												placeholder="Enter mark value..."
+												min="0"
+												max={currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks || 100}
+												step="0.5"
+											>
+											<small class="text-muted">
+												Category: {selectedCategory}
+												{#if currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks}
+													(Max: {currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks} marks)
+												{/if}
+											</small>
 										</div>
-										
-										{#if showAddCategoryKnowledgeArea}
+									{/if}
+									
+									<!-- Categories and Knowledge Areas Management -->
+									<div class="mb-3">
+										<div class="d-flex justify-content-between align-items-center mb-3">
+											<div class="d-flex align-items-center gap-2">
+												<button
+													class="btn btn-link p-0 text-decoration-none text-dark"
+													onclick={() => showCategoriesKnowledgeSection = !showCategoriesKnowledgeSection}
+													title={showCategoriesKnowledgeSection ? 'Collapse' : 'Expand'}
+												>
+													<i class="bi bi-{showCategoriesKnowledgeSection ? 'dash' : 'plus'}-square me-1"></i>
+												</button>
+												<label class="form-label fw-bold mb-0">Assessment Configuration:</label>
+												<small class="text-muted">{currentAssessment?.categories?.length || 0} categories, {(currentAssessment?.knowledgeAreas || []).length} areas</small>
+											</div>
+											<button
+												class="btn btn-outline-secondary btn-sm"
+												onclick={() => showAddCategoryKnowledgeArea = !showAddCategoryKnowledgeArea}
+											>
+												<i class="bi bi-plus-circle me-1"></i>Add Category or Knowledge Area
+											</button>
+										</div>
+
+										{#if showCategoriesKnowledgeSection}
+											<!-- Knowledge Areas Section -->
+											<div class="mb-3">
+												<label class="form-label fw-bold">Knowledge Areas:</label>
+												{#if showAddCategoryKnowledgeArea}
 											<!-- Add Knowledge Area Form -->
 											<div class="mb-3">
 												<label for="knowledgeAreaName" class="form-label">Knowledge Area Name:</label>
@@ -3368,8 +3480,104 @@
 													{/each}
 												</div>
 											</div>
-										{/if}
+												{/if}
+											</div>
+
+											<!-- Assessment Total Marks -->
+											<div class="mb-3">
+										<label for="assessmentTotalMarks" class="form-label fw-bold">Assessment Total Marks:</label>
+										<input
+											id="assessmentTotalMarks"
+											type="number"
+											class="form-control form-control-sm"
+											placeholder="Enter total marks for this assessment..."
+											bind:value={currentAssessment.totalMarks}
+											min="0"
+											step="0.5"
+										>
+										<small class="text-muted">This is the maximum marks for this assessment</small>
 									</div>
+
+									<!-- Marking Mode Selection -->
+									<div class="mb-3">
+										<label class="form-label fw-bold">Marking Mode:</label>
+										<div class="btn-group w-100" role="group">
+											<input
+												type="radio"
+												class="btn-check"
+												name="markingMode"
+												id="markingModeNone"
+												value="none"
+												bind:group={currentAssessment.markingMode}
+											>
+											<label class="btn btn-outline-primary btn-sm" for="markingModeNone">
+												<i class="bi bi-x-circle me-1"></i>None
+											</label>
+
+											<input
+												type="radio"
+												class="btn-check"
+												name="markingMode"
+												id="markingModePercentage"
+												value="percentage"
+												bind:group={currentAssessment.markingMode}
+											>
+											<label class="btn btn-outline-primary btn-sm" for="markingModePercentage">
+												<i class="bi bi-percent me-1"></i>Percentage
+											</label>
+
+											<input
+												type="radio"
+												class="btn-check"
+												name="markingMode"
+												id="markingModeFixed"
+												value="fixed"
+												bind:group={currentAssessment.markingMode}
+											>
+											<label class="btn btn-outline-primary btn-sm" for="markingModeFixed">
+												<i class="bi bi-123 me-1"></i>Fixed
+											</label>
+										</div>
+										<small class="text-muted d-block mt-1">
+											{#if currentAssessment.markingMode === 'none'}
+												<i class="bi bi-info-circle me-1"></i>No color marking system
+											{:else if currentAssessment.markingMode === 'percentage'}
+												<i class="bi bi-info-circle me-1"></i>Percentage ranges apply uniformly across all categories
+											{:else}
+												<i class="bi bi-info-circle me-1"></i>Set specific marks for each color when entering paragraphs
+											{/if}
+										</small>
+									</div>
+
+									<!-- Percentage Mode Instruction -->
+									{#if currentAssessment.markingMode === 'percentage'}
+										<div class="alert alert-info d-flex align-items-center mb-3" role="alert">
+											<i class="bi bi-lightbulb me-2"></i>
+											<div>
+												<strong>How to use Percentage Mode:</strong>
+												<div class="small mt-1">Add color ranges in Calculator sidebar once (click <i class="bi bi-calculator"></i> icon). Ranges will automatically apply to all categories.</div>
+											</div>
+										</div>
+									{/if}
+
+									<!-- Assessment Mark Ranges Display - Only for Percentage Mode -->
+									{#if currentAssessment.markingMode === 'percentage' && currentAssessment.totalMarks > 0 && currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0}
+										<div class="mb-3 border rounded p-3 bg-light">
+											<h6 class="fw-bold mb-2 text-primary">
+												<i class="bi bi-bar-chart-fill me-2"></i>Assessment Mark Ranges
+											</h6>
+											<div class="d-flex flex-wrap gap-2">
+												{#each getCategoryMarkRanges(currentAssessment.totalMarks, currentAssessment.percentageRanges) as markRange}
+													<div class="badge p-2" style="background-color: {markRange.color}; color: white; font-size: 0.85rem;">
+														{markRange.range}
+													</div>
+												{/each}
+											</div>
+											<small class="text-muted d-block mt-2">
+												<i class="bi bi-info-circle me-1"></i>These mark ranges apply to the overall assessment (Total: {currentAssessment.totalMarks} marks)
+											</small>
+										</div>
+									{/if}
 
 									<!-- Category Management -->
 									<div class="mb-3">
@@ -3425,73 +3633,91 @@
 										<!-- Categories List - Compact Horizontal -->
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
 											<div class="mb-2">
-												<div class="d-flex flex-wrap gap-1">
+												<div class="d-flex flex-column gap-2">
 													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category, index}
-														<div class="d-flex align-items-center bg-light border rounded px-1 py-0 small">
-															<span class="text-muted me-1">
-																{category.name}
-																{#if category.allocatedMarks}
-																	<span class="text-primary fw-bold">({category.allocatedMarks})</span>
+														<div class="border rounded p-2 bg-light">
+															<div class="d-flex align-items-center justify-content-between mb-1">
+																<span class="fw-bold small">
+																	{category.name}
+																	{#if category.allocatedMarks}
+																		<span class="text-primary">({category.allocatedMarks} marks)</span>
+																	{/if}
+																</span>
+																<button
+																	class="btn btn-sm p-0 border-0 text-danger"
+																	onclick={() => removeCategory(category.id)}
+																	title="Delete category"
+																	aria-label="Delete category"
+																>
+																	<i class="bi bi-trash"></i>
+																</button>
+															</div>
+
+															{#if category.allocatedMarks && currentAssessment.markingMode === 'percentage'}
+																<!-- Percentage-based Mark Ranges -->
+																{#if currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0}
+																	<div class="d-flex flex-wrap gap-1">
+																		{#each getCategoryMarkRanges(category.allocatedMarks, currentAssessment.percentageRanges) as markRange}
+																			<span class="badge" style="background-color: {markRange.color}; color: white; font-size: 0.7rem;">
+																				{markRange.range}
+																			</span>
+																		{/each}
+																	</div>
 																{/if}
-															</span>
-															<button 
-																class="btn btn-sm p-0 border-0 text-danger" style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
-																onclick={() => removeCategory(category.id)}
-																title="Delete category"
-															>
-																×
-															</button>
+															{/if}
 														</div>
 													{/each}
 												</div>
 											</div>
 										{/if}
-										
-										<!-- Category and Knowledge Area Selection -->
-										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
-											<div class="mb-3">
-												<div class="row g-2">
-													<div class="col-12">
-														<label for="knowledgeAreaSelect" class="form-label fw-bold">Select Knowledge Area:</label>
-														<select 
-															id="knowledgeAreaSelect" 
-															class="form-select" 
-															bind:value={selectedKnowledgeArea}
+									</div>
+								{/if}
+							</div>
+
+							<!-- Category and Knowledge Area Selection -->
+								{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
+									<div class="mb-3">
+										<div class="row g-2">
+											<div class="col-12">
+												<label for="knowledgeAreaSelect" class="form-label fw-bold">Select Knowledge Area:</label>
+												<select
+													id="knowledgeAreaSelect"
+													class="form-select"
+													bind:value={selectedKnowledgeArea}
+												>
+													<option value="">Choose a knowledge area...</option>
+													{#each (currentAssessment?.knowledgeAreas || []) as area}
+														<option value={area}>{area}</option>
+													{/each}
+												</select>
+											</div>
+											<div class="col-12">
+												<div class="d-flex align-items-end gap-3">
+													<div class="flex-grow-1">
+														<label for="categorySelect" class="form-label fw-bold mb-1">Select Category:</label>
+														<select
+															id="categorySelect"
+															class="form-select"
+															bind:value={selectedCategory}
 														>
-															<option value="">Choose a knowledge area...</option>
-															{#each (currentAssessment?.knowledgeAreas || []) as area}
-																<option value={area}>{area}</option>
+															<option value="">Choose a category...</option>
+															{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category}
+																<option value={category.name}>{category.name}</option>
 															{/each}
 														</select>
-													</div>
-													<div class="col-12">
-														<div class="d-flex align-items-end gap-3">
-															<div class="flex-grow-1">
-																<label for="categorySelect" class="form-label fw-bold mb-1">Select Category:</label>
-																<select 
-																	id="categorySelect" 
-																	class="form-select" 
-																	bind:value={selectedCategory}
-																>
-																	<option value="">Choose a category...</option>
-																	{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category}
-																		<option value={category.name}>{category.name}</option>
-																	{/each}
-																</select>
-																{#if selectedKnowledgeArea}
-																	<small class="text-muted">
-																		<i class="bi bi-info-circle me-1"></i>
-																		Selected: {selectedKnowledgeArea}
-																	</small>
-																{/if}
-															</div>
-														</div>
+														{#if selectedKnowledgeArea}
+															<small class="text-muted">
+																<i class="bi bi-info-circle me-1"></i>
+																Selected: {selectedKnowledgeArea}
+															</small>
+														{/if}
 													</div>
 												</div>
 											</div>
-										{/if}
+										</div>
 									</div>
-									
+								{/if}
+
 									{#if needsCategorySelection() && !selectedCategory}
 										<div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
 											<i class="bi bi-exclamation-triangle-fill me-2"></i>
@@ -3647,7 +3873,7 @@
 																		</small>
 																	</div>
 																{/if}
-																{#each paragraphs as {text, color, id, originalIndex, fullText, source}}
+																{#each paragraphs as {text, color, id, originalIndex, fullText, source, mark, category}}
 																<div class="border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
 																	<div class="d-flex align-items-start">
 																		{#if currentStudentId}
@@ -3692,8 +3918,17 @@
 																				<div class="rounded border bg-light" style="width: 16px; height: 16px;" title="No Color"></div>
 																			</div>
 																		{/if}
-																		<!-- Marks range display based on color and category allocated marks -->
-																		{#if currentStudentId && color}
+																	<!-- Marks display (percentage range or fixed mark) -->
+																	{#if currentStudentId && color}
+																		{#if mark !== undefined}
+																			<!-- Fixed mark mode - show specific mark -->
+																			<div class="me-3 d-flex align-items-center">
+																				<span class="badge bg-primary text-white small" title="Fixed mark for {color} color">
+																					{mark} marks
+																				</span>
+																			</div>
+																		{:else}
+																			<!-- Percentage mode - show marks range -->
 																			{@const categoryObj = currentAssessment?.categories?.find(cat => cat.name === group.category)}
 																			{@const marksRange = getMarksRange(color, categoryObj?.allocatedMarks)}
 																			{#if marksRange}
@@ -3704,6 +3939,7 @@
 																				</div>
 																			{/if}
 																		{/if}
+																	{/if}
 																		<div class="flex-grow-1 me-3">
 																			{#if editingParagraphIndex === originalIndex}
 																				<RichTextEditor 
