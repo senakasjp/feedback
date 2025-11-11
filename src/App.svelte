@@ -3633,38 +3633,23 @@
 										<!-- Categories List - Compact Horizontal -->
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
 											<div class="mb-2">
-												<div class="d-flex flex-column gap-2">
+												<div class="d-flex flex-wrap gap-1">
 													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category, index}
-														<div class="border rounded p-2 bg-light">
-															<div class="d-flex align-items-center justify-content-between mb-1">
-																<span class="fw-bold small">
-																	{category.name}
-																	{#if category.allocatedMarks}
-																		<span class="text-primary">({category.allocatedMarks} marks)</span>
-																	{/if}
-																</span>
-																<button
-																	class="btn btn-sm p-0 border-0 text-danger"
-																	onclick={() => removeCategory(category.id)}
-																	title="Delete category"
-																	aria-label="Delete category"
-																>
-																	<i class="bi bi-trash"></i>
-																</button>
-															</div>
-
-															{#if category.allocatedMarks && currentAssessment.markingMode === 'percentage'}
-																<!-- Percentage-based Mark Ranges -->
-																{#if currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0}
-																	<div class="d-flex flex-wrap gap-1">
-																		{#each getCategoryMarkRanges(category.allocatedMarks, currentAssessment.percentageRanges) as markRange}
-																			<span class="badge" style="background-color: {markRange.color}; color: white; font-size: 0.7rem;">
-																				{markRange.range}
-																			</span>
-																		{/each}
-																	</div>
+														<div class="d-flex align-items-center bg-light border rounded px-2 py-1 small">
+															<span class="text-muted me-1">
+																{category.name}
+																{#if category.allocatedMarks}
+																	<span class="text-primary">({category.allocatedMarks})</span>
 																{/if}
-															{/if}
+															</span>
+															<button
+																class="btn btn-sm p-0 border-0 text-danger"
+																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
+																onclick={() => removeCategory(category.id)}
+																title="Delete category"
+															>
+																×
+															</button>
 														</div>
 													{/each}
 												</div>
