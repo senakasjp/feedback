@@ -63,6 +63,11 @@
 	let studentsWithMarks = $state([]); // Students who have marks for this subject
 	let editingWeight = $state({}); // Track which weight is being edited
 	let tempWeightValue = $state(''); // Temporary value while editing
+
+	// Duplicate assessment state
+	let showDuplicateDialog = $state(false);
+	let assessmentToDuplicate = $state(null);
+	let duplicateAssessmentName = $state('');
 	
 	// Student reordering state
 	let isReordering = $state(false);
@@ -1152,6 +1157,89 @@
 		}
 	}
 
+	// Duplicate assessment functions
+	function startDuplicateAssessment(assessment: Assessment) {
+		assessmentToDuplicate = assessment;
+		duplicateAssessmentName = `${assessment.name} (Copy)`;
+		showDuplicateDialog = true;
+	}
+
+	function cancelDuplicate() {
+		showDuplicateDialog = false;
+		assessmentToDuplicate = null;
+		duplicateAssessmentName = '';
+	}
+
+	async function confirmDuplicate() {
+		if (!assessmentToDuplicate || !duplicateAssessmentName.trim()) return;
+
+		try {
+			// Create a deep copy of the assessment with a new ID
+			const newAssessment = {
+				id: Date.now().toString(),
+				name: duplicateAssessmentName.trim(),
+				topics: assessmentToDuplicate.topics ? JSON.parse(JSON.stringify(assessmentToDuplicate.topics)) : [],
+				categories: assessmentToDuplicate.categories ? JSON.parse(JSON.stringify(assessmentToDuplicate.categories)) : [],
+				weight: assessmentToDuplicate.weight,
+				headerPhoto: assessmentToDuplicate.headerPhoto,
+				// Copy other assessment properties
+				knowledgeAreas: (assessmentToDuplicate as any).knowledgeAreas ? JSON.parse(JSON.stringify((assessmentToDuplicate as any).knowledgeAreas)) : [],
+				totalMarks: (assessmentToDuplicate as any).totalMarks,
+				markingMode: (assessmentToDuplicate as any).markingMode,
+				percentageRanges: (assessmentToDuplicate as any).percentageRanges ? JSON.parse(JSON.stringify((assessmentToDuplicate as any).percentageRanges)) : []
+			};
+
+			// Copy paragraphs from the original assessment (from Tauri storage or localStorage)
+			try {
+				// Try to read paragraphs from Tauri storage
+				const paragraphsData = await invoke('read_assessment_paragraphs', {
+					assessmentId: assessmentToDuplicate.id
+				});
+
+				if (paragraphsData) {
+					// Save the paragraphs to the new assessment
+					await invoke('write_assessment_paragraphs', {
+						assessmentId: newAssessment.id,
+						data: paragraphsData
+					});
+				}
+			} catch (error) {
+				// Fallback to localStorage
+				const key = `assessment-paragraphs-${assessmentToDuplicate.id}`;
+				const paragraphsData = localStorage.getItem(key);
+				if (paragraphsData) {
+					const newKey = `assessment-paragraphs-${newAssessment.id}`;
+					localStorage.setItem(newKey, paragraphsData);
+				}
+			}
+
+			// Add the new assessment to the list
+			const updatedAssessments = [...assessments, newAssessment];
+			onUpdateAssessments(updatedAssessments);
+
+			// Show success notification
+			showSuccessNotification(`Assessment "${duplicateAssessmentName}" created successfully!`);
+
+			// Close dialog
+			showDuplicateDialog = false;
+			assessmentToDuplicate = null;
+			duplicateAssessmentName = '';
+		} catch (error) {
+			console.error('Error duplicating assessment:', error);
+			showSuccessNotification('Error duplicating assessment. Please try again.');
+		}
+	}
+
+	function handleDuplicateKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
+			confirmDuplicate();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			cancelDuplicate();
+		}
+	}
+
 	// Helper function to get performance highlights (top, medium, lowest)
 	function getPerformanceHighlights() {
 		if (studentsWithMarks.length === 0) {
@@ -1473,14 +1561,24 @@
 								<i class="bi bi-clipboard-check text-primary me-2" style="font-size: 1.5rem;"></i>
 								<h6 class="mb-0">Assessment</h6>
 							</div>
-      <button 
-							class="btn btn-sm btn-outline-danger border-0"
-							onclick={() => removeAssessment(assessment.id)}
-							title="Delete assessment"
-							aria-label="Delete assessment"
-						>
-							<i class="bi bi-x"></i>
-      </button>
+							<div class="d-flex gap-1">
+								<button
+									class="btn btn-sm btn-outline-primary border-0"
+									onclick={() => startDuplicateAssessment(assessment)}
+									title="Duplicate assessment"
+									aria-label="Duplicate assessment"
+								>
+									<i class="bi bi-copy"></i>
+								</button>
+								<button
+									class="btn btn-sm btn-outline-danger border-0"
+									onclick={() => removeAssessment(assessment.id)}
+									title="Delete assessment"
+									aria-label="Delete assessment"
+								>
+									<i class="bi bi-x"></i>
+								</button>
+							</div>
 					</div>
 					
 					<!-- Content Section -->
@@ -2038,7 +2136,7 @@
         <div class="row">
           <div class="col-12">
             <p class="mb-3">Are you sure you want to export marks to CSV?</p>
-            
+
             <div class="alert alert-info mb-3">
               <div class="row">
                 <div class="col-6">
@@ -2054,7 +2152,7 @@
                 </div>
               </div>
             </div>
-            
+
             <p class="text-muted small mb-0">
               <i class="bi bi-info-circle me-1"></i>
               This will save a CSV file to your Downloads folder for analysis in Excel or other spreadsheet applications.
@@ -2068,6 +2166,65 @@
         </button>
         <button type="button" class="btn btn-success" onclick={confirmCSVExport}>
           <i class="bi bi-download me-1"></i>Export CSV
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{/if}
+
+<!-- Duplicate Assessment Dialog -->
+{#if showDuplicateDialog && assessmentToDuplicate}
+<div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">
+          <i class="bi bi-copy me-2"></i>Duplicate Assessment
+        </h5>
+        <button type="button" class="btn-close btn-close-white" aria-label="Close" onclick={cancelDuplicate}></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="d-flex align-items-center mb-3">
+            <i class="bi bi-clipboard-check text-primary me-3" style="font-size: 2rem;"></i>
+            <div>
+              <h6 class="mb-1">Duplicating: <strong>{assessmentToDuplicate.name}</strong></h6>
+              <p class="text-muted mb-0 small">
+                {assessmentToDuplicate.categories?.length || 0} categories,
+                {assessmentToDuplicate.topics?.length || 0} topics
+              </p>
+            </div>
+          </div>
+
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            This will create a complete copy of the assessment including all categories, knowledge areas, marking mode, and paragraphs.
+          </div>
+
+          <label for="duplicateAssessmentName" class="form-label fw-bold">New Assessment Name:</label>
+          <input
+            id="duplicateAssessmentName"
+            type="text"
+            class="form-control"
+            placeholder="Enter new assessment name..."
+            bind:value={duplicateAssessmentName}
+            onkeydown={handleDuplicateKeydown}
+            autofocus
+          />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick={cancelDuplicate}>
+          <i class="bi bi-x-circle me-1"></i>Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          onclick={confirmDuplicate}
+          disabled={!duplicateAssessmentName.trim()}
+        >
+          <i class="bi bi-copy me-1"></i>Duplicate Assessment
         </button>
       </div>
     </div>
