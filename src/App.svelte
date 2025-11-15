@@ -849,7 +849,6 @@
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
 			newCategoryName = ''
 			newCategoryKnowledgeArea = ''
-			newCategoryMarkingMode = 'none'
 			
 			// Update the current subject's assessments
 			if (currentSubject) {
