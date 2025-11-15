@@ -1,7 +1,49 @@
-# Feature Implementation Summary - Version 3.2.3
+# Feature Implementation Summary - Version 3.2.4
 
 ## Overview
-This document summarizes the major features implemented in the Feedback Manager application version 3.2.3, including total marks display functionality, enhanced text formatting with font color support, and continued improvements for professional assessment tracking while maintaining compatibility with existing export functions.
+This document summarizes the major features implemented in Feedback Manager version 3.2.4. This update focuses on per-category marking modes, smarter percentage handling, and incremental UX polish that keeps feedback creation transparent and predictable.
+
+## Version 3.2.4 - Category Marking Modes & Percentage Display
+
+### 🔢 **Per-Category Marking Modes**
+
+#### Feature Overview
+Categories now own their marking behavior. When adding a category you choose whether it uses manual marks (`None`), percentage-based ranges, or fixed color values. The choice sticks with the category and is surfaced throughout the UI.
+
+**Key Capabilities**:
+- **Type Selector in Add Form**: Users pick the mode (`None`, `Percentage`, or `Fixed`) alongside the category name
+- **Persistent Metadata**: Marking mode is stored on each category record and preserved across exports/imports
+- **Contextual Messaging**: Paragraph form displays a read-only reminder of the selected category’s type
+- **Badges in Category List**: Quick visual cues show which categories use percentages or fixed marks
+
+#### Technical Implementation
+
+- `src/App.svelte`
+  - Added `newCategoryMarkingMode` state and ensured `addCategory` writes `markingMode` to the category object
+  - Removed the global marking-mode toggle and replaced it with informational copy
+  - Updated grouped paragraph logic to pull mark info from each category’s stored mode
+- UI form changes reuse Bootstrap input groups for consistent styling.
+
+### 📊 **Percentage Value Enhancements**
+
+#### Feature Overview
+Percentage-mode paragraphs now always render a badge. If total/allocated marks aren’t set, the badge shows the raw percentage range instead of staying blank. Once marks exist, the badge reverts to numeric values.
+
+**Key Capabilities**:
+- **Calculator-Driven Ranges**: Sidebar calculator remains the single source for lower/upper percentages
+- **Graceful Fallback**: Badges display `65% - 79%` style values when no totals are provided
+- **Consistency**: When totals are available the badge switches to `13-15.8` style mark ranges without any extra steps
+
+#### Technical Implementation
+
+- Updated `getMarksRange` in `src/App.svelte` to:
+  - Use calculator ranges when available
+  - Return percentage strings if `allocatedMarks` or `totalMarks` are missing
+  - Preserve numeric output when marks are defined
+
+---
+
+## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
 
 ## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
 

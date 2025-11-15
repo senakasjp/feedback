@@ -2,6 +2,22 @@
 
 ## Version History
 
+### v3.2.4 - Category Marking Modes & Percentage Display - January 2025
+
+#### 🔢 Per-Category Marking Modes
+- Category add form now includes a type selector (`None`, `Percentage`, `Fixed`)
+- The selected mode is stored on each category and shown via badges and informational copy
+- Editing a category pre-selects its current type, ensuring consistent behavior across imports/exports
+
+#### 📊 Percentage Badge Improvements
+- Color badges now display the percentage span when no total or allocated marks are available
+- When totals exist they automatically switch back to numeric ranges calculated from sidebar percentages
+- Documentation was updated so instructors know the calculator is the single source of truth for percentage data
+
+**Files Updated**:
+- `src/App.svelte` – category creation/editing flow, badge logic, copy updates
+- `README.md`, `FEATURE_SUMMARY.md`, `USER_GUIDE.md`, `CHANGELOG.md` – documentation for the new workflow
+
 ### v3.2.3 - Total Marks Display & Font Color Support - January 2025
 
 #### 🎯 **NEW FEATURE: Total Marks Display**

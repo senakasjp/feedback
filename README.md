@@ -2,6 +2,20 @@
 
 A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, contamination prevention, visual debugging tools, real-time total marks display, and enhanced text formatting capabilities.
 
+## 🎉 Version 3.2.4 - Category Marking Modes & Percentage Display
+
+This incremental release focuses on making assessment categories smarter and ensuring percentage-based color feedback stays visible:
+
+### 🔢 **Per-Category Marking Modes**
+- **Type on Creation**: Set each category to `None`, `Percentage`, or `Fixed` when you add it—no more global toggle
+- **At-a-Glance Context**: The category list shows a badge for the selected type, and the paragraph form reminds you which mode is active
+- **Data Integrity**: Marking mode now lives with the category object, so imports/exports keep the correct behavior
+
+### 📊 **Percentage Value Improvements**
+- **Always Shows a Range**: Color badges now display the percentage span even if you haven’t entered total marks yet
+- **Calculator Integration**: The sidebar calculator remains the single source of truth for percentage ranges; ranges automatically apply to every category using the `Percentage` type
+- **Clear Messaging**: Documentation and UI copy guide users to update category types instead of relying on a hidden toggle
+
 ## 🎉 Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
 
 This release introduces real-time total marks display and enhanced text formatting capabilities:

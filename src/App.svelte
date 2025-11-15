@@ -1294,6 +1294,13 @@
 		}
 	}
 
+	function formatMarkValue(value) {
+		if (value === undefined || value === null) return null
+		const num = Number(value)
+		if (!Number.isFinite(num)) return null
+		return parseFloat(num.toFixed(2)).toString()
+	}
+
 	// Calculate marks range based on color and allocated marks
 	function getMarksRange(color, allocatedMarks) {
 		let lower = null
@@ -1308,9 +1315,22 @@
 			}
 		}
 
-		if (!allocatedMarks || allocatedMarks <= 0) {
-			if (customRange) {
-				return `${customRange.lowerPercentage}% - ${customRange.upperPercentage}%`
+		let calculatorRange = null
+		if (customRange) {
+			const lowerValue = customRange.calculatedLower ?? (
+				customRange.value != null && customRange.lowerPercentage != null
+					? Number(customRange.value) * (Number(customRange.lowerPercentage) / 100)
+					: null
+			)
+			const upperValue = customRange.calculatedUpper ?? (
+				customRange.value != null && customRange.upperPercentage != null
+					? Number(customRange.value) * (Number(customRange.upperPercentage) / 100)
+					: null
+			)
+			const formattedLower = formatMarkValue(lowerValue)
+			const formattedUpper = formatMarkValue(upperValue)
+			if (formattedLower && formattedUpper) {
+				calculatorRange = `${formattedLower} - ${formattedUpper}`
 			}
 		}
 
@@ -1327,15 +1347,25 @@
 			lower = fallback.min
 			upper = fallback.max
 		}
+
+		const percentRange = customRange
+			? `${customRange.lowerPercentage}% - ${customRange.upperPercentage}%`
+			: `${(lower * 100).toFixed(0)}% - ${(upper * 100).toFixed(0)}%`
 		
 		if (!allocatedMarks || allocatedMarks <= 0) {
-			return `${(lower * 100).toFixed(0)}% - ${(upper * 100).toFixed(0)}%`
+			return calculatorRange || percentRange
 		}
 		
 		const minMarks = Math.round(allocatedMarks * lower * 100) / 100
 		const maxMarks = Math.round(allocatedMarks * upper * 100) / 100
+		const formattedMin = formatMarkValue(minMarks)
+		const formattedMax = formatMarkValue(maxMarks)
 		
-		return `${minMarks}-${maxMarks}`
+		if (formattedMin && formattedMax) {
+			return `${formattedMin} - ${formattedMax}`
+		}
+
+		return calculatorRange || percentRange
 	}
 
 	function updateTotalMarks(totalMarks) {

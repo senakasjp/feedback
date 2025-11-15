@@ -186,8 +186,16 @@ The Feedback Manager follows strict data separation rules to ensure clean and or
 1. Open an assessment
 2. Click "Manage Categories" in the assessment manager
 3. Add categories like "Strengths", "Areas for Improvement", etc.
-4. **Allocated Marks**: When adding a category, you can optionally set allocated marks (e.g., 30 marks for "Writing Skills")
-5. Categories help organize your feedback paragraphs and provide mark allocation context
+4. **Choose a Category Type**: When adding a category, pick how marks should be handled:
+   - **None** – enter marks manually when you grade
+   - **Percentage** – use the sidebar calculator to define color percentages that will be applied automatically
+   - **Fixed** – assign a fixed value to each color and reuse it for every paragraph in the category
+5. Categories help organize your feedback paragraphs and determine how color badges display mark information
+
+### Category Types & Percentage Ranges
+- **None**: Use this when you plan to enter raw marks per category with no color automation.
+- **Percentage**: Define global lower/upper percentages per color in the calculator sidebar (toggle the calculator view). The selected ranges automatically apply to every paragraph that uses the category. Badges show the actual mark range when total/allocated marks exist, or fall back to the percentage span (e.g., `65% - 79%`) when they don’t.
+- **Fixed**: Configure a numeric value for each color from the paragraph form; the app remembers the value for the category and shows it as a badge next to each colored paragraph.
 
 ## Student Management
 
@@ -238,6 +246,7 @@ The Feedback Manager follows strict data separation rules to ensure clean and or
 ### Paragraph Management
 - **View Paragraphs**: All paragraphs are displayed in the main area
 - **Select Paragraphs**: Check boxes to include in PDF reports (clean interface without paragraph numbers)
+- **Color Badges**: Each paragraph shows a badge next to its color—fixed categories display the stored mark, percentage categories display either the calculated mark range or the raw percentage span if no totals are available
 - **Edit Paragraphs**: Click the edit icon to modify paragraph text (preserves category and knowledge area prefixes)
 - **Delete Paragraphs**: Click the trash icon to remove (kept in student history)
 - **Filter Paragraphs**: Use category and topic filters to find specific content
