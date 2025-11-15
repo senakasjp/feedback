@@ -49,7 +49,7 @@
 	let selectedParagraphs = $state(new Set())
 	let studentName = $state('')
 	// No studentImage - only header photo for assessment
-	let selectedColor = $state('red')
+	let selectedColor = $state('')
 	let selectedColorMark = $state('') // Mark for the selected color (fixed mode)
 	let currentCategoryMarkingMode = $state('none')
 	let lastColorSelectionSignature = ''
@@ -3733,19 +3733,19 @@
 										</div>
 									</div>
 
-									<!-- Color Selection -->
-									<div class="mb-3">
-										<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
-										<select id="colorSelect" class="form-select" bind:value={selectedColor}>
-											<option value="">⚪ No Color</option>
-											<option value="red">🔴 Red</option>
-											<option value="orange">🟠 Orange</option>
-											<option value="yellow">🟡 Yellow</option>
-											<option value="lightgreen">🟢 Light Green</option>
-											<option value="green">🟢 Green</option>
-										</select>
-										<small class="text-muted">Selected: {selectedColor || 'No Color'} ({selectedColor ? getColorHex(selectedColor) : 'None'})</small>
-									</div>
+										<!-- Color Selection -->
+										<div class="mb-3">
+											<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
+											<select id="colorSelect" class="form-select" bind:value={selectedColor}>
+												<option value="">⚪ No Color</option>
+												<option value="red">🔴 Red</option>
+												<option value="orange">🟠 Orange</option>
+												<option value="yellow">🟡 Yellow</option>
+												<option value="lightgreen" style="color: #20c997;">🟢 Light Green</option>
+												<option value="green">🟢 Green</option>
+											</select>
+											<small class="text-muted">Selected: {selectedColor || 'No Color'} ({selectedColor ? getColorHex(selectedColor) : 'None'})</small>
+										</div>
 
 									<!-- Mark Input for Fixed Mode -->
 									{#if currentCategoryMarkingMode === 'fixed' && selectedColor && selectedCategory}

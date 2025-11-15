@@ -151,7 +151,7 @@ export function getColorBadgeClass(color) {
     case 'red': return 'bg-danger'
     case 'orange': return 'bg-warning'
     case 'yellow': return 'bg-warning text-dark'
-    case 'lightgreen': return 'bg-info text-white'
+    case 'lightgreen': return 'bg-success bg-opacity-30 text-success'
     case 'green': return 'bg-success'
     case '': return 'bg-light text-muted border'
     default: return 'bg-secondary'
