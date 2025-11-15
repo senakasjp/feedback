@@ -3344,77 +3344,6 @@
 									</h5>
 								</div>
 								<div class="card-body">
-									<!-- Category and Knowledge Area Selection -->
-									{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
-										<div class="row g-2 mb-3">
-											<div class="col-12">
-												<label for="knowledgeAreaSelect" class="form-label fw-bold">Select Knowledge Area:</label>
-												<select
-													id="knowledgeAreaSelect"
-													class="form-select"
-													bind:value={selectedKnowledgeArea}
-												>
-													<option value="">Choose a knowledge area...</option>
-													{#each (currentAssessment?.knowledgeAreas || []) as area}
-														<option value={area}>{area}</option>
-													{/each}
-												</select>
-											</div>
-											<div class="col-12">
-												<label for="categorySelect" class="form-label fw-bold mb-1">Select Category:</label>
-												<select
-													id="categorySelect"
-													class="form-select"
-													bind:value={selectedCategory}
-												>
-													<option value="">Choose a category...</option>
-													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category}
-														<option value={category.name}>{category.name}</option>
-													{/each}
-												</select>
-												{#if selectedKnowledgeArea}
-													<small class="text-muted">
-														<i class="bi bi-info-circle me-1"></i>
-														Selected: {selectedKnowledgeArea}
-													</small>
-												{/if}
-											</div>
-										</div>
-									{/if}
-
-									{#if needsCategorySelection() && !selectedCategory}
-										<div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
-											<i class="bi bi-exclamation-triangle-fill me-2"></i>
-											<strong>Warning:</strong> Please select a category first to properly organize this paragraph.
-										</div>
-									{/if}
-
-									<div class="mb-3">
-										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
-										<div class="input-group input-group-sm">
-											<textarea 
-												id="paragraphInput" 
-												class="form-control form-control-sm" 
-												rows="4" 
-												bind:value={newParagraph} 
-												placeholder="Type your paragraph here..."
-											></textarea>
-											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph} style="min-width: 120px;">
-												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
-											</button>
-											<div class="mx-1"></div>
-											<button 
-												class="btn btn-outline-info btn-sm" 
-												type="button" 
-												onclick={() => showImportModal = true}
-												title="Import paragraphs from other assignments"
-												style="min-width: 120px;"
-											>
-												<i class="bi bi-download me-2"></i>Import
-											</button>
-										</div>
-									</div>
-
 									<!-- Marking Mode Selection -->
 									<div class="mb-3">
 										<label class="form-label fw-bold">Marking Mode:</label>
@@ -3495,6 +3424,77 @@
 											</small>
 										</div>
 									{/if}
+
+									<!-- Category and Knowledge Area Selection -->
+									{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
+										<div class="row g-2 mb-3">
+											<div class="col-12">
+												<label for="knowledgeAreaSelect" class="form-label fw-bold">Select Knowledge Area:</label>
+												<select
+													id="knowledgeAreaSelect"
+													class="form-select"
+													bind:value={selectedKnowledgeArea}
+												>
+													<option value="">Choose a knowledge area...</option>
+													{#each (currentAssessment?.knowledgeAreas || []) as area}
+														<option value={area}>{area}</option>
+													{/each}
+												</select>
+											</div>
+											<div class="col-12">
+												<label for="categorySelect" class="form-label fw-bold mb-1">Select Category:</label>
+												<select
+													id="categorySelect"
+													class="form-select"
+													bind:value={selectedCategory}
+												>
+													<option value="">Choose a category...</option>
+													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category}
+														<option value={category.name}>{category.name}</option>
+													{/each}
+												</select>
+												{#if selectedKnowledgeArea}
+													<small class="text-muted">
+														<i class="bi bi-info-circle me-1"></i>
+														Selected: {selectedKnowledgeArea}
+													</small>
+												{/if}
+											</div>
+										</div>
+									{/if}
+
+									{#if needsCategorySelection() && !selectedCategory}
+										<div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+											<i class="bi bi-exclamation-triangle-fill me-2"></i>
+											<strong>Warning:</strong> Please select a category first to properly organize this paragraph.
+										</div>
+									{/if}
+
+									<div class="mb-3">
+										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
+										<div class="input-group input-group-sm">
+											<textarea 
+												id="paragraphInput" 
+												class="form-control form-control-sm" 
+												rows="4" 
+												bind:value={newParagraph} 
+												placeholder="Type your paragraph here..."
+											></textarea>
+											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph} style="min-width: 120px;">
+												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
+											</button>
+											<div class="mx-1"></div>
+											<button 
+												class="btn btn-outline-info btn-sm" 
+												type="button" 
+												onclick={() => showImportModal = true}
+												title="Import paragraphs from other assignments"
+												style="min-width: 120px;"
+											>
+												<i class="bi bi-download me-2"></i>Import
+											</button>
+										</div>
+									</div>
 
 									<!-- Color Selection -->
 									<div class="mb-3">
