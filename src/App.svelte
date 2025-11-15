@@ -203,6 +203,8 @@
 	let showStudentManager = $state(false)
 	let showAddCategoryKnowledgeArea = $state(false)
 	let showCategoriesKnowledgeSection = $state(true) // Collapsible section for categories and knowledge areas
+	let showCategoryEditModal = $state(false)
+	let editingCategory = $state(null)
 	let newSubjectName = $state('')
 	let newAssessmentName = $state('')
 	let newStudentName = $state('')
@@ -785,8 +787,8 @@
 			assessmentId: currentAssessmentId // STRICT DATA ISOLATION: Add assessment context
 		}
 
-		// For fixed marking mode, store the mark and category
-		if (currentAssessment?.markingMode === 'fixed' && selectedColorMark && selectedCategory) {
+		// For fixed marking mode, store the mark and category (use category's marking mode if set)
+		if (getEffectiveMarkingMode(selectedCategory) === 'fixed' && selectedColorMark && selectedCategory) {
 			newPara.mark = parseFloat(selectedColorMark)
 			newPara.category = selectedCategory
 		}
@@ -883,6 +885,47 @@
 				}
 			}
 		}
+	}
+
+	function openCategoryEditModal(category) {
+		editingCategory = { ...category }
+		showCategoryEditModal = true
+	}
+
+	function saveCategoryEdit() {
+		if (!editingCategory || !currentAssessment) return
+
+		const categoryIndex = currentAssessment.categories.findIndex(c => c.id === editingCategory.id)
+		if (categoryIndex !== -1) {
+			currentAssessment.categories[categoryIndex] = { ...editingCategory }
+
+			// Update the current subject's assessments
+			if (currentSubject) {
+				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+				if (subjectIndex !== -1) {
+					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+					if (assessmentIndex !== -1) {
+						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+						saveSubjects()
+					}
+				}
+			}
+		}
+
+		showCategoryEditModal = false
+		editingCategory = null
+	}
+
+	// Get the effective marking mode for a category (category override or assessment default)
+	function getEffectiveMarkingMode(categoryName) {
+		if (!currentAssessment) return 'none'
+
+		const category = currentAssessment.categories?.find(c => c.name === categoryName)
+		if (category?.markingMode) {
+			return category.markingMode
+		}
+
+		return currentAssessment.markingMode || 'none'
 	}
 
 	// Category reordering functions
@@ -1098,6 +1141,51 @@
 			const numMarks = parseFloat(marks) || 0
 			return total + numMarks
 		}, 0)
+	}
+
+	// Get the mark range/grade for the current student
+	function getStudentMarkInfo() {
+		const totalMarks = getTotalMarks()
+		const assessmentTotal = currentAssessment?.totalMarks || 0
+
+		if (totalMarks === 0) {
+			return { display: 'No marks yet', color: 'secondary' }
+		}
+
+		// For percentage mode or when assessment has total marks
+		if (assessmentTotal > 0) {
+			const percentage = (totalMarks / assessmentTotal) * 100
+			let grade = ''
+			let color = ''
+
+			if (percentage >= 80) {
+				grade = 'A (Excellent)'
+				color = 'success'
+			} else if (percentage >= 65) {
+				grade = 'B (Good)'
+				color = 'info'
+			} else if (percentage >= 50) {
+				grade = 'C (Satisfactory)'
+				color = 'warning'
+			} else if (percentage >= 40) {
+				grade = 'D (Pass)'
+				color = 'warning'
+			} else {
+				grade = 'F (Fail)'
+				color = 'danger'
+			}
+
+			return {
+				display: `${totalMarks} / ${assessmentTotal} (${percentage.toFixed(1)}%) - ${grade}`,
+				color: color
+			}
+		}
+
+		// For fixed mode without total marks
+		return {
+			display: `Total: ${totalMarks} marks`,
+			color: 'primary'
+		}
 	}
 
 	// Calculate marks range based on color and allocated marks
@@ -2509,6 +2597,8 @@
 			// Get the source information from the paragraph object
 			const paragraphObj = paragraphs.find(p => p.id === id)
 			const source = paragraphObj?._source
+			const mark = paragraphObj?.mark
+			const storedCategory = paragraphObj?.category
 			// Extract category and knowledge area from paragraph text
 			let category = ''
 			let knowledgeArea = ''
@@ -2572,7 +2662,9 @@
 				id,
 				originalIndex,
 				fullText: paragraph, // Keep original for PDF
-				source: source // Include source information
+				source: source, // Include source information
+				mark,
+				category: storedCategory || finalCategory
 			})
 		})
 		
@@ -3511,7 +3603,7 @@
 									</div>
 
 									<!-- Mark Input for Fixed Mode -->
-									{#if currentAssessment?.markingMode === 'fixed' && selectedColor && selectedCategory}
+									{#if getEffectiveMarkingMode(selectedCategory) === 'fixed' && selectedColor && selectedCategory}
 										<div class="mb-3">
 											<label for="colorMarkInput" class="form-label fw-bold">Mark for this Color:</label>
 											<input
@@ -3671,7 +3763,20 @@
 																{#if category.allocatedMarks}
 																	<span class="text-primary">({category.allocatedMarks})</span>
 																{/if}
+																{#if category.markingMode}
+																	<span class="badge bg-info text-white" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">
+																		{category.markingMode === 'percentage' ? '%' : category.markingMode === 'fixed' ? '123' : '⊗'}
+																	</span>
+																{/if}
 															</span>
+															<button
+																class="btn btn-sm p-0 border-0 text-primary me-1"
+																style="font-size: 0.7rem; line-height: 0.8; padding: 0.05rem 0.2rem;"
+																onclick={() => openCategoryEditModal(category)}
+																title="Edit category marking mode"
+															>
+																<i class="bi bi-pencil"></i>
+															</button>
 															<button
 																class="btn btn-sm p-0 border-0 text-danger"
 																style="font-size: 0.5rem; line-height: 0.8; padding: 0.05rem 0.1rem;"
@@ -3883,21 +3988,23 @@
 																			</div>
 																		{/if}
 																	<!-- Marks display (percentage range or fixed mark) -->
-																	{#if currentStudentId && color}
-																		{#if mark !== undefined}
+																	{#if color}
+																		{@const categoryObj = currentAssessment?.categories?.find(cat => cat.name === group.category)}
+																		{@const effectiveMode = getEffectiveMarkingMode(group.category)}
+																		{#if effectiveMode === 'fixed' && mark !== undefined}
 																			<!-- Fixed mark mode - show specific mark -->
 																			<div class="me-3 d-flex align-items-center">
 																				<span class="badge bg-primary text-white small" title="Fixed mark for {color} color">
 																					{mark} marks
 																				</span>
 																			</div>
-																		{:else}
+																		{:else if effectiveMode === 'percentage'}
 																			<!-- Percentage mode - show marks range -->
-																			{@const categoryObj = currentAssessment?.categories?.find(cat => cat.name === group.category)}
-																			{@const marksRange = getMarksRange(color, categoryObj?.allocatedMarks)}
+																			{@const allocatedMarks = categoryObj?.allocatedMarks || currentAssessment?.totalMarks}
+																			{@const marksRange = getMarksRange(color, allocatedMarks)}
 																			{#if marksRange}
 																				<div class="me-3 d-flex align-items-center">
-																					<span class="badge bg-secondary text-white small" title="Marks range for {color} color">
+																					<span class="badge bg-info text-white small" title="Marks range for {color} color ({effectiveMode} mode)">
 																						{marksRange}
 																					</span>
 																				</div>
@@ -4237,6 +4344,51 @@
 	</div>
 {/if}
 
+<!-- Category Edit Modal -->
+{#if showCategoryEditModal && editingCategory}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header bg-primary text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-pencil me-2"></i>Edit Category: {editingCategory.name}
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={() => { showCategoryEditModal = false; editingCategory = null; }}></button>
+				</div>
+				<div class="modal-body">
+					<div class="mb-3">
+						<label class="form-label fw-bold">Category Marking Mode:</label>
+						<div class="alert alert-info small mb-2">
+							<i class="bi bi-info-circle me-1"></i>Leave as "Use Assessment Default" to inherit the assessment's marking mode, or select a specific mode for this category only.
+						</div>
+						<select class="form-select" bind:value={editingCategory.markingMode}>
+							<option value={undefined}>Use Assessment Default ({currentAssessment?.markingMode || 'none'})</option>
+							<option value="none">None - No color marking</option>
+							<option value="percentage">Percentage - Use percentage ranges</option>
+							<option value="fixed">Fixed - Set specific marks per color</option>
+						</select>
+					</div>
+
+					{#if editingCategory.markingMode}
+						<div class="alert alert-warning small">
+							<i class="bi bi-exclamation-triangle me-1"></i>
+							<strong>Override Active:</strong> This category will use <strong>{editingCategory.markingMode}</strong> mode instead of the assessment default.
+						</div>
+					{/if}
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={() => { showCategoryEditModal = false; editingCategory = null; }}>
+						<i class="bi bi-x-circle me-2"></i>Cancel
+					</button>
+					<button type="button" class="btn btn-primary" onclick={saveCategoryEdit}>
+						<i class="bi bi-check-circle me-2"></i>Save Changes
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <!-- Add Student Modal -->
 {#if showAddStudent}
 	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
@@ -4486,4 +4638,3 @@
 		</div>
 	</div>
 {/if}
-
