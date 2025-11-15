@@ -3609,21 +3609,6 @@
 												{/if}
 											</div>
 
-											<!-- Assessment Total Marks -->
-											<div class="mb-3">
-										<label for="assessmentTotalMarks" class="form-label fw-bold">Assessment Total Marks:</label>
-										<input
-											id="assessmentTotalMarks"
-											type="number"
-											class="form-control form-control-sm"
-											placeholder="Enter total marks for this assessment..."
-											bind:value={currentAssessment.totalMarks}
-											min="0"
-											step="0.5"
-										>
-										<small class="text-muted">This is the maximum marks for this assessment</small>
-									</div>
-
 									<!-- Category Management -->
 									<div class="mb-3">
 										<div class="d-flex justify-content-between align-items-center mb-2">
