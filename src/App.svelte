@@ -855,7 +855,7 @@
 				colorMarks: {} // For fixed marking mode: { colorName: markValue }
 			}
 
-			currentAssessment.categories = [...currentAssessment.categories, newCategory]
+				currentAssessment.categories = normalizeCategoryOrder([...currentAssessment.categories, newCategory])
 			newCategoryName = ''
 			newCategoryKnowledgeArea = ''
 			newCategoryAllocatedMarks = ''
@@ -876,9 +876,11 @@
 	}
 
 	function removeCategory(categoryId) {
-		if (currentAssessment && currentAssessment.categories) {
-			const categoryToRemove = currentAssessment.categories.find(cat => cat.id === categoryId)
-			currentAssessment.categories = currentAssessment.categories.filter(cat => cat.id !== categoryId)
+			if (currentAssessment && currentAssessment.categories) {
+				const categoryToRemove = currentAssessment.categories.find(cat => cat.id === categoryId)
+				currentAssessment.categories = normalizeCategoryOrder(
+					currentAssessment.categories.filter(cat => cat.id !== categoryId)
+				)
 			
 			// Update the current subject's assessments
 			if (currentSubject) {
@@ -1053,25 +1055,30 @@
 				selectedCategory = sortedCategories[0].name
 			}
 		}
-	})
+		})
 
-	// Category reordering functions
-	function moveCategoryUp(categoryId) {
-		if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
-		
-		const categories = currentAssessment.categories
-		const currentCategory = categories.find(cat => cat.id === categoryId)
-		if (!currentCategory) return
-		
-		const currentOrder = currentCategory.order || 0
-		const previousCategory = categories.find(cat => (cat.order || 0) === currentOrder - 1)
-		
-		if (previousCategory) {
-			// Swap order values
-			const tempOrder = currentCategory.order
-			currentCategory.order = previousCategory.order
-			previousCategory.order = tempOrder
+		// Category reordering functions
+		function normalizeCategoryOrder(categories) {
+			if (!categories || categories.length === 0) return []
+			return categories
+				.slice()
+				.sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+				.map((cat, index) => ({ ...cat, order: index }))
+		}
+
+		function moveCategoryUp(categoryId) {
+			if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
 			
+			const normalized = normalizeCategoryOrder(currentAssessment.categories)
+			const index = normalized.findIndex(cat => cat.id === categoryId)
+			if (index <= 0) return
+
+			const swapped = [...normalized]
+			;[swapped[index - 1], swapped[index]] = [swapped[index], swapped[index - 1]]
+
+			const reordered = swapped.map((cat, idx) => ({ ...cat, order: idx }))
+			currentAssessment = { ...currentAssessment, categories: reordered }
+				
 			// Update the current subject's assessments
 			if (currentSubject) {
 				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
@@ -1084,24 +1091,20 @@
 				}
 			}
 		}
-	}
 
-	function moveCategoryDown(categoryId) {
-		if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
-		
-		const categories = currentAssessment.categories
-		const currentCategory = categories.find(cat => cat.id === categoryId)
-		if (!currentCategory) return
-		
-		const currentOrder = currentCategory.order || 0
-		const nextCategory = categories.find(cat => (cat.order || 0) === currentOrder + 1)
-		
-		if (nextCategory) {
-			// Swap order values
-			const tempOrder = currentCategory.order
-			currentCategory.order = nextCategory.order
-			nextCategory.order = tempOrder
+		function moveCategoryDown(categoryId) {
+			if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
 			
+			const normalized = normalizeCategoryOrder(currentAssessment.categories)
+			const index = normalized.findIndex(cat => cat.id === categoryId)
+			if (index === -1 || index >= normalized.length - 1) return
+
+			const swapped = [...normalized]
+			;[swapped[index], swapped[index + 1]] = [swapped[index + 1], swapped[index]]
+
+			const reordered = swapped.map((cat, idx) => ({ ...cat, order: idx }))
+			currentAssessment = { ...currentAssessment, categories: reordered }
+				
 			// Update the current subject's assessments
 			if (currentSubject) {
 				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
@@ -1114,7 +1117,6 @@
 				}
 			}
 		}
-	}
 
 	// Paragraph reordering functions
 	function moveParagraphUp(paragraphIndex) {
