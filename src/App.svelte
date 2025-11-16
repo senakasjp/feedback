@@ -56,6 +56,7 @@
 	let newCategoryName = $state('')
 	let newCategoryKnowledgeArea = $state('')
 	let newCategoryMarkingMode = $state('none')
+	let newCategoryAllocatedMarks = $state('')
 	let newKnowledgeAreaName = $state('')
 	// Note: knowledgeAreas are now stored as assignment properties (currentAssessment.knowledgeAreas)
 	let categoryMarks = $state({}) // Store marks for each category
@@ -837,18 +838,27 @@
 				currentAssessment.categories = []
 			}
 
+			const isPercentageMode = newCategoryMarkingMode === 'percentage'
+			const parsedAllocated = parseFloat(newCategoryAllocatedMarks)
+			const hasValidAllocatedMarks = !isPercentageMode || (!Number.isNaN(parsedAllocated) && parsedAllocated > 0)
+			if (!hasValidAllocatedMarks) {
+				return
+			}
+
 			const newCategory = {
 				id: Date.now().toString(),
 				name: newCategoryName.trim(),
 				knowledgeLevel: newCategoryKnowledgeArea.trim() || undefined,
 				markingMode: newCategoryMarkingMode || 'none',
 				order: currentAssessment.categories.length, // Set order as the next index
+				allocatedMarks: isPercentageMode ? parsedAllocated : undefined,
 				colorMarks: {} // For fixed marking mode: { colorName: markValue }
 			}
 
 			currentAssessment.categories = [...currentAssessment.categories, newCategory]
 			newCategoryName = ''
 			newCategoryKnowledgeArea = ''
+			newCategoryAllocatedMarks = ''
 			
 			// Update the current subject's assessments
 			if (currentSubject) {
@@ -896,9 +906,17 @@
 	function saveCategoryEdit() {
 		if (!editingCategory || !currentAssessment) return
 
+		const normalizedCategory = { ...editingCategory }
+		if (normalizedCategory.markingMode === 'percentage') {
+			const parsed = parseFloat(normalizedCategory.allocatedMarks)
+			normalizedCategory.allocatedMarks = Number.isNaN(parsed) ? undefined : parsed
+		} else {
+			normalizedCategory.allocatedMarks = undefined
+		}
+
 		const categoryIndex = currentAssessment.categories.findIndex(c => c.id === editingCategory.id)
 		if (categoryIndex !== -1) {
-			currentAssessment.categories[categoryIndex] = { ...editingCategory }
+			currentAssessment.categories[categoryIndex] = normalizedCategory
 
 			// Update the current subject's assessments
 			if (currentSubject) {
@@ -951,7 +969,12 @@
 		const category = currentAssessment.categories[categoryIndex]
 		const updatedColorMarks = { ...(category.colorMarks || {}) }
 
-		if (markValue === undefined || markValue === null || Number.isNaN(markValue)) {
+		const isEmpty =
+			markValue === undefined ||
+			markValue === null ||
+			(typeof markValue === 'string' && markValue.trim() === '')
+
+		if (isEmpty) {
 			delete updatedColorMarks[color]
 		} else {
 			updatedColorMarks[color] = markValue
@@ -985,10 +1008,9 @@
 			return
 		}
 
-		const numericValue = parseFloat(stringValue)
-		if (Number.isNaN(numericValue)) return
-
-		updateCategoryColorMark(selectedCategory, selectedColor, numericValue)
+		const numericValue = Number(stringValue)
+		const valueToStore = Number.isNaN(numericValue) ? stringValue : numericValue
+		updateCategoryColorMark(selectedCategory, selectedColor, valueToStore)
 	}
 
 	function handleColorMarkChange(event) {
@@ -1241,6 +1263,12 @@
 		}
 	}
 
+	function getCategoryAllocatedMarks(categoryName) {
+		if (!currentAssessment?.categories || !categoryName) return undefined
+		const category = currentAssessment.categories.find(cat => cat.name === categoryName)
+		return category?.allocatedMarks
+	}
+
 	function getTotalMarks() {
 		return Object.values(categoryMarks).reduce((total, marks) => {
 			const numMarks = parseFloat(marks) || 0
@@ -1300,72 +1328,53 @@
 		return parseFloat(num.toFixed(2)).toString()
 	}
 
-	// Calculate marks range based on color and allocated marks
-	function getMarksRange(color, allocatedMarks) {
-		let lower = null
-		let upper = null
-		let customRange = null
-		
-		if (currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0) {
-			customRange = currentAssessment.percentageRanges.find(range => range.color === color)
-			if (customRange) {
-				lower = customRange.lowerPercentage / 100
-				upper = customRange.upperPercentage / 100
+		// Calculate marks range based on color and allocated marks
+		function getMarksRange(color, allocatedMarks) {
+			let lower = null
+			let upper = null
+			let customRange = null
+			
+			if (currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0) {
+				customRange = currentAssessment.percentageRanges.find(range => range.color === color)
+				if (customRange) {
+					lower = customRange.lowerPercentage / 100
+					upper = customRange.upperPercentage / 100
+				}
 			}
-		}
 
-		let calculatorRange = null
-		if (customRange) {
-			const lowerValue = customRange.calculatedLower ?? (
-				customRange.value != null && customRange.lowerPercentage != null
-					? Number(customRange.value) * (Number(customRange.lowerPercentage) / 100)
-					: null
-			)
-			const upperValue = customRange.calculatedUpper ?? (
-				customRange.value != null && customRange.upperPercentage != null
-					? Number(customRange.value) * (Number(customRange.upperPercentage) / 100)
-					: null
-			)
-			const formattedLower = formatMarkValue(lowerValue)
-			const formattedUpper = formatMarkValue(upperValue)
-			if (formattedLower && formattedUpper) {
-				calculatorRange = `${formattedLower} - ${formattedUpper}`
+			if (lower === null || upper === null) {
+				const colorRanges = {
+					green: { min: 0.8, max: 1.0 },
+					lightgreen: { min: 0.65, max: 0.79 },
+					yellow: { min: 0.5, max: 0.64 },
+					orange: { min: 0.4, max: 0.49 },
+					red: { min: 0.0, max: 0.39 }
+				}
+				const fallback = colorRanges[color]
+				if (!fallback) return null
+				lower = fallback.min
+				upper = fallback.max
 			}
-		}
 
-		if (lower === null || upper === null) {
-			const colorRanges = {
-				green: { min: 0.8, max: 1.0 },
-				lightgreen: { min: 0.65, max: 0.79 },
-				yellow: { min: 0.5, max: 0.64 },
-				orange: { min: 0.4, max: 0.49 },
-				red: { min: 0.0, max: 0.39 }
+			const percentRange = customRange
+				? `${customRange.lowerPercentage}% - ${customRange.upperPercentage}%`
+				: `${(lower * 100).toFixed(0)}% - ${(upper * 100).toFixed(0)}%`
+			
+			if (!allocatedMarks || allocatedMarks <= 0) {
+				return percentRange
 			}
-			const fallback = colorRanges[color]
-			if (!fallback) return null
-			lower = fallback.min
-			upper = fallback.max
-		}
+			
+			const minMarks = Math.round(allocatedMarks * lower * 100) / 100
+			const maxMarks = Math.round(allocatedMarks * upper * 100) / 100
+			const formattedMin = formatMarkValue(minMarks)
+			const formattedMax = formatMarkValue(maxMarks)
+			
+			if (formattedMin && formattedMax) {
+				return `${formattedMin} - ${formattedMax}`
+			}
 
-		const percentRange = customRange
-			? `${customRange.lowerPercentage}% - ${customRange.upperPercentage}%`
-			: `${(lower * 100).toFixed(0)}% - ${(upper * 100).toFixed(0)}%`
-		
-		if (!allocatedMarks || allocatedMarks <= 0) {
-			return calculatorRange || percentRange
+			return percentRange
 		}
-		
-		const minMarks = Math.round(allocatedMarks * lower * 100) / 100
-		const maxMarks = Math.round(allocatedMarks * upper * 100) / 100
-		const formattedMin = formatMarkValue(minMarks)
-		const formattedMax = formatMarkValue(maxMarks)
-		
-		if (formattedMin && formattedMax) {
-			return `${formattedMin} - ${formattedMax}`
-		}
-
-		return calculatorRange || percentRange
-	}
 
 	function updateTotalMarks(totalMarks) {
 		manualTotalMarks = totalMarks
@@ -1512,11 +1521,12 @@
 
 	// Helper function to calculate mark ranges for a category based on percentage ranges
 	function getCategoryMarkRanges(categoryMarks, percentageRanges) {
-		if (!categoryMarks || !percentageRanges || percentageRanges.length === 0) return []
+		const numericMarks = Number(categoryMarks)
+		if (!Number.isFinite(numericMarks) || !percentageRanges || percentageRanges.length === 0) return []
 
 		return percentageRanges.map(range => {
-			const lower = (categoryMarks * range.lowerPercentage / 100).toFixed(1)
-			const upper = (categoryMarks * range.upperPercentage / 100).toFixed(1)
+			const lower = (numericMarks * range.lowerPercentage / 100).toFixed(1)
+			const upper = (numericMarks * range.upperPercentage / 100).toFixed(1)
 			return {
 				color: range.color,
 				range: `${parseFloat(lower)}-${parseFloat(upper)}`,
@@ -1527,11 +1537,12 @@
 	}
 
 	// Percentage range management
-	function addPercentageRange(value, color, lowerPercentage, upperPercentage) {
+	function addPercentageRange(color, lowerPercentage, upperPercentage) {
 		if (!currentAssessment) return
 
-		const calculatedLower = (value * lowerPercentage / 100).toFixed(2)
-		const calculatedUpper = (value * upperPercentage / 100).toFixed(2)
+		const lower = Number(lowerPercentage)
+		const upper = Number(upperPercentage)
+		if (Number.isNaN(lower) || Number.isNaN(upper)) return
 
 		// Ensure percentageRanges array exists on assessment
 		if (!currentAssessment.percentageRanges) {
@@ -1541,12 +1552,9 @@
 		// Add range to current assessment
 		currentAssessment.percentageRanges = [...currentAssessment.percentageRanges, {
 			id: Date.now().toString(),
-			value: value,
 			color: color,
-			lowerPercentage: lowerPercentage,
-			upperPercentage: upperPercentage,
-			calculatedLower: parseFloat(calculatedLower),
-			calculatedUpper: parseFloat(calculatedUpper)
+			lowerPercentage: lower,
+			upperPercentage: upper
 		}]
 
 		// Update assessment in subjects array
@@ -2822,7 +2830,7 @@
 					}
 				} else if (effectiveMode === 'percentage') {
 					const categoryObj = currentAssessment?.categories?.find(cat => cat.name === finalCategory)
-					const allocatedMarks = categoryObj?.allocatedMarks || currentAssessment?.totalMarks
+					const allocatedMarks = categoryObj?.allocatedMarks
 					const range = getMarksRange(color, allocatedMarks)
 					if (range) {
 						paragraphMarkInfo = { type: 'percentage', value: range }
@@ -3643,24 +3651,27 @@
 										</div>
 									{/if}
 
-									<!-- Assessment Mark Ranges Display - Only for Percentage Mode -->
-									{#if selectedCategory && currentCategoryMarkingMode === 'percentage' && currentAssessment.totalMarks > 0 && currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0}
-										<div class="mb-3 border rounded p-3 bg-light">
-											<h6 class="fw-bold mb-2 text-primary">
-												<i class="bi bi-bar-chart-fill me-2"></i>Mark Ranges for {selectedCategory}
-											</h6>
-											<div class="d-flex flex-wrap gap-2">
-												{#each getCategoryMarkRanges(currentAssessment.totalMarks, currentAssessment.percentageRanges) as markRange}
-													<div class="badge p-2" style="background-color: {markRange.color}; color: white; font-size: 0.85rem;">
-														{markRange.range}
+										<!-- Assessment Mark Ranges Display - Only for Percentage Mode -->
+										{#if selectedCategory}
+											{@const selectedCategoryAllocatedMarks = getCategoryAllocatedMarks(selectedCategory)}
+											{#if currentCategoryMarkingMode === 'percentage' && selectedCategoryAllocatedMarks && currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0}
+												<div class="mb-3 border rounded p-3 bg-light">
+													<h6 class="fw-bold mb-2 text-primary">
+														<i class="bi bi-bar-chart-fill me-2"></i>Mark Ranges for {selectedCategory}
+													</h6>
+													<div class="d-flex flex-wrap gap-2">
+														{#each getCategoryMarkRanges(selectedCategoryAllocatedMarks, currentAssessment.percentageRanges) as markRange}
+															<div class="badge p-2" style="background-color: {markRange.color}; color: white; font-size: 0.85rem;">
+																{markRange.range}
+															</div>
+														{/each}
 													</div>
-												{/each}
-											</div>
-											<small class="text-muted d-block mt-2">
-												<i class="bi bi-info-circle me-1"></i>Ranges calculated from total marks ({currentAssessment.totalMarks}). Adjust color percentages via the calculator sidebar.
-											</small>
-										</div>
-									{/if}
+													<small class="text-muted d-block mt-2">
+														<i class="bi bi-info-circle me-1"></i>Ranges calculated from {selectedCategoryAllocatedMarks} marks for this category. Adjust color percentages via the calculator sidebar.
+													</small>
+												</div>
+											{/if}
+										{/if}
 
 									<!-- Category and Knowledge Area Selection -->
 									{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
@@ -3707,6 +3718,41 @@
 										</div>
 									{/if}
 
+										<!-- Color Selection -->
+										<div class="mb-3">
+											<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
+											<select id="colorSelect" class="form-select" bind:value={selectedColor}>
+												<option value="">⚪ No Color</option>
+												<option value="red">🔴 Red</option>
+												<option value="orange">🟠 Orange</option>
+												<option value="yellow">🟡 Yellow</option>
+												<option value="lightgreen" style="color: #20c997;">🟢 Light Green</option>
+												<option value="green">🟢 Green</option>
+											</select>
+											<small class="text-muted">Selected: {selectedColor || 'No Color'} ({selectedColor ? getColorHex(selectedColor) : 'None'})</small>
+										</div>
+
+									<!-- Mark Input for Fixed Mode -->
+									{#if currentCategoryMarkingMode === 'fixed' && selectedColor && selectedCategory}
+										<div class="mb-3">
+											<label for="colorMarkInput" class="form-label fw-bold">Mark for this Color:</label>
+											<input
+												id="colorMarkInput"
+												type="text"
+												class="form-control"
+												bind:value={selectedColorMark}
+												placeholder="Enter mark value..."
+												onchange={handleColorMarkChange}
+											>
+											<small class="text-muted">
+												Category: {selectedCategory}
+												{#if currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks}
+													(Max: {currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks} marks)
+												{/if}
+											</small>
+										</div>
+									{/if}
+
 									<div class="mb-3">
 										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
 										<div class="input-group input-group-sm">
@@ -3732,44 +3778,6 @@
 											</button>
 										</div>
 									</div>
-
-										<!-- Color Selection -->
-										<div class="mb-3">
-											<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
-											<select id="colorSelect" class="form-select" bind:value={selectedColor}>
-												<option value="">⚪ No Color</option>
-												<option value="red">🔴 Red</option>
-												<option value="orange">🟠 Orange</option>
-												<option value="yellow">🟡 Yellow</option>
-												<option value="lightgreen" style="color: #20c997;">🟢 Light Green</option>
-												<option value="green">🟢 Green</option>
-											</select>
-											<small class="text-muted">Selected: {selectedColor || 'No Color'} ({selectedColor ? getColorHex(selectedColor) : 'None'})</small>
-										</div>
-
-									<!-- Mark Input for Fixed Mode -->
-									{#if currentCategoryMarkingMode === 'fixed' && selectedColor && selectedCategory}
-										<div class="mb-3">
-											<label for="colorMarkInput" class="form-label fw-bold">Mark for this Color:</label>
-											<input
-												id="colorMarkInput"
-												type="number"
-												class="form-control"
-												bind:value={selectedColorMark}
-												placeholder="Enter mark value..."
-												min="0"
-												max={currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks || 100}
-												step="0.5"
-												onchange={handleColorMarkChange}
-											>
-											<small class="text-muted">
-												Category: {selectedCategory}
-												{#if currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks}
-													(Max: {currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks} marks)
-												{/if}
-											</small>
-										</div>
-									{/if}
 									
 									<!-- Categories and Knowledge Areas Management -->
 									<div class="mb-3">
@@ -3857,11 +3865,11 @@
 										{#if showAddCategoryKnowledgeArea}
 											<!-- Add Category Form -->
 											<div class="mb-3">
-												<div class="input-group">
-													<input
-														id="categoryName"
-														type="text"
-														class="form-control form-control-sm"
+													<div class="input-group">
+														<input
+															id="categoryName"
+															type="text"
+															class="form-control form-control-sm"
 														placeholder="Enter category name..."
 														bind:value={newCategoryName}
 														onkeydown={(e) => {
@@ -3873,21 +3881,35 @@
 													>
 													<select
 														id="categoryMarkingMode"
-														class="form-select form-select-sm"
-														bind:value={newCategoryMarkingMode}
-														style="width: 140px;"
-													>
-														<option value="none">Type: None</option>
-														<option value="percentage">Type: Percentage</option>
-														<option value="fixed">Type: Fixed</option>
-													</select>
-													<button 
-														class="btn btn-outline-primary"
-														onclick={addCategory}
-														disabled={!newCategoryName.trim()}
-													>
-														<i class="bi bi-plus-circle me-1"></i>Add
-													</button>
+															class="form-select form-select-sm"
+															bind:value={newCategoryMarkingMode}
+															style="width: 140px;"
+														>
+															<option value="none">Type: None</option>
+															<option value="percentage">Type: Percentage</option>
+															<option value="fixed">Type: Fixed</option>
+														</select>
+														{#if newCategoryMarkingMode === 'percentage'}
+															<input
+																type="number"
+																class="form-control form-control-sm"
+																placeholder="Marks"
+																min="0"
+																step="0.5"
+																style="max-width: 120px;"
+																bind:value={newCategoryAllocatedMarks}
+															>
+														{/if}
+														<button 
+															class="btn btn-outline-primary"
+															onclick={addCategory}
+															disabled={
+																!newCategoryName.trim() ||
+																(newCategoryMarkingMode === 'percentage' && (newCategoryAllocatedMarks === '' || Number.isNaN(parseFloat(newCategoryAllocatedMarks)) || parseFloat(newCategoryAllocatedMarks) <= 0))
+															}
+														>
+															<i class="bi bi-plus-circle me-1"></i>Add
+														</button>
 												</div>
 												<small class="text-muted">Select the category type to determine how its paragraphs are marked.</small>
 											</div>
@@ -4134,7 +4156,7 @@
 																				<!-- Fixed mark mode - show specific mark -->
 																				<div class="me-3 d-flex align-items-center">
 																					<span class="badge bg-primary text-white small" title="Fixed mark for {color} color">
-																						{markInfo.value} marks
+																						{Number.isFinite(Number(markInfo.value)) ? `${markInfo.value} marks` : markInfo.value}
 																					</span>
 																				</div>
 																			{:else if markInfo.type === 'percentage'}
@@ -4490,19 +4512,33 @@
 					</h5>
 					<button type="button" class="btn-close btn-close-white" onclick={() => { showCategoryEditModal = false; editingCategory = null; }}></button>
 				</div>
-				<div class="modal-body">
-					<div class="mb-3">
-						<label class="form-label fw-bold">Category Marking Mode:</label>
-						<select class="form-select" bind:value={editingCategory.markingMode}>
-							<option value="none">None - No color marking</option>
-							<option value="percentage">Percentage - Use percentage ranges</option>
-							<option value="fixed">Fixed - Set specific marks per color</option>
-						</select>
-						<small class="text-muted d-block mt-2">
-							<i class="bi bi-info-circle me-1"></i>This setting applies only to <strong>{editingCategory.name}</strong>.
-						</small>
+					<div class="modal-body">
+						<div class="mb-3">
+							<label class="form-label fw-bold">Category Marking Mode:</label>
+							<select class="form-select" bind:value={editingCategory.markingMode}>
+								<option value="none">None - No color marking</option>
+								<option value="percentage">Percentage - Use percentage ranges</option>
+								<option value="fixed">Fixed - Set specific marks per color</option>
+							</select>
+							{#if editingCategory.markingMode === 'percentage'}
+								<div class="mt-2">
+									<label class="form-label small mb-1" for="editAllocatedMarks">Category Marks</label>
+									<input
+										id="editAllocatedMarks"
+										type="number"
+										class="form-control"
+										min="0"
+										step="0.5"
+										placeholder="Enter total marks for this category"
+										bind:value={editingCategory.allocatedMarks}
+									>
+								</div>
+							{/if}
+							<small class="text-muted d-block mt-2">
+								<i class="bi bi-info-circle me-1"></i>This setting applies only to <strong>{editingCategory.name}</strong>.
+							</small>
+						</div>
 					</div>
-				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn btn-secondary" onclick={() => { showCategoryEditModal = false; editingCategory = null; }}>
 						<i class="bi bi-x-circle me-2"></i>Cancel

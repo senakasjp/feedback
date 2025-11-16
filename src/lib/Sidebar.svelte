@@ -42,12 +42,11 @@
 	export let onSaveAssignmentData = () => {};
 	export let onCopyToClipboard = () => {};
 	export let onGeneratePDF = () => {};
-	export let onAddPercentageRange = (value, color, lowerPercentage, upperPercentage) => {};
+	export let onAddPercentageRange = (color, lowerPercentage, upperPercentage) => {};
 	export let onDeletePercentageRange = (id) => {};
 	export let onExportAssignmentSettings = () => {};
 	
 	// Percentage range form state
-	let newValue = '';
 	let newLowerPercentage = '';
 	let newUpperPercentage = '';
 	let newColor = 'green';
@@ -72,19 +71,17 @@
 	}
 	
 	function addPercentageRange() {
-		if (newValue && newLowerPercentage && newUpperPercentage) {
+		if (newLowerPercentage && newUpperPercentage) {
 			onAddPercentageRange(
-				parseFloat(newValue),
 				newColor,
 				parseFloat(newLowerPercentage),
 				parseFloat(newUpperPercentage)
 			);
 			
 			// Reset form
-			newValue = '';
 			newLowerPercentage = '';
 			newUpperPercentage = '';
-			newColor = 'blue';
+			newColor = 'green';
 		}
 	}
 	
@@ -304,37 +301,26 @@
 					</h6>
 					<div>
 						<!-- Add new range form -->
-						<div class="mb-2">
-							<!-- First row: Value and Percentage inputs -->
-							<div class="d-flex align-items-end gap-1 mb-2 justify-content-center">
-								<div class="flex-shrink-0" style="width: 60px;">
-									<label for="newValue" class="form-label small fw-bold mb-1">Value:</label>
-									<input 
-										type="text" 
-										id="newValue"
-										class="form-control form-control-sm" 
-										placeholder="Value"
-										bind:value={newValue}
-										inputmode="decimal"
-									>
-								</div>
-								<div class="flex-shrink-0" style="width: 60px;">
-									<label for="newLowerPercentage" class="form-label small fw-bold mb-1">Lower %:</label>
-									<input 
-										type="text" 
-										id="newLowerPercentage"
-										class="form-control form-control-sm" 
+							<div class="mb-2">
+								<!-- First row: Percentage inputs -->
+								<div class="d-flex align-items-end gap-2 mb-2 justify-content-center">
+									<div class="flex-shrink-0" style="width: 80px;">
+										<label for="newLowerPercentage" class="form-label small fw-bold mb-1">Lower %:</label>
+										<input 
+											type="text" 
+											id="newLowerPercentage"
+											class="form-control form-control-sm" 
 										placeholder="0"
 										bind:value={newLowerPercentage}
 										inputmode="decimal"
 									>
 								</div>
-								<div class="flex-shrink-0" style="width: 60px;">
-									<label for="newUpperPercentage" class="form-label small fw-bold mb-1">Upper %:</label>
-									<input 
-										type="text" 
-										id="newUpperPercentage"
-										class="form-control form-control-sm" 
+									<div class="flex-shrink-0" style="width: 80px;">
+										<label for="newUpperPercentage" class="form-label small fw-bold mb-1">Upper %:</label>
+										<input 
+											type="text" 
+											id="newUpperPercentage"
+											class="form-control form-control-sm" 
 										placeholder="100"
 										bind:value={newUpperPercentage}
 										inputmode="decimal"
@@ -351,15 +337,15 @@
 										{/each}
 									</select>
 								</div>
-								<button 
-									class="btn btn-primary btn-sm" 
-									onclick={addPercentageRange}
-									disabled={newValue === '' || newLowerPercentage === '' || newUpperPercentage === ''}
-								>
-									<i class="bi bi-plus-circle me-1"></i>Add Range
-								</button>
+									<button 
+										class="btn btn-primary btn-sm" 
+										onclick={addPercentageRange}
+										disabled={newLowerPercentage === '' || newUpperPercentage === ''}
+									>
+										<i class="bi bi-plus-circle me-1"></i>Add Range
+									</button>
+								</div>
 							</div>
-						</div>
 
 						<!-- Display existing ranges -->
 						{#if percentageRanges.length > 0}
@@ -369,17 +355,16 @@
 									{#each percentageRanges as range}
 										<div class="list-group-item px-0 py-1 border-0">
 											<div class="d-flex align-items-center justify-content-between">
-												<div class="d-flex align-items-center">
-													<div class="badge me-2 d-flex align-items-center justify-content-center" style="width: 20px; height: 20px; border-radius: 4px; font-size: 0.7rem; {getColorStyle(range.color)}">
-														{range.color.charAt(0).toUpperCase()}
+													<div class="d-flex align-items-center">
+														<div class="badge me-2 d-flex align-items-center justify-content-center" style="width: 20px; height: 20px; border-radius: 4px; font-size: 0.7rem; {getColorStyle(range.color)}">
+															{range.color.charAt(0).toUpperCase()}
+														</div>
+														<div class="d-flex align-items-center gap-2">
+															<span class="small text-muted">
+																{range.lowerPercentage}% - {range.upperPercentage}%
+															</span>
+														</div>
 													</div>
-													<div class="d-flex align-items-center gap-2">
-														<span class="small fw-bold">{range.value}</span>
-														<span class="small text-muted">
-															{range.calculatedLower} - {range.calculatedUpper}
-														</span>
-													</div>
-												</div>
 												<i 
 													class="bi bi-trash text-danger" 
 													onclick={() => deletePercentageRange(range.id)}
