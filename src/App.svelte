@@ -4116,6 +4116,7 @@
 																					class="form-check-input" 
 																					type="checkbox" 
 																					id="paragraph-{id}"
+																					aria-label="Select paragraph"
 																					checked={selectedParagraphs.has(id)}
 																					onchange={() => {
 																						addCheckboxDebug(`🖱️ Checkbox clicked: ${id}`)
@@ -4137,9 +4138,6 @@
 																					}}
 																					style="width: 1.2rem; height: 1.2rem; margin-top: 0;"
 																				>
-																				<label class="form-check-label fw-bold ms-2" for="paragraph-{id}">
-																					Select
-																				</label>
 																			</div>
 																		{/if}
 																		<!-- Color indicator between checkbox and text -->
