@@ -266,17 +266,17 @@
 			}
 		} else if (!currentStudentId && currentView === 'feedback' && currentAssessmentId) {
 			// STRICT DATA SEPARATION RULE 1: Student deselected - ensure we show assignment-only data
-			console.log('STRICT DATA SEPARATION: Student deselected via reactive effect - loading assignment-only data')
-			studentName = ''
-			// No studentImage - only header photo for assessment
-			selectedParagraphs = new Set()
-			categoryMarks = {}
-			manualTotalMarks = ''
-			
-			// Reload assignment paragraphs only (no student data)
-			loadAssessmentData(currentSubjectId, currentAssessmentId, false)
-		}
-	})
+				console.log('STRICT DATA SEPARATION: Student deselected via reactive effect - loading assignment-only data')
+				studentName = ''
+				// No studentImage - only header photo for assessment
+				selectedParagraphs = new Set()
+				categoryMarks = {}
+				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				
+				// Reload assignment paragraphs only (no student data)
+				loadAssessmentData(currentSubjectId, currentAssessmentId, false)
+			}
+		})
 	
 	// Function to update view
 	function updateView(newView) {
@@ -470,13 +470,13 @@
 				studentName = ''
 				// No studentImage - only header photo for assessment
 				
-				// Load assessment header photo if available
-				if (currentAssessment && parsed.headerPhoto) {
-					currentAssessment.headerPhoto = parsed.headerPhoto
-				}
-				// Reset all marks to zero
-				categoryMarks = {}
-				manualTotalMarks = ''
+					// Load assessment header photo if available
+					if (currentAssessment && parsed.headerPhoto) {
+						currentAssessment.headerPhoto = parsed.headerPhoto
+					}
+					// Reset all marks to zero
+					categoryMarks = {}
+					manualTotalMarks = currentAssessment?.totalMarks ?? ''
 			} else {
 				// Initialize empty data for new assessment
 				initializeEmptyData()
@@ -560,7 +560,7 @@
 					}
 					// Reset all marks to zero
 					categoryMarks = {}
-					manualTotalMarks = ''
+					manualTotalMarks = currentAssessment?.totalMarks ?? ''
 				} else {
 					// Initialize empty data for new assessment
 					initializeEmptyData()
@@ -610,7 +610,7 @@
 			// No studentImage - only header photo for assessment
 			headerPhoto: currentAssessment?.headerPhoto || '',
 			categoryMarks,
-			manualTotalMarks
+			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks
 		}
 		
 		try {
@@ -722,9 +722,10 @@
 		// STRICT FILTER: Clear ALL data before entering assessment feedback page
 		initializeEmptyData()
 
-		// Set new assessment context
-		currentAssessmentId = assessment.id
-		currentAssessment = assessment
+			// Set new assessment context
+			currentAssessmentId = assessment.id
+			currentAssessment = assessment
+			manualTotalMarks = assessment.totalMarks ?? ''
 
 		// Backward compatibility: Initialize markingMode if not present
 		if (!currentAssessment.markingMode) {
@@ -1278,6 +1279,15 @@
 		}, 0)
 	}
 
+	function getAssessmentTotalInfo() {
+		const numericTotal = Number(currentAssessment?.totalMarks)
+		const hasValue = Number.isFinite(numericTotal) && numericTotal > 0
+		return {
+			value: hasValue ? numericTotal : 0,
+			hasValue
+		}
+	}
+
 	// Get the mark range/grade for the current student
 	function getStudentMarkInfo() {
 		const totalMarks = getTotalMarks()
@@ -1378,10 +1388,31 @@
 			return percentRange
 		}
 
-	function updateTotalMarks(totalMarks) {
-		manualTotalMarks = totalMarks
-		// Autosave will handle saving automatically
-	}
+		function updateTotalMarks(totalMarks) {
+			manualTotalMarks = totalMarks ?? ''
+
+			// Persist total marks on the assessment itself
+			if (!currentAssessment || !currentSubject) return
+
+			const parsedTotal = totalMarks === '' || totalMarks === null || totalMarks === undefined
+				? null
+				: Number(totalMarks)
+			const sanitizedTotal = Number.isFinite(parsedTotal) ? parsedTotal : null
+
+			const updatedAssessment = { ...currentAssessment, totalMarks: sanitizedTotal }
+			currentAssessment = updatedAssessment
+
+			const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
+			if (subjectIndex !== -1) {
+				const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
+				if (assessmentIndex !== -1) {
+					const assessments = [...subjects[subjectIndex].assessments]
+					assessments[assessmentIndex] = updatedAssessment
+					subjects[subjectIndex] = { ...subjects[subjectIndex], assessments }
+					saveSubjects()
+				}
+			}
+		}
 
 	// Notification Functions
 	function showSuccessNotification(message) {
@@ -1455,13 +1486,13 @@
 		
 		// Clear current student selection if the deleted student was selected
 		if (currentStudentId === studentId) {
-			currentStudentId = null
-			studentName = ''
-			// No studentImage - only header photo for assessment
-			selectedParagraphs.clear()
-			categoryMarks = {}
-			manualTotalMarks = ''
-		}
+				currentStudentId = null
+				studentName = ''
+				// No studentImage - only header photo for assessment
+				selectedParagraphs.clear()
+				categoryMarks = {}
+				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+			}
 		
 		// Clear loading state and close modal
 		deletingStudentId = null
@@ -1492,16 +1523,16 @@
 		if (!studentId || studentId === '') {
 			console.log('STRICT FILTER: Student deselected - loading assignment-only data')
 			// Clear student-specific data
-			studentName = ''
-			// No studentImage - only header photo for assessment
-			selectedParagraphs = new Set()
-			categoryMarks = {}
-			manualTotalMarks = ''
-			
-			// Reload assignment paragraphs only (no student data)
-			await loadAssessmentData(currentSubjectId, currentAssessmentId, false)
-			return
-		}
+				studentName = ''
+				// No studentImage - only header photo for assessment
+				selectedParagraphs = new Set()
+				categoryMarks = {}
+				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				
+				// Reload assignment paragraphs only (no student data)
+				await loadAssessmentData(currentSubjectId, currentAssessmentId, false)
+				return
+			}
 		
 		const student = students.find(s => s.id === studentId)
 		if (student) {
@@ -1628,17 +1659,17 @@
 		console.log('✅ SAVED: Student data updated with new selections')
 
 		// Still save other evaluation data (marks, etc.) in separate file for compatibility
-		const evaluationData = {
-			studentId: currentStudentId,
-			assessmentId: currentAssessmentId,
-			paragraphs: [...paragraphs],
-			// selectedParagraphs: removed - now stored in student properties only
-			studentName: studentName,
-			// No studentImage - only header photo for assessment
-			categoryMarks: { ...categoryMarks },
-			manualTotalMarks: manualTotalMarks,
-			savedAt: new Date().toISOString()
-		}
+			const evaluationData = {
+				studentId: currentStudentId,
+				assessmentId: currentAssessmentId,
+				paragraphs: [...paragraphs],
+				// selectedParagraphs: removed - now stored in student properties only
+				studentName: studentName,
+				// No studentImage - only header photo for assessment
+				categoryMarks: { ...categoryMarks },
+				manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
+				savedAt: new Date().toISOString()
+			}
 
 		try {
 			await invoke('write_student_evaluation', { 
@@ -1698,15 +1729,15 @@
 			}
 
 			// 2. Transfer evaluation data (marks, etc.)
-			const evaluationData = {
-				studentId: targetStudentId,
-				assessmentId: currentAssessmentId,
-				paragraphs: [...paragraphs],
-				studentName: students.find(s => s.id === targetStudentId)?.name || '',
-				categoryMarks: { ...categoryMarks },
-				manualTotalMarks: manualTotalMarks,
-				savedAt: new Date().toISOString()
-			}
+				const evaluationData = {
+					studentId: targetStudentId,
+					assessmentId: currentAssessmentId,
+					paragraphs: [...paragraphs],
+					studentName: students.find(s => s.id === targetStudentId)?.name || '',
+					categoryMarks: { ...categoryMarks },
+					manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
+					savedAt: new Date().toISOString()
+				}
 
 			// Save evaluation data for target student
 			try {
@@ -1981,7 +2012,14 @@
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		// No studentImage - only header photo for assessment
 		categoryMarks = savedCategoryMarks
-		manualTotalMarks = savedManualTotalMarks
+		const assessmentTotalMarks = currentAssessment?.totalMarks
+		if (assessmentTotalMarks !== null && assessmentTotalMarks !== undefined && assessmentTotalMarks !== '') {
+			manualTotalMarks = assessmentTotalMarks
+		} else if (savedManualTotalMarks !== '') {
+			updateTotalMarks(savedManualTotalMarks)
+		} else {
+			manualTotalMarks = ''
+		}
 
 		// Selection mapping is now handled by mapSelectionsToMergedParagraphs above
 
@@ -3110,10 +3148,10 @@
 			.catch(() => showSuccessNotification('❌ Copy failed - unable to access clipboard. Please try again or copy manually.'))
 	}
 
-	function generatePDF() {
-		console.log('📄 generatePDF called')
-		let selectedText = getSelectedTextInVisualOrder()
-		
+		function generatePDF() {
+			console.log('📄 generatePDF called')
+			let selectedText = getSelectedTextInVisualOrder()
+			
 		// Convert HTML to plain text for PDF
 		if (selectedText.includes('<')) {
 			const tempDiv = document.createElement('div')
@@ -3121,23 +3159,24 @@
 			selectedText = tempDiv.textContent || tempDiv.innerText || ''
 		}
 		
-		console.log('📄 generatePDF result:', {
-			length: selectedText.length,
-			text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
-			isEmpty: selectedText.trim() === ''
-		})
-		
-		if (!selectedText || selectedText.trim() === '') {
-			showSuccessNotification('ℹ️ PDF generation cancelled - no paragraphs selected or text is empty. Please select paragraphs first.')
-			return
-		}
-
-		// Check for marks warning: category marks > 0 but total marks is 0 or empty
-		const calculatedTotal = getTotalMarks()
-		if (calculatedTotal > 0 && (!manualTotalMarks || manualTotalMarks === '0' || manualTotalMarks === '')) {
-			showTotalMarksWarning = true
-			return
-		}
+			console.log('📄 generatePDF result:', {
+				length: selectedText.length,
+				text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
+				isEmpty: selectedText.trim() === ''
+			})
+			
+			if (!selectedText || selectedText.trim() === '') {
+				showSuccessNotification('ℹ️ PDF generation cancelled - no paragraphs selected or text is empty. Please select paragraphs first.')
+				return
+			}
+			
+			// Check for marks warning: category marks > 0 but total marks is 0 or empty
+			const calculatedTotal = getTotalMarks()
+			const { hasValue: hasAssessmentTotal } = getAssessmentTotalInfo()
+			if (calculatedTotal > 0 && !hasAssessmentTotal) {
+				showTotalMarksWarning = true
+				return
+			}
 
 		const doc = new jsPDF()
 		
@@ -3181,11 +3220,11 @@
 		generateRestOfPDF(doc, margin, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
 	}
 
-	function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName) {
-		// Try to set a font that's closer to Oxygen (Arial or Helvetica)
-		try {
-			doc.setFont('helvetica', 'normal')
-		} catch (e) {
+		function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName) {
+			// Try to set a font that's closer to Oxygen (Arial or Helvetica)
+			try {
+				doc.setFont('helvetica', 'normal')
+			} catch (e) {
 			// Fallback to default font if helvetica is not available
 			console.log('Helvetica not available, using default font')
 		}
@@ -3206,18 +3245,19 @@
 		if (studentName) {
 			doc.text(`Student: ${studentName}`, margin, yPosition)
 			yPosition += 6
-		}
-		
-		// Add total marks in red color
-		const totalMarks = getTotalMarks()
-		if (totalMarks > 0) {
-			doc.setTextColor(255, 0, 0) // Red color
-			doc.setFontSize(10) // Same font size as name and subject
-			const manualTotal = manualTotalMarks ? `/${manualTotalMarks}` : ''
-			doc.text(`Total Marks: ${totalMarks}${manualTotal}`, margin, yPosition)
-			doc.setTextColor(0, 0, 0) // Reset to black
-			yPosition += 8
-		}
+			}
+			
+			// Add total marks in red color
+			const totalMarks = getTotalMarks()
+			const { value: assessmentTotal, hasValue: hasAssessmentTotal } = getAssessmentTotalInfo()
+			if (totalMarks > 0) {
+				doc.setTextColor(255, 0, 0) // Red color
+				doc.setFontSize(10) // Same font size as name and subject
+				const manualTotal = hasAssessmentTotal ? `/${assessmentTotal}` : ''
+				doc.text(`Total Marks: ${totalMarks}${manualTotal}`, margin, yPosition)
+				doc.setTextColor(0, 0, 0) // Reset to black
+				yPosition += 8
+			}
 		
 		// Reset font to normal for content
 		doc.setFont('helvetica', 'normal')
@@ -3657,7 +3697,7 @@
 										{#if selectedCategory}
 											{@const selectedCategoryAllocatedMarks = getCategoryAllocatedMarks(selectedCategory)}
 											{#if currentCategoryMarkingMode === 'percentage' && selectedCategoryAllocatedMarks && currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0}
-												<div class="mb-3 border rounded p-3 bg-light">
+												<div class="mb-3 border rounded p-3 bg-light mark-range-panel">
 													<h6 class="fw-bold mb-2 text-primary">
 														<i class="bi bi-bar-chart-fill me-2"></i>Mark Ranges for {selectedCategory}
 													</h6>
@@ -4002,15 +4042,15 @@
 											<label for="total-marks-input" class="form-label text-white mb-0 fw-bold">Total Marks:</label>
 											<input
 												type="number"
-												class="form-control form-control-sm"
-												id="total-marks-input"
-												style="width: 80px;"
-												placeholder="0"
-												value={manualTotalMarks || ''}
-												oninput={(e) => updateTotalMarks(e.currentTarget.value)}
-												min="0"
-												step="0.5"
-											>
+													class="form-control form-control-sm"
+													id="total-marks-input"
+													style="width: 80px;"
+													placeholder="0"
+													value={manualTotalMarks ?? ''}
+													oninput={(e) => updateTotalMarks(e.currentTarget.value)}
+													min="0"
+													step="0.5"
+												>
 										</div>
 									</div>
 								</div>

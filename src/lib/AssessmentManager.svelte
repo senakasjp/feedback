@@ -48,6 +48,18 @@
 		addCheckboxDebug?: (message: string) => void;
   } = $props()
 
+	// ID helpers
+	function generateAssessmentId(): string {
+		if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+			return crypto.randomUUID();
+		}
+		return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	}
+
+	function generateParagraphId(index: number): string {
+		return `para-${Date.now()}-${Math.random().toString(16).slice(2)}-${index}`;
+	}
+
 	// Sort assessments alphabetically by name
 	let sortedAssessments = $derived(
 		[...assessments].sort((a, b) => a.name.localeCompare(b.name))
@@ -1130,7 +1142,7 @@
 	function addAssessment() {
 		if (localNewAssessmentName.trim()) {
 			const newAssessment = {
-				id: Date.now().toString(),
+				id: generateAssessmentId(),
 				name: localNewAssessmentName.trim(),
 				topics: [],
 				categories: []
@@ -1175,13 +1187,13 @@
 
 		try {
 			// Create a deep copy of the assessment with a new ID
-			const newAssessment = {
-				id: Date.now().toString(),
-				name: duplicateAssessmentName.trim(),
-				topics: assessmentToDuplicate.topics ? JSON.parse(JSON.stringify(assessmentToDuplicate.topics)) : [],
-				categories: assessmentToDuplicate.categories ? JSON.parse(JSON.stringify(assessmentToDuplicate.categories)) : [],
-				weight: assessmentToDuplicate.weight,
-				headerPhoto: assessmentToDuplicate.headerPhoto,
+				const newAssessment = {
+					id: generateAssessmentId(),
+					name: duplicateAssessmentName.trim(),
+					topics: assessmentToDuplicate.topics ? JSON.parse(JSON.stringify(assessmentToDuplicate.topics)) : [],
+					categories: assessmentToDuplicate.categories ? JSON.parse(JSON.stringify(assessmentToDuplicate.categories)) : [],
+					weight: assessmentToDuplicate.weight,
+					headerPhoto: assessmentToDuplicate.headerPhoto,
 				// Copy other assessment properties
 				knowledgeAreas: (assessmentToDuplicate as any).knowledgeAreas ? JSON.parse(JSON.stringify((assessmentToDuplicate as any).knowledgeAreas)) : [],
 				totalMarks: (assessmentToDuplicate as any).totalMarks,
@@ -1196,20 +1208,41 @@
 					assessmentId: assessmentToDuplicate.id
 				});
 
-				if (paragraphsData) {
-					// Save the paragraphs to the new assessment
-					await invoke('write_assessment_paragraphs', {
-						assessmentId: newAssessment.id,
-						data: paragraphsData
-					});
-				}
-			} catch (error) {
+					if (paragraphsData) {
+						// Regenerate paragraph IDs to keep the copy independent
+						const parsed = JSON.parse(String(paragraphsData));
+						const updatedParagraphs = Array.isArray(parsed)
+							? parsed.map((para: any, index: number) => {
+									if (para && typeof para === 'object') {
+										return { ...para, id: generateParagraphId(index) };
+									}
+									return para;
+								})
+							: parsed;
+
+						// Save the paragraphs to the new assessment
+						await invoke('write_assessment_paragraphs', {
+							assessmentId: newAssessment.id,
+							data: JSON.stringify(updatedParagraphs, null, 2)
+						});
+					}
+				} catch (error) {
 				// Fallback to localStorage
 				const key = `assessment-paragraphs-${assessmentToDuplicate.id}`;
 				const paragraphsData = localStorage.getItem(key);
 				if (paragraphsData) {
+					const parsed = JSON.parse(String(paragraphsData));
+					const updatedParagraphs = Array.isArray(parsed)
+						? parsed.map((para: any, index: number) => {
+								if (para && typeof para === 'object') {
+									return { ...para, id: generateParagraphId(index) };
+								}
+								return para;
+							})
+						: parsed;
+
 					const newKey = `assessment-paragraphs-${newAssessment.id}`;
-					localStorage.setItem(newKey, paragraphsData);
+					localStorage.setItem(newKey, JSON.stringify(updatedParagraphs, null, 2));
 				}
 			}
 

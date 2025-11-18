@@ -375,6 +375,31 @@
   background-color: var(--dark-bg-secondary) !important;
 }
 
+[data-bs-theme="dark"] .mark-range-panel {
+  background-color: var(--dark-bg-tertiary) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+[data-bs-theme="dark"] .mark-range-panel small {
+  color: var(--dark-text-muted) !important;
+}
+
+[data-bs-theme="dark"] .calculator-panel {
+  background-color: var(--dark-bg-secondary) !important;
+  border-color: var(--dark-border) !important;
+}
+
+[data-bs-theme="dark"] .calculator-panel .list-group-item {
+  background-color: var(--dark-bg-tertiary) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+[data-bs-theme="dark"] .calculator-panel .text-muted {
+  color: var(--dark-text-muted) !important;
+}
+
 [data-bs-theme="dark"] .border {
   border-color: var(--dark-border) !important;
 }

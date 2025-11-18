@@ -295,7 +295,7 @@
 		{:else}
 			<!-- Calculator View -->
 			{#if currentView === 'feedback' && currentAssessment}
-				<div class="mb-3">
+				<div class="mb-3 calculator-panel bg-light border rounded p-3">
 					<h6 class="text-info mb-3">
 						<i class="bi bi-percent me-2"></i>Percentage Ranges
 					</h6>
