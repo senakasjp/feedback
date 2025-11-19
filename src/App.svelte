@@ -1267,6 +1267,32 @@
 		return Number.isFinite(parsed) ? parsed : null
 	}
 
+	function parseNumericRange(value) {
+		if (value === undefined || value === null) return null
+		const stringValue = String(value)
+		const connectorMatch = stringValue.match(/(-?\d+(?:\.\d+)?)\s*(?:-|–|—|to|through|thru)\s*(-?\d+(?:\.\d+)?)/i)
+		if (connectorMatch) {
+			const first = parseFloat(connectorMatch[1])
+			const second = parseFloat(connectorMatch[2])
+			if (Number.isFinite(first) && Number.isFinite(second)) {
+				return {
+					min: Math.min(first, second),
+					max: Math.max(first, second)
+				}
+			}
+		}
+
+		const matches = stringValue.match(/-?\d+(?:\.\d+)?/g)
+		if (!matches || matches.length < 2) return null
+		const first = parseFloat(matches[0])
+		const second = parseFloat(matches[1])
+		if (!Number.isFinite(first) || !Number.isFinite(second)) return null
+		return {
+			min: Math.min(first, second),
+			max: Math.max(first, second)
+		}
+	}
+
 	function hasMarksValue(value) {
 		if (value === undefined || value === null) return false
 		return String(value).trim() !== ''
@@ -1309,6 +1335,15 @@
 		const markInfo = paragraph.markInfo
 		if (markInfo) {
 			if (markInfo.type === 'fixed') {
+				const inferredRange = parseNumericRange(markInfo.value)
+				if (inferredRange) {
+					return {
+						type: 'range',
+						min: inferredRange.min,
+						max: inferredRange.max,
+						color: markInfo.color || paragraph.color
+					}
+				}
 				const numericValue = parseNumericMarkValue(markInfo.numericValue ?? markInfo.value)
 				if (Number.isFinite(numericValue)) {
 					return {
