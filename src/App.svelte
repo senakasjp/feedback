@@ -1921,18 +1921,60 @@
 				savedAt: new Date().toISOString()
 			}
 
+		let saveSucceeded = false
+
 		try {
 			await invoke('write_student_evaluation', { 
 				data: JSON.stringify(evaluationData),
 				studentId: currentStudentId,
 				assessmentId: currentAssessmentId
 			})
-			showSuccessNotification(getMotivationalMessage('student'))
+			saveSucceeded = true
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
-			const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
-			localStorage.setItem(key, JSON.stringify(evaluationData))
+			try {
+				const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
+				localStorage.setItem(key, JSON.stringify(evaluationData))
+				saveSucceeded = true
+			} catch (storageError) {
+				console.error('Failed to persist student evaluation in browser storage', storageError)
+			}
+		}
+
+		if (saveSucceeded) {
 			showSuccessNotification(getMotivationalMessage('student'))
+			await handleStudentSaveCompletion()
+		}
+	}
+
+	async function handleStudentSaveCompletion() {
+		await deselectStudentAfterSave()
+	}
+
+	async function deselectStudentAfterSave() {
+		if (!currentStudentId) return
+
+		try {
+			if (currentView === 'feedback' && currentAssessmentId) {
+				await selectStudent('')
+			} else {
+				currentStudentId = null
+				studentName = ''
+				selectedParagraphs = new Set()
+				categoryMarks = {}
+				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+			}
+		} catch (error) {
+			console.error('Failed to deselect student after save', error)
+			currentStudentId = null
+			studentName = ''
+			selectedParagraphs = new Set()
+			categoryMarks = {}
+			manualTotalMarks = currentAssessment?.totalMarks ?? ''
+		} finally {
+			if (!currentStudentId) {
+				currentStudentId = null
+			}
 		}
 	}
 
