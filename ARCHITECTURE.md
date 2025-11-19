@@ -1,6 +1,6 @@
 # Architecture Documentation
 
-## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
+## Version 3.2.4 - Total Marks Display & Enhanced Text Formatting
 
 ### Real-time Total Marks Display System
 

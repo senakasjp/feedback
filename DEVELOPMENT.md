@@ -1,6 +1,6 @@
 # Development Guide
 
-## Latest Updates (v3.2.3)
+## Latest Updates (v3.2.4)
 
 ### Total Marks Display Implementation
 - **Real-time Calculation**: Added `getTotalMarks()` function for reactive total calculation
@@ -313,7 +313,7 @@ npm run build
 ```json
 {
   "name": "feedback-app",
-  "version": "3.2.3",
+  "version": "3.2.4",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -341,7 +341,7 @@ npm run build
 {
   "package": {
     "productName": "Feedback Manager",
-    "version": "3.2.3"
+    "version": "3.2.4"
   },
   "build": {
     "distDir": "../dist",

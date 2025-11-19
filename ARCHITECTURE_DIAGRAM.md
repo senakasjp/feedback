@@ -1,6 +1,6 @@
 # Feedback Application Architecture Diagram
 
-## Latest Architecture Updates (v3.2.3)
+## Latest Architecture Updates (v3.2.4)
 
 ### Total Marks Display Architecture
 The application now includes a comprehensive real-time total marks display system:

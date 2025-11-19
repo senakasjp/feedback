@@ -18,7 +18,7 @@
         <div class="modal-body">
           <div class="text-center mb-4">
             <h4 class="fw-bold">Feedback Manager</h4>
-            <p class="text-muted">Version 3.2.3</p>
+            <p class="text-muted">Version 3.2.4</p>
           </div>
 
           <div class="mb-4">

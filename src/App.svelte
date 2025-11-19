@@ -62,7 +62,7 @@
 	let categoryMarks = $state({}) // Store marks for each category
 	let manualTotalMarks = $state('') // Store manually entered total marks
 	let showTotalMarksWarning = $state(false) // Show warning modal
-	let categoryWarnings = $state({}) // Store warnings for each category
+	let categoryWarnings = $state({}) // Store per-category warning state (missing paragraphs/marks)
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
 	let deletingStudentId = $state(null) // Track which student is being deleted
@@ -998,6 +998,8 @@
 				}
 			}
 		}
+
+		refreshCategoryWarnings()
 	}
 
 	function persistSelectedColorMark(valueOverride = null) {
@@ -1203,44 +1205,248 @@
 		}
 	}
 
+	function paragraphMatchesCategory(paragraphText, category) {
+		if (!paragraphText || !category) return false
+		if (paragraphText.includes(': ')) {
+			const parts = paragraphText.split(': ')
+			if (parts.length >= 2 && parts[0].trim() === category) {
+				return true
+			}
+		} else if (category === 'General Feedback') {
+			return true
+		}
+		return false
+	}
+
 	function checkCategoryHasSelectedParagraphs(category) {
 		// Check if any selected paragraphs belong to this category
 		for (const selectedId of selectedParagraphs) {
 			const paragraph = paragraphs.find(p => p.id === selectedId)
 			if (paragraph) {
 				const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
-				
-				// Check if paragraph belongs to this category
-				if (paragraphText.includes(': ')) {
-					const parts = paragraphText.split(': ')
-					if (parts.length >= 2 && parts[0].trim() === category) {
-						return true
-					}
-				} else {
-					// Check if it's a general feedback paragraph (no category prefix)
-					if (category === 'General Feedback') {
-						return true
-					}
+				if (paragraphMatchesCategory(paragraphText, category)) {
+					return true
 				}
 			}
 		}
 		return false
 	}
 
+	function getSelectedParagraphsInCategory(category, paragraphInfoIndex = null) {
+		const results = []
+		if (paragraphInfoIndex) {
+			for (const selectedId of selectedParagraphs) {
+				const paragraphInfo = paragraphInfoIndex[selectedId]
+				if (paragraphInfo && paragraphInfo.category === category) {
+					results.push(paragraphInfo)
+				}
+			}
+			return results
+		}
+
+		for (const selectedId of selectedParagraphs) {
+			const paragraph = paragraphs.find(p => p.id === selectedId)
+			if (!paragraph) continue
+			const paragraphText = typeof paragraph === 'string' ? paragraph : paragraph.text
+			if (paragraphMatchesCategory(paragraphText, category)) {
+				results.push(typeof paragraph === 'string' ? { text: paragraph, id: selectedId } : paragraph)
+			}
+		}
+		return results
+	}
+
+	function parseNumericMarkValue(value) {
+		if (value === undefined || value === null) return null
+		if (typeof value === 'number') {
+			return Number.isFinite(value) ? value : null
+		}
+		const stringValue = String(value)
+		const match = stringValue.match(/-?\d+(\.\d+)?/)
+		if (!match) return null
+		const parsed = parseFloat(match[0])
+		return Number.isFinite(parsed) ? parsed : null
+	}
+
+	function hasMarksValue(value) {
+		if (value === undefined || value === null) return false
+		return String(value).trim() !== ''
+	}
+
+	function getColorPercentageBounds(color) {
+		if (!color) return null
+		if (currentAssessment?.percentageRanges && currentAssessment.percentageRanges.length > 0) {
+			const customRange = currentAssessment.percentageRanges.find(range => range.color === color)
+			if (customRange) {
+				return {
+					lower: customRange.lowerPercentage / 100,
+					upper: customRange.upperPercentage / 100
+				}
+			}
+		}
+
+		const defaultRanges = {
+			green: { lower: 0.8, upper: 1.0 },
+			lightgreen: { lower: 0.65, upper: 0.79 },
+			yellow: { lower: 0.5, upper: 0.64 },
+			orange: { lower: 0.4, upper: 0.49 },
+			red: { lower: 0.0, upper: 0.39 }
+		}
+		return defaultRanges[color] || null
+	}
+
+	function doesCategoryRequireMarks(category) {
+		const allocatedMarks = getCategoryAllocatedMarks(category)
+		if (Number.isFinite(allocatedMarks) && allocatedMarks > 0) {
+			return true
+		}
+		
+		const effectiveMode = getEffectiveMarkingMode(category)
+		return effectiveMode === 'fixed'
+	}
+
+	function getParagraphMarkExpectation(paragraph, category) {
+		if (!paragraph || !category) return null
+		const markInfo = paragraph.markInfo
+		if (markInfo) {
+			if (markInfo.type === 'fixed') {
+				const numericValue = parseNumericMarkValue(markInfo.numericValue ?? markInfo.value)
+				if (Number.isFinite(numericValue)) {
+					return {
+						type: 'fixed',
+						value: numericValue,
+						color: markInfo.color || paragraph.color
+					}
+				}
+			} else if (markInfo.type === 'percentage') {
+				const minValue = parseNumericMarkValue(markInfo.min)
+				const maxValue = parseNumericMarkValue(markInfo.max)
+				if (Number.isFinite(minValue) && Number.isFinite(maxValue)) {
+					return {
+						type: 'range',
+						min: Math.min(minValue, maxValue),
+						max: Math.max(minValue, maxValue),
+						color: markInfo.color || paragraph.color
+					}
+				}
+			}
+		}
+
+		const paragraphColor = paragraph.color
+		const effectiveMode = getEffectiveMarkingMode(category)
+		if (!paragraphColor || effectiveMode === 'none') return null
+
+		if (effectiveMode === 'fixed') {
+			const colorMark = getCategoryColorMarkValue(category, paragraphColor)
+			const numericColorMark = parseNumericMarkValue(colorMark)
+			if (!Number.isFinite(numericColorMark)) return null
+			return {
+				type: 'fixed',
+				value: numericColorMark,
+				color: paragraphColor
+			}
+		} else if (effectiveMode === 'percentage') {
+			const allocatedMarks = getCategoryAllocatedMarks(category)
+			const percentageBounds = getColorPercentageBounds(paragraphColor)
+			if (!Number.isFinite(allocatedMarks) || !percentageBounds) return null
+			const minMarks = Number((allocatedMarks * percentageBounds.lower).toFixed(2))
+			const maxMarks = Number((allocatedMarks * percentageBounds.upper).toFixed(2))
+			if (!Number.isFinite(minMarks) || !Number.isFinite(maxMarks)) return null
+			return {
+				type: 'range',
+				min: Math.min(minMarks, maxMarks),
+				max: Math.max(minMarks, maxMarks),
+				color: paragraphColor
+			}
+		}
+
+		return null
+	}
+
+	function isMarkWithinExpectation(markValue, expectation) {
+		if (!expectation || !Number.isFinite(markValue)) return true
+		const tolerance = 0.01
+		if (expectation.type === 'fixed') {
+			return Math.abs(markValue - expectation.value) <= tolerance
+		}
+		return markValue >= (expectation.min - tolerance) && markValue <= (expectation.max + tolerance)
+	}
+
+	function getCategoryMarkMismatchWarning(category, numericMarks, paragraphInfoIndex = null, selectedParasOverride = null) {
+		const marksValue = Number.isFinite(numericMarks) ? numericMarks : Number(categoryMarks[category])
+		if (!Number.isFinite(marksValue)) return null
+		const selectedParas = selectedParasOverride || getSelectedParagraphsInCategory(category, paragraphInfoIndex)
+		if (selectedParas.length === 0) return null
+
+		for (const para of selectedParas) {
+			const expectation = getParagraphMarkExpectation(para, category)
+			if (!expectation) {
+				continue
+			}
+			if (!isMarkWithinExpectation(marksValue, expectation)) {
+				const expectedText = expectation.type === 'fixed'
+					? `${expectation.value} mark${expectation.value === 1 ? '' : 's'}`
+					: `${expectation.min} - ${expectation.max} marks`
+				return {
+					type: 'markMismatch',
+					color: expectation.color,
+					expected: expectedText
+				}
+			}
+		}
+
+		return null
+	}
+
+	function getCategoryWarningState(category, paragraphInfoIndex = null) {
+		const marksValue = categoryMarks[category]
+		const hasMarks = hasMarksValue(marksValue)
+		const selectedParagraphsForCategory = getSelectedParagraphsInCategory(category, paragraphInfoIndex)
+		const hasSelectedParagraphs = selectedParagraphsForCategory.length > 0
+
+		if (hasMarks && !hasSelectedParagraphs) {
+			return { type: 'missingParagraphs' }
+		}
+
+		if (doesCategoryRequireMarks(category) && hasSelectedParagraphs && !hasMarks) {
+			return { type: 'missingMarks' }
+		}
+
+		if (hasMarks && hasSelectedParagraphs) {
+			const parsedMarks = Number(marksValue)
+			if (Number.isFinite(parsedMarks)) {
+				const mismatchWarning = getCategoryMarkMismatchWarning(category, parsedMarks, paragraphInfoIndex, selectedParagraphsForCategory)
+				if (mismatchWarning) {
+					return mismatchWarning
+				}
+			}
+		}
+
+		return null
+	}
+
+	function refreshCategoryWarnings() {
+		const categoriesToCheck = new Set(Object.keys(categoryMarks))
+		if (currentAssessment?.categories) {
+			currentAssessment.categories.forEach(cat => categoriesToCheck.add(cat.name))
+		}
+
+		const paragraphInfoIndex = buildParagraphInfoIndex()
+		const nextWarnings = {}
+		categoriesToCheck.forEach(category => {
+			const warning = getCategoryWarningState(category, paragraphInfoIndex)
+			if (warning) {
+				nextWarnings[category] = warning
+			}
+		})
+
+		categoryWarnings = nextWarnings
+	}
+
 	function updateCategoryMarks(category, marks) {
 		categoryMarks[category] = marks
 		categoryMarks = {...categoryMarks} // trigger reactivity
 		
-		// Check if any paragraphs under this category are selected
-		if (marks && marks.trim() !== '') {
-			const hasSelectedParagraphs = checkCategoryHasSelectedParagraphs(category)
-			categoryWarnings[category] = !hasSelectedParagraphs
-			categoryWarnings = {...categoryWarnings} // trigger reactivity
-		} else {
-			// Clear warning if marks are empty
-			categoryWarnings[category] = false
-			categoryWarnings = {...categoryWarnings} // trigger reactivity
-		}
+		refreshCategoryWarnings()
 		
 		saveAssessmentData()
 	}
@@ -1264,12 +1470,17 @@
 				}
 			}
 		}
+		refreshCategoryWarnings()
 	}
 
 	function getCategoryAllocatedMarks(categoryName) {
 		if (!currentAssessment?.categories || !categoryName) return undefined
 		const category = currentAssessment.categories.find(cat => cat.name === categoryName)
-		return category?.allocatedMarks
+		if (!category) return undefined
+		const rawValue = category.allocatedMarks
+		if (rawValue === undefined || rawValue === null) return undefined
+		const numericValue = typeof rawValue === 'string' ? parseFloat(rawValue) : rawValue
+		return Number.isFinite(numericValue) ? numericValue : undefined
 	}
 
 	function getTotalMarks() {
@@ -1601,6 +1812,8 @@
 				}
 			}
 		}
+
+		refreshCategoryWarnings()
 	}
 
 	function deletePercentageRange(id) {
@@ -1620,6 +1833,8 @@
 				}
 			}
 		}
+
+		refreshCategoryWarnings()
 	}
 
 	// Sort students alphabetically by display name
@@ -2584,14 +2799,7 @@
 			selected: Array.from(selectedParagraphs)
 		})
 		
-		// Update warnings for all categories with marks
-		Object.keys(categoryMarks).forEach(category => {
-			if (categoryMarks[category] && categoryMarks[category].trim() !== '') {
-				const hasSelectedParagraphs = checkCategoryHasSelectedParagraphs(category)
-				categoryWarnings[category] = !hasSelectedParagraphs
-			}
-		})
-		categoryWarnings = {...categoryWarnings} // trigger reactivity
+		refreshCategoryWarnings()
 		
 		saveAssessmentData()
 	}
@@ -2671,14 +2879,7 @@
 			}
 		}
 		
-		// Update warnings for all categories with marks
-		Object.keys(categoryMarks).forEach(category => {
-			if (categoryMarks[category] && categoryMarks[category].trim() !== '') {
-				const hasSelectedParagraphs = checkCategoryHasSelectedParagraphs(category)
-				categoryWarnings[category] = !hasSelectedParagraphs
-			}
-		})
-		categoryWarnings = {...categoryWarnings} // trigger reactivity
+		refreshCategoryWarnings()
 		
 		// Save assignment data (without the deleted paragraph)
 		saveAssessmentData()
@@ -2866,14 +3067,33 @@
 				if (effectiveMode === 'fixed') {
 					const colorMarkValue = getCategoryColorMarkValue(finalCategory, color)
 					if (colorMarkValue !== undefined) {
-						paragraphMarkInfo = { type: 'fixed', value: colorMarkValue }
+						const numericValue = parseNumericMarkValue(colorMarkValue)
+						paragraphMarkInfo = { 
+							type: 'fixed', 
+							value: colorMarkValue, 
+							numericValue: Number.isFinite(numericValue) ? numericValue : null,
+							color
+						}
 					}
 				} else if (effectiveMode === 'percentage') {
 					const categoryObj = currentAssessment?.categories?.find(cat => cat.name === finalCategory)
 					const allocatedMarks = categoryObj?.allocatedMarks
 					const range = getMarksRange(color, allocatedMarks)
+					const bounds = getColorPercentageBounds(color)
+					let minMarks = null
+					let maxMarks = null
+					if (bounds && Number.isFinite(allocatedMarks)) {
+						minMarks = Number((allocatedMarks * bounds.lower).toFixed(2))
+						maxMarks = Number((allocatedMarks * bounds.upper).toFixed(2))
+					}
 					if (range) {
-						paragraphMarkInfo = { type: 'percentage', value: range }
+						paragraphMarkInfo = { 
+							type: 'percentage', 
+							value: range,
+							min: Number.isFinite(minMarks) ? Math.min(minMarks, maxMarks) : null,
+							max: Number.isFinite(maxMarks) ? Math.max(minMarks, maxMarks) : null,
+							color
+						}
 					}
 				}
 			}
@@ -2890,6 +3110,22 @@
 		})
 		
 		return Object.values(grouped)
+	}
+
+	function buildParagraphInfoIndex() {
+		const index = {}
+		const groupedParagraphs = getGroupedParagraphs()
+		groupedParagraphs.forEach(group => {
+			Object.values(group.knowledgeAreas || {}).forEach(paragraphsInArea => {
+				paragraphsInArea.forEach(paragraphObj => {
+					index[paragraphObj.id] = {
+						...paragraphObj,
+						category: group.category
+					}
+				})
+			})
+		})
+		return index
 	}
 
 	function getSelectedTextInVisualOrder() {
@@ -3353,7 +3589,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.2.3</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.2.4</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
@@ -4126,7 +4362,13 @@
 															<div class="d-flex align-items-center">
 																<i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
 																<small class="mb-0 fw-bold">
-																	Warning: No paragraphs selected for this category. Marks entered will not be included in the final report.
+																	{#if categoryWarnings[group.category]?.type === 'missingMarks'}
+																		Warning: Paragraphs selected for this category but no marks entered. Please enter marks to include them in the final report.
+																	{:else if categoryWarnings[group.category]?.type === 'markMismatch'}
+																		Warning: Entered marks ({categoryMarks[group.category] || 0}) do not match the selected paragraph's mark range ({categoryWarnings[group.category].expected}). Adjust marks or paragraph selection.
+																	{:else}
+																		Warning: No paragraphs selected for this category. Marks entered will not be included in the final report.
+																	{/if}
 																</small>
 															</div>
 														</div>
@@ -4148,7 +4390,10 @@
 																	</div>
 																{/if}
 																	{#each paragraphs as {text, color, id, originalIndex, fullText, source, markInfo}}
-																<div class="border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}">
+																<div 
+																	class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
+																	class:selected-paragraph={selectedParagraphs.has(id)}
+																>
 																	<div class="d-flex align-items-start">
 																		{#if currentStudentId}
 																			<div class="form-check me-3 d-flex align-items-center">

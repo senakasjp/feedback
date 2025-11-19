@@ -1,6 +1,6 @@
 # User Guide
 
-## Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
+## Version 3.2.4 - Total Marks Display & Enhanced Text Formatting
 
 ### 🎯 **Total Marks Display**
 

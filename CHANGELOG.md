@@ -18,7 +18,7 @@
 - `src/App.svelte` – category creation/editing flow, badge logic, copy updates
 - `README.md`, `FEATURE_SUMMARY.md`, `USER_GUIDE.md`, `CHANGELOG.md` – documentation for the new workflow
 
-### v3.2.3 - Total Marks Display & Font Color Support - January 2025
+### v3.2.4 - Total Marks Display & Font Color Support - January 2025
 
 #### 🎯 **NEW FEATURE: Total Marks Display**
 Added real-time total marks display in multiple locations for better assessment tracking:

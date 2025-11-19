@@ -1,4 +1,4 @@
-# Feedback Manager v3.2.3
+# Feedback Manager v3.2.4
 
 A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, contamination prevention, visual debugging tools, real-time total marks display, and enhanced text formatting capabilities.
 
@@ -16,7 +16,7 @@ This incremental release focuses on making assessment categories smarter and ens
 - **Calculator Integration**: The sidebar calculator remains the single source of truth for percentage ranges; ranges automatically apply to every category using the `Percentage` type
 - **Clear Messaging**: Documentation and UI copy guide users to update category types instead of relying on a hidden toggle
 
-## 🎉 Version 3.2.3 - Total Marks Display & Enhanced Text Formatting
+## 🎉 Version 3.2.4 - Total Marks Display & Enhanced Text Formatting
 
 This release introduces real-time total marks display and enhanced text formatting capabilities:
 

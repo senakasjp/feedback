@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-## Version 3.2.3 - Latest Issues and Solutions
+## Version 3.2.4 - Latest Issues and Solutions
 
 ### Total Marks Display Issues
 
@@ -224,7 +224,7 @@ await loadStudentEvaluation(); // Reload from storage
 ### Support Information
 
 #### Version Check
-Current version: 3.2.3
+Current version: 3.2.4
 - Real-time total marks display
 - Enhanced text formatting with font colors
 - Student-centric selection storage
