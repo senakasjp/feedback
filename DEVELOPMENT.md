@@ -1,5 +1,8 @@
 # Development Guide
 
+> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+
+
 ## Latest Updates (v3.2.4)
 
 ### Total Marks Display Implementation

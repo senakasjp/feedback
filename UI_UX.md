@@ -1,5 +1,8 @@
 # UI/UX Design System Documentation
 
+> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+
+
 ## Overview
 
 This document provides a complete guide to recreate the UI/UX system used in the Feedback Manager application. The system is built on Bootstrap 5 with custom Svelte components, featuring a modern, professional design with consistent patterns for modals, notifications, cards, interactive elements, and comprehensive debugging tools.

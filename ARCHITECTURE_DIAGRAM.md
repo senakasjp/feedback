@@ -1,5 +1,8 @@
 # Feedback Application Architecture Diagram
 
+> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+
+
 ## Latest Architecture Updates (v3.2.4)
 
 ### Total Marks Display Architecture

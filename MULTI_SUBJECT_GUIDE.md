@@ -1,5 +1,8 @@
 # Multi-Subject Feedback Manager
 
+> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+
+
 ## Overview
 
 The Feedback Manager has been enhanced to support multiple subjects, each containing multiple assessments. This allows for better organization of feedback data, separate PDF generation for different contexts, and comprehensive debugging tools for troubleshooting issues.

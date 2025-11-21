@@ -1,5 +1,8 @@
 # Changelog
 
+> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+
+
 ## Version History
 
 ### v3.2.4 - Category Marking Modes & Percentage Display - January 2025

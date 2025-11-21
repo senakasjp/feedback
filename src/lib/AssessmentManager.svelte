@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core'
 	import { getDynamicColor, getGradeColor } from './colorUtils.js'
-	import { generateCSVContent } from './printUtils.js'
+import { generateCSVContent } from './printUtils.js'
+import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../utils/exportColumns.js'
 	import jsPDF from 'jspdf'
 
   // Types
@@ -75,6 +76,122 @@
 	let studentsWithMarks = $state([]); // Students who have marks for this subject
 	let editingWeight = $state({}); // Track which weight is being edited
 	let tempWeightValue = $state(''); // Temporary value while editing
+	let hiddenColumnsInput = $state('');
+	let hiddenColumnsSet = $derived(buildHiddenColumnSet(hiddenColumnsInput));
+	let exportColumnOptions = $derived(
+		(() => {
+			const options = [
+				{
+					id: 'column-number',
+					label: '#',
+					description: 'Row number',
+					aliases: ['#', 'number', 'row']
+				},
+				{
+					id: 'column-student-name',
+					label: 'Student Name',
+					description: 'Student full name',
+					aliases: ['student name', 'student']
+				},
+				{
+					id: 'column-student-id',
+					label: 'Student ID',
+					description: 'Student identifier',
+					aliases: ['student id', 'id']
+				}
+			];
+
+			assessments.forEach((assessment) => {
+				const marksLabel = `${assessment.name} (Marks)`;
+				options.push({
+					id: `column-${assessment.id}-marks`,
+					label: marksLabel,
+					description: 'Raw marks column',
+					aliases: [`${assessment.name} (marks)`]
+				});
+
+				const weightDisplay = assessment.weight ?? 0;
+				const weightLabel = `${assessment.name} (${weightDisplay}%)`;
+				options.push({
+					id: `column-${assessment.id}-weight`,
+					label: weightLabel,
+					description: 'Weighted score / percentage',
+					aliases: [
+						`${assessment.name} (${assessment.weight ?? 0}%)`,
+						`${assessment.name} (%)`,
+						`${assessment.name} percent`,
+						`${assessment.name} weight`
+					]
+				});
+			});
+
+			options.push({
+				id: 'column-final-grade',
+				label: 'Final Grade',
+				description: 'Overall grade',
+				aliases: ['final grade', 'grade']
+			});
+
+			return options;
+		})()
+	);
+	let showColumnDropdown = $state(false);
+	let columnDropdownContainer = $state<HTMLElement | null>(null);
+
+	function getHiddenColumnsMap() {
+		const map = new Map<string, string>();
+		if (!hiddenColumnsInput) {
+			return map;
+		}
+
+		hiddenColumnsInput
+			.split(',')
+			.map(entry => entry.trim())
+			.filter(Boolean)
+			.forEach(entry => {
+				map.set(normalizeColumnLabel(entry), entry);
+			});
+
+		return map;
+	}
+
+	function handleColumnCheckboxChange(columnLabel: string, hideColumn: boolean) {
+		const normalizedLabel = normalizeColumnLabel(columnLabel);
+		const entries = getHiddenColumnsMap();
+
+		if (hideColumn) {
+			entries.set(normalizedLabel, columnLabel);
+		} else {
+			entries.delete(normalizedLabel);
+		}
+
+		hiddenColumnsInput = Array.from(entries.values()).join(', ');
+	}
+
+	function toggleColumnDropdown(event: MouseEvent) {
+		event.stopPropagation();
+		showColumnDropdown = !showColumnDropdown;
+	}
+
+	function closeColumnDropdown() {
+		showColumnDropdown = false;
+	}
+
+	$effect(() => {
+		function handleDocumentClick(event: MouseEvent) {
+			if (!showColumnDropdown || !columnDropdownContainer) {
+				return;
+			}
+
+			const target = event.target as Node | null;
+			if (target && !columnDropdownContainer.contains(target)) {
+				closeColumnDropdown();
+			}
+		}
+
+		document.addEventListener('click', handleDocumentClick);
+		return () => document.removeEventListener('click', handleDocumentClick);
+	});
 
 	// Duplicate assessment state
 	let showDuplicateDialog = $state(false);
@@ -532,110 +649,139 @@
 		
 		yPosition += 10;
 		
-		// Create proper column layout with fixed widths
-		const basicHeaders = ['#', 'Student Name', 'Student ID'];
-		const allHeaders = [...basicHeaders, 'Final Grade'];
-		
-		// Add assessment columns (2 per assessment: Marks and Percentage)
-		assessments.forEach((assessment) => {
-			allHeaders.push(`${assessment.name} (Marks)`);
-			allHeaders.push(`${assessment.name} (${assessment.weight}%)`);
-		});
-		
-		// Calculate column widths - give more space to student names and assessment names
-		const totalCols = basicHeaders.length + (assessments.length * 2) + 1; // +1 for Final Grade
+		// Build export columns with hide support
 		const availableWidth = pageWidth - (margin * 2);
-		
-		// Define column widths based on content type
-		const colWidths = [];
-		basicHeaders.forEach((header, index) => {
-			if (header === 'Student Name') {
-				colWidths.push(availableWidth * 0.25); // 25% for student names
-			} else {
-				colWidths.push(availableWidth * 0.08); // 8% for # and Student ID
+		const hiddenColumns = hiddenColumnsSet || new Set();
+
+		const basicColumnBlueprints = [
+			{
+				header: '#',
+				ratio: 0.08,
+				aliases: ['#', 'number', 'row'],
+				allowWrap: false,
+				getValue: (_student, index) => String(index + 1)
+			},
+			{
+				header: 'Student Name',
+				ratio: 0.25,
+				aliases: ['student name', 'student'],
+				allowWrap: true,
+				getValue: (student) => student.name
+			},
+			{
+				header: 'Student ID',
+				ratio: 0.08,
+				aliases: ['student id', 'id'],
+				allowWrap: false,
+				getValue: (student) => student.studentId || 'N/A'
+			}
+		];
+
+		const visibleBasicColumns = basicColumnBlueprints
+			.filter((column) => !isColumnHidden(hiddenColumns, column.header, column.aliases || []))
+			.map((column) => ({ ...column, width: 0 }));
+
+		const visibleAssessmentColumns = [];
+		assessments.forEach((assessment) => {
+			const marksHeader = `${assessment.name} (Marks)`;
+			if (!isColumnHidden(hiddenColumns, marksHeader, `${assessment.name} (marks)`)) {
+				visibleAssessmentColumns.push({
+					header: marksHeader,
+					allowWrap: false,
+					width: 0,
+					getValue: (student) => {
+						const marks = getStudentMarks(student.id, assessment.id);
+						return marks && marks.hasMarks ? String(marks.total) : 'No marks';
+					}
+				});
+			}
+
+			const weightHeader = `${assessment.name} (${assessment.weight}%)`;
+			if (!isColumnHidden(hiddenColumns, weightHeader, `${assessment.name} (%)`, `${assessment.name} percent`, `${assessment.name} weight`)) {
+				visibleAssessmentColumns.push({
+					header: weightHeader,
+					allowWrap: false,
+					width: 0,
+					getValue: (student) => {
+						const weighted = getWeightedMarks(student.id, assessment.id);
+						return weighted ? weighted.displayValue : 'N/A';
+					}
+				});
 			}
 		});
-		
-		// Assessment columns - share remaining space equally
-		const remainingWidth = availableWidth - colWidths.reduce((sum, width) => sum + width, 0) - (availableWidth * 0.1); // 10% for Final Grade
-		const assessmentColWidth = remainingWidth / (assessments.length * 2);
-		
-		assessments.forEach(() => {
-			colWidths.push(assessmentColWidth); // Marks column
-			colWidths.push(assessmentColWidth); // Weighted column
+
+		const includeFinalGrade = !isColumnHidden(hiddenColumns, 'Final Grade', 'grade');
+		const finalGradeColumn = includeFinalGrade
+			? {
+					header: 'Final Grade',
+					ratio: 0.1,
+					allowWrap: false,
+					width: 0,
+					getValue: (student) => getFinalGrade(student.id)
+				}
+			: null;
+
+		const columnConfigs = [
+			...visibleBasicColumns,
+			...visibleAssessmentColumns,
+			...(finalGradeColumn ? [finalGradeColumn] : [])
+		];
+
+		if (columnConfigs.length === 0) {
+			showSuccessNotification('All export columns are hidden. Please update the hide columns textbox and try again.');
+			return;
+		}
+
+		// Calculate widths
+		let usedWidth = 0;
+		visibleBasicColumns.forEach((column) => {
+			column.width = availableWidth * column.ratio;
+			usedWidth += column.width;
 		});
-		
-		colWidths.push(availableWidth * 0.1); // Final Grade
-		
-		// Calculate maximum header height needed for word wrapping
-		let maxHeaderHeight = 8; // Base height
-		let allHeaderLines = [];
-		
-		// Check basic headers
-		basicHeaders.forEach((header, index) => {
-			const lines = doc.splitTextToSize(header, colWidths[index] - 4);
-			allHeaderLines.push(lines);
+
+		if (finalGradeColumn) {
+			finalGradeColumn.width = availableWidth * finalGradeColumn.ratio;
+			usedWidth += finalGradeColumn.width;
+		}
+
+		const assessmentColumnCount = visibleAssessmentColumns.length;
+		const remainingWidth = Math.max(availableWidth - usedWidth, 0);
+		const assessmentColumnWidth = assessmentColumnCount > 0 ? remainingWidth / assessmentColumnCount : 0;
+
+		visibleAssessmentColumns.forEach((column) => {
+			column.width = assessmentColumnWidth;
+		});
+
+		// Prepare headers with wrapping support
+		let maxHeaderHeight = 8;
+		const headerLines = columnConfigs.map((column) => {
+			const headerWidth = Math.max(column.width - 4, 20);
+			const lines = doc.splitTextToSize(column.header, headerWidth);
 			maxHeaderHeight = Math.max(maxHeaderHeight, lines.length * 4);
+			return lines;
 		});
-		
-		// Check assessment headers
-		assessments.forEach((assessment, assessmentIndex) => {
-			const marksHeader = `${assessment.name} (Marks)`;
-			const weightHeader = `${assessment.name} (${assessment.weight}%)`;
 
-			const marksLines = doc.splitTextToSize(marksHeader, colWidths[basicHeaders.length + (assessmentIndex * 2)] - 4);
-			const weightLines = doc.splitTextToSize(weightHeader, colWidths[basicHeaders.length + (assessmentIndex * 2) + 1] - 4);
-
-			allHeaderLines.push(marksLines, weightLines);
-			maxHeaderHeight = Math.max(maxHeaderHeight, marksLines.length * 4, weightLines.length * 4);
-		});
-		
-		// Check final grade header
-		const finalGradeLines = doc.splitTextToSize('Final Grade', colWidths[colWidths.length - 1] - 4);
-		allHeaderLines.push(finalGradeLines);
-		maxHeaderHeight = Math.max(maxHeaderHeight, finalGradeLines.length * 4);
-		
-		// Add padding to header height - dynamic based on content
 		const headerHeight = Math.max(15, maxHeaderHeight + 6);
-		
-		// Draw header background with light gray
-		doc.setFillColor(248, 249, 250);
-		doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
-		
-		// Headers with proper width constraints (same as feedback report)
-		doc.setTextColor(0, 0, 0);
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(10); // Same as feedback report
-		
-		let xPosition = margin;
-		let headerLineIndex = 0;
-		
-		basicHeaders.forEach((header, index) => {
-			const lines = allHeaderLines[headerLineIndex++];
-			doc.text(lines, xPosition + 2, yPosition + 2);
-			xPosition += colWidths[index];
-		});
-		
-		// Assessment headers with proper width constraints
-		assessments.forEach((assessment, assessmentIndex) => {
-			// Marks header
-			const marksLines = allHeaderLines[headerLineIndex++];
-			doc.text(marksLines, xPosition + 2, yPosition + 2);
-			xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2)];
 
-			// Percentage header
-			const weightLines = allHeaderLines[headerLineIndex++];
-			doc.text(weightLines, xPosition + 2, yPosition + 2);
-			xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2) + 1];
-		});
-		
-		// Final Grade header
-		const finalGradeHeaderLines = allHeaderLines[headerLineIndex++];
-		doc.text(finalGradeHeaderLines, xPosition + 2, yPosition + 2);
-		
-		// Reset text color for table content and position below header
-		doc.setTextColor(0, 0, 0);
-		yPosition += headerHeight + 5; // Position data below header background with dynamic gap
+		const drawHeaderRow = () => {
+			doc.setFont('helvetica', 'bold');
+			doc.setFontSize(10);
+			doc.setFillColor(248, 249, 250);
+			doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
+
+			let xPosition = margin;
+			headerLines.forEach((lines, index) => {
+				doc.text(lines, xPosition + 2, yPosition + 2);
+				xPosition += columnConfigs[index].width;
+			});
+
+			doc.setTextColor(0, 0, 0);
+			yPosition += headerHeight + 5;
+			doc.setFont('helvetica', 'normal');
+			doc.setFontSize(10);
+		};
+
+		drawHeaderRow();
 		
 		// Check if table fits on current page, if not start on new page
 		const estimatedRowHeight = 8; // Estimated height per student row
@@ -664,38 +810,7 @@
 			
 			yPosition += 10;
 			
-			// Redraw table headers on new page
-			doc.setFont('helvetica', 'bold');
-			doc.setFontSize(10);
-			
-			// Draw header background with light gray
-			doc.setFillColor(248, 249, 250);
-			doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
-			
-			// Redraw all headers
-			let xPosition = margin;
-			let headerLineIndex = 0;
-			
-			basicHeaders.forEach((header, index) => {
-				const lines = allHeaderLines[headerLineIndex++];
-				doc.text(lines, xPosition + 2, yPosition + 2);
-				xPosition += colWidths[index];
-			});
-			
-			assessments.forEach((assessment, assessmentIndex) => {
-				const marksLines = allHeaderLines[headerLineIndex++];
-				doc.text(marksLines, xPosition + 2, yPosition + 2);
-				xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2)];
-
-				const weightLines = allHeaderLines[headerLineIndex++];
-				doc.text(weightLines, xPosition + 2, yPosition + 2);
-				xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2) + 1];
-			});
-			
-			const finalGradeHeaderLines = allHeaderLines[headerLineIndex++];
-			doc.text(finalGradeHeaderLines, xPosition + 2, yPosition + 2);
-			
-			yPosition += headerHeight + 5;
+			drawHeaderRow();
 		}
 		
 		// Add table data (same as feedback report)
@@ -727,98 +842,32 @@
 				
 				yPosition += 10;
 				
-				// Redraw table headers on new page
-				doc.setFont('helvetica', 'bold');
-				doc.setFontSize(10);
-				
-				// Draw header background with light gray
-				doc.setFillColor(248, 249, 250);
-				doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
-				
-				// Redraw all headers
-				let xPosition = margin;
-				let headerLineIndex = 0;
-				
-				basicHeaders.forEach((header, index) => {
-					const lines = allHeaderLines[headerLineIndex++];
-					doc.text(lines, xPosition + 2, yPosition + 2);
-					xPosition += colWidths[index];
-				});
-				
-				assessments.forEach((assessment, assessmentIndex) => {
-					const marksLines = allHeaderLines[headerLineIndex++];
-					doc.text(marksLines, xPosition + 2, yPosition + 2);
-					xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2)];
-
-					const weightLines = allHeaderLines[headerLineIndex++];
-					doc.text(weightLines, xPosition + 2, yPosition + 2);
-					xPosition += colWidths[basicHeaders.length + (assessmentIndex * 2) + 1];
-				});
-				
-				const finalGradeHeaderLines = allHeaderLines[headerLineIndex++];
-				doc.text(finalGradeHeaderLines, xPosition + 2, yPosition + 2);
-				
-				yPosition += headerHeight + 5;
-				
-				// Reset font for data
-				doc.setFont('helvetica', 'normal');
-				doc.setFontSize(10);
+				drawHeaderRow();
 			}
 			
-			const rowData = [
-				String(index + 1),
-				student.name,
-				student.studentId
-			];
-			
-			assessments.forEach(assessment => {
-				const marks = getStudentMarks(student.id, assessment.id);
-				if (marks && marks.hasMarks) {
-					rowData.push(String(marks.total));
-				} else {
-					rowData.push('No marks');
-				}
-				
-				const weighted = getWeightedMarks(student.id, assessment.id);
-				const weightedValue = weighted ? weighted.displayValue : 'N/A';
-				rowData.push(weightedValue);
-			});
-			
-			const finalGrade = getFinalGrade(student.id);
-			rowData.push(finalGrade);
+			const rowData = columnConfigs.map((column) => column.getValue(student, index));
 			
 			// Draw row data with proper column widths
-			xPosition = margin;
+			let xPosition = margin;
 			let maxCellHeight = 6; // Default row height
 			
-				rowData.forEach((cellData, cellIndex) => {
-					let displayText = String(cellData);
-					const currentColWidth = colWidths[cellIndex];
+			rowData.forEach((cellData, cellIndex) => {
+				const column = columnConfigs[cellIndex];
+				let displayText = String(cellData ?? '');
+				const currentColWidth = column.width;
+				const cellLines = doc.splitTextToSize(displayText, Math.max(currentColWidth - 4, 10));
 
-					// For student names, truncate to first three words if more than three words
-					if (cellIndex === 1) { // Student Name column
-						const words = displayText.split(' ');
-						if (words.length > 3) {
-							displayText = words.slice(0, 3).join(' ') + '...';
-						}
+				if (column.allowWrap) {
+					doc.text(cellLines, xPosition + 2, yPosition);
+					if (cellLines.length > 1) {
+						maxCellHeight = Math.max(maxCellHeight, cellLines.length * 4);
 					}
+				} else {
+					doc.text(cellLines[0] || '', xPosition + 2, yPosition);
+				}
 
-					// Use word wrapping for table cells with proper width constraint
-					const cellLines = doc.splitTextToSize(displayText, currentColWidth - 4);
-
-					// For student names, use word wrapping and track height
-					if (cellIndex === 1) { // Student Name column
-						doc.text(cellLines, xPosition + 2, yPosition);
-						if (cellLines.length > 1) {
-							maxCellHeight = Math.max(maxCellHeight, cellLines.length * 4);
-						}
-					} else {
-						// For other columns, use first line if it wraps
-						doc.text(cellLines[0] || '', xPosition + 2, yPosition);
-					}
-
-					xPosition += currentColWidth;
-				});
+				xPosition += currentColWidth;
+			});
 			yPosition += maxCellHeight;
 		});
 		
@@ -1012,7 +1061,8 @@
 				assessments,
 				getStudentMarks,
 				getWeightedMarks,
-				getFinalGrade
+				getFinalGrade,
+				hiddenColumnsSet
 			);
 
 			console.log('📄 CSV Export: Generated content length:', csvContent.length);
@@ -1023,7 +1073,11 @@
 			if (!csvContent) {
 				console.log('❌ CSV Export: No content generated');
 				addCheckboxDebug('❌ CSV Export: No content generated');
-				showSuccessNotification('No data to export');
+				if (studentsWithMarks.length === 0 || assessments.length === 0) {
+					showSuccessNotification('No data to export');
+				} else {
+					showSuccessNotification('All export columns are hidden. Please update the hide columns textbox and try again.');
+				}
 				return;
 			}
 
@@ -1647,31 +1701,90 @@
 			<div class="row mt-5">
 				<div class="col-12">
 					<div class="card">
-						<div class="card-header d-flex justify-content-between align-items-center">
+						<div class="card-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
 							<div>
 								<h5 class="card-title mb-0">
 									<i class="bi bi-people me-2"></i>Students with Marks
 								</h5>
-								<p class="text-muted mb-0 small">Students who have marks for assessments in this subject</p>
-    </div>
-							<div class="btn-group" role="group">
-								<!-- Test button - always enabled -->
-								<button 
-									class="btn btn-outline-danger btn-sm"
-									onclick={handlePrintToDownload}
-									title="Generate and download PDF marks report"
-								>
-									<i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
-								</button>
-							<button 
-								class="btn btn-outline-success btn-sm"
-								onclick={exportToCSV}
-								disabled={studentsWithMarks.length === 0}
-								title="Export marks to CSV for Excel"
-							>
-								<i class="bi bi-download me-1"></i>Export CSV
-							</button>
-        </div>
+							</div>
+							<div class="d-flex flex-column flex-lg-row align-items-lg-center gap-2 w-100 w-lg-auto">
+								<div class="input-group input-group-sm export-hide-columns-input flex-grow-1 flex-lg-grow-0" style="max-width: 320px;">
+									<span class="input-group-text" id="hide-columns-addon">
+										<i class="bi bi-eye-slash"></i>
+									</span>
+									<input
+										type="text"
+										class="form-control form-control-sm"
+										placeholder="Hide columns e.g. Student ID, Final Grade"
+										title="Enter comma separated column names to exclude from PDF and CSV exports"
+										aria-label="Columns to hide when exporting"
+										aria-describedby="hide-columns-addon"
+										bind:value={hiddenColumnsInput}
+										autocomplete="off"
+										spellcheck={false}
+									>
+								</div>
+									<div class="dropdown flex-shrink-0" bind:this={columnDropdownContainer}>
+										<button
+											class="btn btn-outline-secondary btn-sm dropdown-toggle w-100 w-lg-auto"
+											type="button"
+											id="columnSelectorDropdown"
+											aria-expanded={showColumnDropdown}
+											aria-haspopup="true"
+											title="Choose which columns should be hidden in exports"
+											onclick={toggleColumnDropdown}
+										>
+											<i class="bi bi-columns-gap me-1"></i>Select Columns
+										</button>
+										<div
+											class="dropdown-menu dropdown-menu-end p-3 shadow"
+											class:show={showColumnDropdown}
+											aria-labelledby="columnSelectorDropdown"
+											aria-hidden={!showColumnDropdown}
+											style="min-width: 260px; max-height: 320px; overflow-y: auto; z-index: 1100;"
+										>
+											<p class="text-muted small mb-2">Check the columns you want to hide.</p>
+										{#each exportColumnOptions as column}
+											<div class="form-check mb-2">
+												<input
+													class="form-check-input"
+													type="checkbox"
+													id={`column-hide-${column.id}`}
+													checked={isColumnHidden(hiddenColumnsSet, column.label, column.aliases || [])}
+													onchange={(event) => handleColumnCheckboxChange(column.label, (event.target as HTMLInputElement).checked)}
+												>
+												<label class="form-check-label small" for={`column-hide-${column.id}`}>
+													{column.label}
+													{#if column.description}
+														<span class="text-muted d-block">{column.description}</span>
+													{/if}
+												</label>
+											</div>
+										{/each}
+										{#if exportColumnOptions.length === 0}
+											<p class="text-muted small mb-0">No columns available.</p>
+										{/if}
+									</div>
+								</div>
+								<div class="btn-group" role="group">
+									<!-- Test button - always enabled -->
+									<button 
+										class="btn btn-outline-danger btn-sm"
+										onclick={handlePrintToDownload}
+										title="Generate and download PDF marks report"
+									>
+										<i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+									</button>
+									<button 
+										class="btn btn-outline-success btn-sm"
+										onclick={exportToCSV}
+										disabled={studentsWithMarks.length === 0}
+										title="Export marks to CSV for Excel"
+									>
+										<i class="bi bi-download me-1"></i>Export CSV
+									</button>
+								</div>
+							</div>
 						</div>
 						<div class="card-body p-0">
 							<div class="table-responsive">
@@ -1880,12 +1993,12 @@
   </div>
 
 			<!-- Performance Highlights Cards for Each Assessment -->
-			<div class="row mt-4">
+			<div class="performance-highlights-grid mt-4">
 				{#each assessments as assessment}
 					{@const highlights = getAssessmentPerformanceHighlights(assessment.id)}
 					{#if highlights.highestPerformers.length > 0 || highlights.mediumPerformers.length > 0 || highlights.needsSupport.length > 0}
-						<div class="col-12 col-md-6 col-lg-4 mb-4">
-							<div class="card h-100 shadow-sm">
+						<div class="performance-highlight-card">
+							<div class="card h-100 shadow-sm w-100">
 								<!-- Card Header -->
 								<div class="card-header bg-primary text-white">
 									<div class="d-flex align-items-center">

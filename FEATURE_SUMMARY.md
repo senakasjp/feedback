@@ -1,5 +1,8 @@
 # Feature Implementation Summary - Version 3.2.4
 
+> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+
+
 ## Overview
 This document summarizes the major features implemented in Feedback Manager version 3.2.4. This update focuses on per-category marking modes, smarter percentage handling, and incremental UX polish that keeps feedback creation transparent and predictable.
 

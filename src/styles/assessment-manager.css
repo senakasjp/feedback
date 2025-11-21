@@ -35,3 +35,14 @@
   width: 100%;
   margin-top: auto;
 }
+
+.performance-highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.performance-highlight-card {
+  display: flex;
+  min-width: 0;
+}

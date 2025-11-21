@@ -4,6 +4,7 @@
  */
 
 import jsPDF from 'jspdf';
+import { buildHiddenColumnSet, isColumnHidden } from '../utils/exportColumns.js';
 
 /**
  * Generates a PDF report of student marks table using jsPDF
@@ -158,7 +159,7 @@ export function printToDownload(studentsWithMarks, assessments, subjectName, get
  * @param {Function} getFinalGrade - Function to get final grade for a student
  * @returns {string} CSV content
  */
-export function generateCSVContent(studentsWithMarks, assessments, getStudentMarks, getWeightedMarks, getFinalGrade) {
+export function generateCSVContent(studentsWithMarks, assessments, getStudentMarks, getWeightedMarks, getFinalGrade, hiddenColumnsInput = new Set()) {
     console.log('🔄 CSV Generation: Starting CSV generation');
     console.log('📊 CSV Generation: Input data -', {
         studentsCount: studentsWithMarks.length,
@@ -172,14 +173,43 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
         return '';
     }
 
-    // Create CSV headers
-    const headers = ['Student Name', 'Student ID'];
-    assessments.forEach(assessment => {
-        headers.push(`${assessment.name} (Marks)`);
-        headers.push(`${assessment.name} (Weight % & Weighted)`);
-    });
-    headers.push('Grade');
+    const hiddenColumns = hiddenColumnsInput instanceof Set
+        ? hiddenColumnsInput
+        : buildHiddenColumnSet(typeof hiddenColumnsInput === 'string' ? hiddenColumnsInput : '');
 
+    const includeStudentName = !isColumnHidden(hiddenColumns, 'Student Name', 'student');
+    const includeStudentId = !isColumnHidden(hiddenColumns, 'Student ID', 'id');
+    const includeGradeColumn = !isColumnHidden(hiddenColumns, 'Grade', 'Final Grade');
+
+    const assessmentColumnVisibility = assessments.map(assessment => {
+        const marksHeader = `${assessment.name} (Marks)`;
+        const weightHeader = `${assessment.name} (Weight % & Weighted)`;
+        return {
+            assessment,
+            marksHeader,
+            weightHeader,
+            showMarks: !isColumnHidden(hiddenColumns, marksHeader, `${assessment.name} (marks)`),
+            showWeight: !isColumnHidden(hiddenColumns, weightHeader, `${assessment.name} (%)`, `${assessment.name} percent`, `${assessment.name} weight`)
+        };
+    });
+
+    const headers = [];
+    if (includeStudentName) headers.push('Student Name');
+    if (includeStudentId) headers.push('Student ID');
+
+    assessmentColumnVisibility.forEach(({ marksHeader, weightHeader, showMarks, showWeight }) => {
+        if (showMarks) headers.push(marksHeader);
+        if (showWeight) headers.push(weightHeader);
+    });
+
+    if (includeGradeColumn) headers.push('Grade');
+
+    if (headers.length === 0) {
+        console.log('❌ CSV Generation: All columns hidden, nothing to export');
+        return '';
+    }
+
+    // Create CSV headers
     console.log('📋 CSV Generation: Headers created -', headers);
 
     // Create CSV rows
@@ -188,12 +218,21 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
     studentsWithMarks.forEach((student, index) => {
         console.log(`🔄 CSV Generation: Processing student ${index + 1}:`, student);
         
-        const row = [
-            `"${student.name}"`,
-            `"${student.studentId || 'N/A'}"`
-        ];
+        const row = [];
+
+        if (includeStudentName) {
+            row.push(`"${student.name}"`);
+        }
+
+        if (includeStudentId) {
+            row.push(`"${student.studentId || 'N/A'}"`);
+        }
         
-        assessments.forEach(assessment => {
+        assessmentColumnVisibility.forEach(({ assessment, showMarks, showWeight }) => {
+            if (!showMarks && !showWeight) {
+                return;
+            }
+
             const marks = getStudentMarks(student.id, assessment.id);
             const weighted = getWeightedMarks(student.id, assessment.id);
             
@@ -203,18 +242,32 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
                 assessmentWeight: assessment.weight
             });
             
-            if (marks && marks.hasMarks) {
-                row.push(String(marks.total));
-                row.push(`"${assessment.weight || 0}% (${weighted ? weighted.weightedMarks.toFixed(1) : 0})"`);
-            } else {
-                row.push('No marks');
-                row.push('No marks');
+            if (showMarks) {
+                if (marks && marks.hasMarks) {
+                    row.push(String(marks.total));
+                } else {
+                    row.push('No marks');
+                }
+            }
+
+            if (showWeight) {
+                if (marks && marks.hasMarks) {
+                    const weightedValue = weighted && typeof weighted.weightedMarks === 'number'
+                        ? weighted.weightedMarks.toFixed(1)
+                        : '0';
+                    row.push(`"${assessment.weight || 0}% (${weightedValue})"`);
+                } else {
+                    row.push('No marks');
+                }
             }
         });
         
-        const finalGrade = getFinalGrade(student.id);
-        console.log(`📊 CSV Generation: Final grade for ${student.name}:`, finalGrade);
-        row.push(`"${finalGrade}"`);
+        if (includeGradeColumn) {
+            const finalGrade = getFinalGrade(student.id);
+            console.log(`📊 CSV Generation: Final grade for ${student.name}:`, finalGrade);
+            row.push(`"${finalGrade}"`);
+        }
+
         rows.push(row.join(','));
     });
 

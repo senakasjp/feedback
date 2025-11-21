@@ -1,5 +1,8 @@
 # Debugging Guide - Selection System Issues
 
+> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+
+
 ## Issue 1: Duplicate Paragraph IDs (v3.2.1 - RESOLVED)
 
 ### Problem Description
