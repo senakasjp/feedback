@@ -4397,19 +4397,20 @@
 																	{#if currentAssessment.categories.find(cat => cat.name === group.category)?.allocatedMarks}
 																		<span class="text-white fw-bold" style="font-size: 0.9rem;">
 																			{currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
-																		</span>
+																	</span>
 																	{/if}
 																	<!-- Category reordering buttons (only in assignment mode) -->
 																	{#if !currentStudentId}
-																		{@const categoryObj = currentAssessment.categories.find(cat => cat.name === group.category)}
-																		{@const categoryIndex = currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999)).findIndex(cat => cat.name === group.category)}
+																		{@const sortedCategories = normalizeCategoryOrder(currentAssessment.categories)}
+																		{@const categoryObj = sortedCategories.find(cat => cat.name === group.category)}
+																		{@const categoryIndex = categoryObj ? sortedCategories.findIndex(cat => cat.id === categoryObj.id) : -1}
 																		<div class="d-flex flex-column">
 																			<button 
 																				class="btn btn-sm btn-outline-light" 
 																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
 																				onclick={() => moveCategoryUp(categoryObj.id)}
 																				title="Move category up"
-																				disabled={categoryIndex === 0}
+																				disabled={categoryIndex <= 0}
 																			>
 																				<i class="bi bi-chevron-up"></i>
 																			</button>
@@ -4418,7 +4419,7 @@
 																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
 																				onclick={() => moveCategoryDown(categoryObj.id)}
 																				title="Move category down"
-																				disabled={categoryIndex === currentAssessment.categories.length - 1}
+																				disabled={categoryIndex === -1 || categoryIndex >= sortedCategories.length - 1}
 																			>
 																				<i class="bi bi-chevron-down"></i>
 																			</button>
