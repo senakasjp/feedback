@@ -69,6 +69,8 @@
 	let showStudentTransferModal = $state(false) // Show student transfer modal
 	let showImportModal = $state(false) // Show import paragraphs modal
 	let showExportModal = $state(false) // Show export assignment settings modal
+	let quickAddKnowledgeArea = $state({}) // Store quick-add knowledge area selection per category
+	let quickAddText = $state({}) // Store quick-add paragraph text per category
 	let showAboutModal = $state(false) // Show about modal
 	
 	// Visual debug for checkbox issue
@@ -806,6 +808,59 @@
 			saveStudentParagraphs()
 		}
 		}
+	}
+
+	const quickAddInputId = (categoryName = '') => `quick-add-${categoryName.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+
+	// Prefill category/knowledge area and focus the inline quick-add input
+	function startNewParagraphFor(categoryName, knowledgeAreaName) {
+		if (categoryName) {
+			selectedCategory = categoryName
+		}
+		if (knowledgeAreaName && knowledgeAreaName !== 'No Knowledge Area') {
+			selectedKnowledgeArea = knowledgeAreaName
+			quickAddKnowledgeArea = { ...quickAddKnowledgeArea, [categoryName]: knowledgeAreaName }
+		} else {
+			selectedKnowledgeArea = ''
+		}
+
+		const quickInput = document.getElementById(quickAddInputId(categoryName))
+		if (quickInput) {
+			quickInput.scrollIntoView({ behavior: 'smooth', block: 'center' })
+			quickInput.focus()
+		}
+	}
+
+	function quickAddParagraph(categoryName) {
+		const text = (quickAddText[categoryName] || '').trim()
+		if (!text) return
+
+		let paragraphText = text
+		if (categoryName) {
+			paragraphText = `${categoryName}: ${paragraphText}`
+		}
+
+		const knowledgeArea = quickAddKnowledgeArea[categoryName]
+		if (knowledgeArea) {
+			paragraphText = `${paragraphText} - ${knowledgeArea}`
+		}
+
+		const newPara = {
+			id: generateId(),
+			text: paragraphText,
+			color: undefined,
+			subjectId: currentSubjectId,
+			assessmentId: currentAssessmentId
+		}
+
+		paragraphs.push(newPara)
+		quickAddText = { ...quickAddText, [categoryName]: '' }
+
+		saveAssessmentData()
+		if (currentStudentId) {
+			saveStudentParagraphs()
+		}
+		refreshCategoryWarnings()
 	}
 
 	/**
@@ -2886,15 +2941,6 @@
 		const deletedParagraph = paragraphs[index]
 		const deletedParagraphId = deletedParagraph?.id
 		
-		// Extract category from the paragraph text
-		let deletedCategory = ''
-		if (deletedParagraph?.text && deletedParagraph.text.includes(': ')) {
-			const parts = deletedParagraph.text.split(': ')
-			if (parts.length >= 2) {
-				deletedCategory = parts[0].trim()
-			}
-		}
-		
 		// Remove from paragraphs array (assignment level only)
 		paragraphs.splice(index, 1)
 		
@@ -2902,58 +2948,6 @@
 		if (deletedParagraphId) {
 			selectedParagraphs.delete(deletedParagraphId)
 			selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
-		}
-		
-		// Check if this was the last paragraph in the category
-		if (deletedCategory && currentAssessment?.categories) {
-			// Count remaining paragraphs in this category
-			const remainingParagraphsInCategory = paragraphs.filter(para => {
-				if (para.text && para.text.includes(': ')) {
-					const parts = para.text.split(': ')
-					if (parts.length >= 2) {
-						const category = parts[0].trim()
-						return category === deletedCategory
-					}
-				}
-				return false
-			})
-			
-			// If no paragraphs remain in this category, remove the category
-			if (remainingParagraphsInCategory.length === 0) {
-				console.log(`🗑️ No paragraphs remaining in category "${deletedCategory}". Removing category.`)
-				
-				// Remove category from assessment
-				const categoryToRemove = currentAssessment.categories.find(cat => cat.name === deletedCategory)
-				if (categoryToRemove) {
-					currentAssessment.categories = currentAssessment.categories.filter(cat => cat.id !== categoryToRemove.id)
-					
-					// Update the current subject's assessments
-					if (currentSubject) {
-						const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
-						if (subjectIndex !== -1) {
-							const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
-							if (assessmentIndex !== -1) {
-								subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
-								console.log(`✅ Removed category "${deletedCategory}" from assessment. Remaining categories: ${currentAssessment.categories.length}`)
-								saveSubjects()
-							}
-						}
-					}
-					
-					// Remove category marks and warnings
-					if (categoryMarks[deletedCategory] !== undefined) {
-						delete categoryMarks[deletedCategory]
-						categoryMarks = {...categoryMarks} // trigger reactivity
-					}
-					if (categoryWarnings[deletedCategory] !== undefined) {
-						delete categoryWarnings[deletedCategory]
-						categoryWarnings = {...categoryWarnings} // trigger reactivity
-					}
-					
-					// Show notification
-					showSuccessNotification(`Category "${deletedCategory}" was automatically removed as it had no remaining paragraphs.`)
-				}
-			}
 		}
 		
 		refreshCategoryWarnings()
@@ -4379,7 +4373,7 @@
 											{#each getGroupedParagraphs() as group}
 												<div class="card mb-3 border-start border-info border-4">
 													<div class="card-header bg-info text-white py-2">
-														<div class="d-flex align-items-center w-100">
+														<div class="d-flex align-items-center w-100 mb-2">
 															<div class="flex-grow-1">
 																<h6 class="mb-0 fw-bold">
 																	{#if group.category && group.category !== 'No Knowledge Area'}
@@ -4460,10 +4454,20 @@
 														{:else}
 															{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs]}
 																{#if knowledgeArea !== 'No Knowledge Area'}
-																	<div class="bg-light border-bottom px-3 py-2">
-																		<small class="text-muted fw-bold">
+																	<div class="bg-light border-bottom px-3 py-2 d-flex align-items-center justify-content-between">
+																		<small class="text-muted fw-bold mb-0">
 																			<i class="bi bi-bookmark me-1"></i>{knowledgeArea}
 																		</small>
+																		{#if !currentStudentId}
+																			<button 
+																				type="button"
+																				class="btn btn-link btn-sm text-decoration-none"
+																				onclick={() => startNewParagraphFor(group.category, knowledgeArea)}
+																				title="Add a paragraph to this knowledge area"
+																			>
+																				<i class="bi bi-plus-circle me-1"></i>Add paragraph here
+																			</button>
+																		{/if}
 																	</div>
 																{/if}
 																	{#each paragraphs as {text, color, id, originalIndex, fullText, source, markInfo}}
@@ -4628,6 +4632,62 @@
 														{/each}
 														{/if}
 													</div>
+													{#if !currentStudentId}
+														<div class="card-footer bg-light border-top">
+															<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+																{#if (currentAssessment?.knowledgeAreas || []).length > 0}
+																	<select
+																		class="form-select form-select-sm bg-white text-dark"
+																		style="min-width: 180px;"
+																		value={quickAddKnowledgeArea[group.category] || ''}
+																		onchange={(e) => {
+																			quickAddKnowledgeArea = {
+																				...quickAddKnowledgeArea,
+																				[group.category]: e.currentTarget.value
+																			}
+																		}}
+																	>
+																		<option value="">No knowledge area</option>
+																		{#each (currentAssessment?.knowledgeAreas || []) as area}
+																			<option value={area}>{area}</option>
+																		{/each}
+																	</select>
+																{/if}
+															</div>
+															<div class="d-flex flex-column flex-sm-row gap-2">
+																<textarea
+																	id={quickAddInputId(group.category)}
+																	class="form-control form-control-sm"
+																	rows="2"
+																	placeholder={`Add paragraph to ${group.category}...`}
+																	value={quickAddText[group.category] || ''}
+																	oninput={(e) => {
+																		quickAddText = {
+																			...quickAddText,
+																			[group.category]: e.currentTarget.value
+																		}
+																	}}
+																></textarea>
+																<div class="d-flex flex-column gap-2">
+																	<button
+																		class="btn btn-outline-secondary btn-sm"
+																		type="button"
+																		onclick={() => quickAddParagraph(group.category)}
+																		title="Add a paragraph to this category"
+																	>
+																		<i class="bi bi-plus-circle me-1"></i>Add paragraph
+																	</button>
+																	<button
+																		class="btn btn-link btn-sm text-decoration-none p-0"
+																		type="button"
+																		onclick={() => startNewParagraphFor(group.category, quickAddKnowledgeArea[group.category])}
+																	>
+																		Use main editor
+																	</button>
+																</div>
+															</div>
+														</div>
+													{/if}
 												</div>
 											{/each}
 											
