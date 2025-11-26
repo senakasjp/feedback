@@ -63,6 +63,7 @@
 	let categoryMarks = $state({}) // Store marks for each category
 	let manualTotalMarks = $state('') // Store manually entered total marks
 	let assessmentHtml = $state('') // Custom HTML snippet stored on the assessment
+	let showAssessmentHtml = $state(false)
 	let showTotalMarksWarning = $state(false) // Show warning modal
 	let categoryWarnings = $state({}) // Store per-category warning state (missing paragraphs/marks)
 	let showNotification = $state(false) // Show success notification
@@ -483,6 +484,7 @@
 						currentAssessment.rubricHtml = parsed.rubricHtml
 					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
+					showAssessmentHtml = !!assessmentHtml
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -572,6 +574,7 @@
 						currentAssessment.rubricHtml = parsed.rubricHtml
 					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
+					showAssessmentHtml = !!assessmentHtml
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -594,6 +597,7 @@
 		studentName = ''
 		// No studentImage - only header photo for assessment
 		assessmentHtml = ''
+		showAssessmentHtml = false
 		categoryMarks = {}
 		manualTotalMarks = ''
 		
@@ -3304,7 +3308,7 @@
 		return finalText
 	}
 
-	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth) {
+	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth, matchedCategories = new Set()) {
 		const htmlContent = (assessmentHtml || '').trim()
 		if (!htmlContent) return startY
 
@@ -3405,17 +3409,20 @@
 					const cells = Array.from(row.children)
 					if (cells.length <= dataStartIndex) return
 					const rawLabel = cells[0].textContent || ''
-					const rowKey = normalize(rawLabel)
-					if (allowedRows && !allowedRows.has(rowKey)) {
-						return
-					}
-					const markValue = marksMap[rowKey]
-					if (!Number.isFinite(markValue)) return
+				const rowKey = normalize(rawLabel)
+				if (allowedRows && !allowedRows.has(rowKey)) {
+					return
+				}
+				const markValue = marksMap[rowKey]
+				if (!Number.isFinite(markValue)) return
 
-					// Populate Marks column text if present
-					if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
-						const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === rowKey)
-						const allocated = categoryObj?.allocatedMarks
+				// Track that this category is represented in the table (even if mark is 0)
+				matchedCategories.add(rowKey)
+
+				// Populate Marks column text if present
+				if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
+					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === rowKey)
+					const allocated = categoryObj?.allocatedMarks
 						cells[marksColumnIndex].textContent = allocated ? `${markValue} / ${allocated}` : `${markValue}`
 					}
 
@@ -3819,7 +3826,8 @@
 		doc.setFont('helvetica', 'normal')
 		
 		// Render assessment HTML (as-is) into the PDF before content
-		yPosition = await renderAssessmentHtmlToPdf(doc, yPosition, margin, pageWidth)
+		const matchedCategoriesFromTable = new Set()
+		yPosition = await renderAssessmentHtmlToPdf(doc, yPosition, margin, pageWidth, matchedCategoriesFromTable)
 
 		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
 		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
@@ -3827,10 +3835,11 @@
 		if (hasAssessmentHtml) {
 			Object.entries(categoryMarks || {}).forEach(([name, val]) => {
 				const num = parseFloat(val)
-				if (Number.isFinite(num) && num > 0) {
+				if (Number.isFinite(num)) {
 					skipCategories.add(normalizeCategoryName(name))
 				}
 			})
+			matchedCategoriesFromTable.forEach(cat => skipCategories.add(cat))
 		}
 
 		// Content with smaller font and bold category names
@@ -4161,29 +4170,40 @@
 							<div class="col-12">
 								<div class="card border-warning">
 									<div class="card-header bg-warning text-dark py-2">
-										<h5 class="card-title mb-0">
-											<i class="bi bi-table me-2"></i>Assessment HTML (included in PDF)
-										</h5>
+										<div class="d-flex align-items-center justify-content-between">
+											<h5 class="card-title mb-0">
+												<i class="bi bi-table me-2"></i>Assessment HTML (included in PDF)
+											</h5>
+											<button
+												class="btn btn-sm btn-light"
+												onclick={() => showAssessmentHtml = !showAssessmentHtml}
+												aria-label={showAssessmentHtml ? 'Hide HTML input' : 'Show HTML input'}
+											>
+												{showAssessmentHtml ? 'Hide' : 'Show'}
+											</button>
+										</div>
 									</div>
-									<div class="card-body py-3">
-										<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
-										<textarea
-											id="assessmentHtmlInput"
-											class="form-control"
-											rows="6"
-											bind:value={assessmentHtml}
-											oninput={(e) => {
-												assessmentHtml = e.target.value
-												if (currentAssessment) {
-													currentAssessment.rubricHtml = assessmentHtml
-												}
-											}}
-											placeholder="&lt;table&gt;...&lt;/table&gt;"
-										></textarea>
-										<small class="text-muted d-block mt-2">
-											Use <code>data-color=&quot;yellow&quot;</code> on a cell to highlight it (e.g., <code>&lt;td data-color=&quot;yellow&quot;&gt;Value&lt;/td&gt;</code>). The HTML is inserted into the PDF as-is after the header.
-										</small>
-									</div>
+									{#if showAssessmentHtml}
+										<div class="card-body py-3">
+											<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
+											<textarea
+												id="assessmentHtmlInput"
+												class="form-control"
+												rows="6"
+												bind:value={assessmentHtml}
+												oninput={(e) => {
+													assessmentHtml = e.target.value
+													if (currentAssessment) {
+														currentAssessment.rubricHtml = assessmentHtml
+													}
+												}}
+												placeholder="&lt;table&gt;...&lt;/table&gt;"
+											></textarea>
+											<small class="text-muted d-block mt-2">
+												Use <code>data-color=&quot;yellow&quot;</code> on a cell to highlight it (e.g., <code>&lt;td data-color=&quot;yellow&quot;&gt;Value&lt;/td&gt;</code>). The HTML is inserted into the PDF as-is after the header.
+											</small>
+										</div>
+									{/if}
 								</div>
 							</div>
 						</div>
