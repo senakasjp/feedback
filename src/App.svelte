@@ -3842,8 +3842,9 @@
 		// Render assessment HTML (as-is) into the PDF before content
 		const matchedCategoriesFromTable = new Set()
 		const afterTableY = await renderAssessmentHtmlToPdf(doc, yPosition, margin, pageWidth, matchedCategoriesFromTable)
-		// Reduce whitespace between table and subsequent comments
-		yPosition = Math.max(margin, afterTableY - 6)
+		// Keep table close to the first point without squeezing the rest of the content
+		const gapAfterTable = 2
+		yPosition = Math.max(margin, afterTableY - gapAfterTable)
 
 		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
 		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
@@ -3858,9 +3859,10 @@
 			matchedCategoriesFromTable.forEach(cat => skipCategories.add(cat))
 		}
 
-		// Content with smaller font and bold category names
-		doc.setFontSize(10) // Smaller font size
-		const lineHeight = 4 // Further reduced line height for tighter spacing
+		// Content with comfortable spacing and bold category names
+		const bodyFontSize = 12
+		doc.setFontSize(bodyFontSize)
+		const lineHeight = 6.5 // Comfortable line spacing for readability
 		const pageHeightBody = doc.internal.pageSize.getHeight()
 		let currentCategory = null
 		let skipCurrentCategory = false
@@ -3874,10 +3876,9 @@
 				doc.addPage()
 				yPosition = margin + 10
 			}
-			
-			// Skip empty lines but add minimal spacing
+			// Skip empty lines but keep comfortable spacing between points
 			if (line.trim() === '') {
-				yPosition += lineHeight * 0.3
+				yPosition += lineHeight
 				return
 			}
 			
@@ -3893,14 +3894,14 @@
 
 				// Bold font for category headers only (no marks)
 				doc.setFont('helvetica', 'bold')
-				doc.setFontSize(10) // Same size as other content
+				doc.setFontSize(bodyFontSize) // Same size as other content
 
 				doc.text(`${categoryName}:`, margin, yPosition)
 
 				// Reset font to normal for content
 				doc.setFont('helvetica', 'normal')
-				doc.setFontSize(10) // Back to small font
-				yPosition += lineHeight + 1 // Minimal extra spacing after headers
+				doc.setFontSize(bodyFontSize) // Back to regular size
+				yPosition += lineHeight + 1 // Natural gap after headers
 			} else {
 				if (skipCurrentCategory) return
 				// Regular content - split long lines
