@@ -3811,6 +3811,10 @@
 				yPosition += 8
 			}
 		
+		// Move all report content to a new page after the header block
+		doc.addPage()
+		yPosition = margin
+		
 		// Reset font to normal for content
 		doc.setFont('helvetica', 'normal')
 		
@@ -3829,12 +3833,6 @@
 			})
 		}
 
-		// Add separator line with reduced spacing
-		yPosition += 3
-		doc.setLineWidth(0.5)
-		doc.line(margin, yPosition, pageWidth - margin, yPosition)
-		yPosition += 10
-		
 		// Content with smaller font and bold category names
 		doc.setFontSize(10) // Smaller font size
 		const lineHeight = 4 // Further reduced line height for tighter spacing
