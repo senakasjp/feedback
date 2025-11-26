@@ -4984,62 +4984,60 @@
 														{/each}
 														{/if}
 													</div>
-													{#if !currentStudentId}
-														<div class="card-footer bg-light border-top">
-															<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-																{#if (currentAssessment?.knowledgeAreas || []).length > 0}
-																	<select
-																		class="form-select form-select-sm bg-white text-dark"
-																		style="min-width: 180px;"
-																		value={quickAddKnowledgeArea[group.category] || ''}
-																		onchange={(e) => {
-																			quickAddKnowledgeArea = {
-																				...quickAddKnowledgeArea,
-																				[group.category]: e.currentTarget.value
-																			}
-																		}}
-																	>
-																		<option value="">No knowledge area</option>
-																		{#each (currentAssessment?.knowledgeAreas || []) as area}
-																			<option value={area}>{area}</option>
-																		{/each}
-																	</select>
-																{/if}
-															</div>
-															<div class="d-flex flex-column flex-sm-row gap-2">
-																<textarea
-																	id={quickAddInputId(group.category)}
-																	class="form-control form-control-sm"
-																	rows="2"
-																	placeholder={`Add paragraph to ${group.category}...`}
-																	value={quickAddText[group.category] || ''}
-																	oninput={(e) => {
-																		quickAddText = {
-																			...quickAddText,
+													<div class="card-footer bg-light border-top">
+														<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+															{#if (currentAssessment?.knowledgeAreas || []).length > 0}
+																<select
+																	class="form-select form-select-sm bg-white text-dark"
+																	style="min-width: 180px;"
+																	value={quickAddKnowledgeArea[group.category] || ''}
+																	onchange={(e) => {
+																		quickAddKnowledgeArea = {
+																			...quickAddKnowledgeArea,
 																			[group.category]: e.currentTarget.value
 																		}
 																	}}
-																></textarea>
-																<div class="d-flex flex-column gap-2">
-																	<button
-																		class="btn btn-outline-secondary btn-sm"
-																		type="button"
-																		onclick={() => quickAddParagraph(group.category)}
-																		title="Add a paragraph to this category"
-																	>
-																		<i class="bi bi-plus-circle me-1"></i>Add paragraph
-																	</button>
-																	<button
-																		class="btn btn-link btn-sm text-decoration-none p-0"
-																		type="button"
-																		onclick={() => startNewParagraphFor(group.category, quickAddKnowledgeArea[group.category])}
-																	>
-																		Use main editor
-																	</button>
-																</div>
+																>
+																	<option value="">No knowledge area</option>
+																	{#each (currentAssessment?.knowledgeAreas || []) as area}
+																		<option value={area}>{area}</option>
+																	{/each}
+																</select>
+															{/if}
+														</div>
+														<div class="d-flex flex-column flex-sm-row gap-2">
+															<textarea
+																id={quickAddInputId(group.category)}
+																class="form-control form-control-sm"
+																rows="2"
+																placeholder={`Add paragraph to ${group.category}...`}
+																value={quickAddText[group.category] || ''}
+																oninput={(e) => {
+																	quickAddText = {
+																		...quickAddText,
+																		[group.category]: e.currentTarget.value
+																	}
+																}}
+															></textarea>
+															<div class="d-flex flex-column gap-2">
+																<button
+																	class="btn btn-outline-secondary btn-sm"
+																	type="button"
+																	onclick={() => quickAddParagraph(group.category)}
+																	title="Add a paragraph to this category"
+																>
+																	<i class="bi bi-plus-circle me-1"></i>Add paragraph
+																</button>
+																<button
+																	class="btn btn-link btn-sm text-decoration-none p-0"
+																	type="button"
+																	onclick={() => startNewParagraphFor(group.category, quickAddKnowledgeArea[group.category])}
+																>
+																	Use main editor
+																</button>
 															</div>
 														</div>
-													{/if}
+													</div>
 												</div>
 											{/each}
 											
