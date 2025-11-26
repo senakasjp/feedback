@@ -121,20 +121,27 @@ fn generate_pdf_file(
     let mut y_position = 270.0; // Start from top
     let margin = 20.0;
     
+    // Font sizes and spacing
+    let header_font_size = 10.0;
+    let content_font_size = 9.0; // One level smaller for paragraph text
+    let header_spacing = 4.0;
+    let content_spacing = 3.0;
+    let empty_line_spacing = 1.5;
+
     // Add header information with smaller font size and bold font
     if let Some(subject) = &subject_name {
-        current_layer.use_text(format!("Subject: {}", subject), 10.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 6.0;
+        current_layer.use_text(format!("Subject: {}", subject), header_font_size, Mm(margin), Mm(y_position), &font);
+        y_position -= header_spacing + 1.0;
     }
     
     if let Some(assessment) = &assessment_name {
-        current_layer.use_text(format!("Assessment: {}", assessment), 10.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 5.0;
+        current_layer.use_text(format!("Assessment: {}", assessment), header_font_size, Mm(margin), Mm(y_position), &font);
+        y_position -= header_spacing;
     }
     
     if let Some(student) = &student_name {
-        current_layer.use_text(format!("Student: {}", student), 10.0, Mm(margin), Mm(y_position), &font);
-        y_position -= 5.0;
+        current_layer.use_text(format!("Student: {}", student), header_font_size, Mm(margin), Mm(y_position), &font);
+        y_position -= header_spacing;
     }
     
     // Add separator with reduced spacing
@@ -149,19 +156,19 @@ fn generate_pdf_file(
         }
         
         if line.trim().is_empty() {
-            y_position -= 2.0; // Reduced empty line spacing
+            y_position -= empty_line_spacing; // Reduced empty line spacing
             continue;
         }
         
         // Check if it's a category header (Sub Objective X.X, Sub Learning Objective X.X, Report, Decision followed by ':')
         if line.trim().ends_with(':') && (line.contains("Sub Objective") || line.contains("Sub Learning Objective") || line.contains("Report") || line.contains("Decision")) {
             // Bold font for category headers, same size as content
-            current_layer.use_text(line.to_string(), 10.0, Mm(margin), Mm(y_position), &font);
-            y_position -= 5.0; // Reduced spacing after headers
+            current_layer.use_text(line.to_string(), header_font_size, Mm(margin), Mm(y_position), &font);
+            y_position -= header_spacing; // Reduced spacing after headers
         } else {
             // Regular content with smaller font
-            current_layer.use_text(line.to_string(), 10.0, Mm(margin), Mm(y_position), &regular_font);
-            y_position -= 4.0; // Further reduced line spacing
+            current_layer.use_text(line.to_string(), content_font_size, Mm(margin), Mm(y_position), &regular_font);
+            y_position -= content_spacing; // Further reduced line spacing
         }
     }
     
