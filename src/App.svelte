@@ -3835,6 +3835,9 @@
 		// Move all report content to a new page after the header block
 		doc.addPage()
 		yPosition = margin
+		const contentStartPage = typeof doc.internal.getCurrentPageInfo === 'function'
+			? doc.internal.getCurrentPageInfo().pageNumber
+			: doc.internal.getNumberOfPages()
 		
 		// Reset font to normal for content
 		doc.setFont('helvetica', 'normal')
@@ -3860,9 +3863,23 @@
 		}
 
 		// Content with comfortable spacing and bold category names
-		const bodyFontSize = 12
-		doc.setFontSize(bodyFontSize)
-		const lineHeight = 6.5 // Comfortable line spacing for readability
+		const firstPageBodyFontSize = 10
+		const nextPagesBodyFontSize = 10
+		const firstPageLineHeight = 5.5
+		const nextPagesLineHeight = 5.5 // Tighter spacing to reduce paragraph gaps
+		let lineHeight = nextPagesLineHeight
+		let currentBodyFontSize = nextPagesBodyFontSize
+		const applyBodyFontForCurrentPage = () => {
+			const currentPageNumber = typeof doc.internal.getCurrentPageInfo === 'function'
+				? doc.internal.getCurrentPageInfo().pageNumber
+				: doc.internal.getNumberOfPages()
+			const contentPageIndex = Math.max(1, currentPageNumber - contentStartPage + 1)
+			const isSecondOrLater = contentPageIndex >= 2
+			currentBodyFontSize = isSecondOrLater ? nextPagesBodyFontSize : firstPageBodyFontSize
+			lineHeight = isSecondOrLater ? nextPagesLineHeight : firstPageLineHeight
+			doc.setFontSize(currentBodyFontSize)
+		}
+		applyBodyFontForCurrentPage()
 		const pageHeightBody = doc.internal.pageSize.getHeight()
 		let currentCategory = null
 		let skipCurrentCategory = false
@@ -3874,11 +3891,12 @@
 			// Check if we need a new page
 			if (yPosition > pageHeight - margin) {
 				doc.addPage()
+				applyBodyFontForCurrentPage()
 				yPosition = margin + 10
 			}
 			// Skip empty lines but keep comfortable spacing between points
 			if (line.trim() === '') {
-				yPosition += lineHeight
+				yPosition += lineHeight * 0.6 // smaller gap for empty lines
 				return
 			}
 			
@@ -3894,13 +3912,13 @@
 
 				// Bold font for category headers only (no marks)
 				doc.setFont('helvetica', 'bold')
-				doc.setFontSize(bodyFontSize) // Same size as other content
+				doc.setFontSize(currentBodyFontSize) // Same size as other content
 
 				doc.text(`${categoryName}:`, margin, yPosition)
 
 				// Reset font to normal for content
 				doc.setFont('helvetica', 'normal')
-				doc.setFontSize(bodyFontSize) // Back to regular size
+				doc.setFontSize(currentBodyFontSize) // Back to regular size
 				yPosition += lineHeight + 1 // Natural gap after headers
 			} else {
 				if (skipCurrentCategory) return
@@ -3909,6 +3927,7 @@
 				wrappedLines.forEach((wrappedLine) => {
 					if (yPosition > pageHeight - margin) {
 						doc.addPage()
+						applyBodyFontForCurrentPage()
 						yPosition = margin + 10
 					}
 					doc.text(wrappedLine, margin, yPosition)
