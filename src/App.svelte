@@ -3781,35 +3781,35 @@
 			console.log('Helvetica not available, using default font')
 		}
 		
-		// Header info with reduced spacing and bold font
+		// Title after header image (or at top if no image)
+		doc.setFont('helvetica', 'bold')
+		doc.setFontSize(16)
+		doc.text('Feedback Report', pageWidth / 2, yPosition, { align: 'center' })
+		yPosition += 8
+		
+		// Header info anchored at bottom-left of first page
+		const pageHeight = doc.internal.pageSize.getHeight()
+		const headerLines = []
+		if (subjectName) headerLines.push({ text: `Subject: ${subjectName}`, color: [0, 0, 0] })
+		if (assessmentName) headerLines.push({ text: `Assessment: ${assessmentName}`, color: [0, 0, 0] })
+		if (studentName) headerLines.push({ text: `Student: ${studentName}`, color: [0, 0, 0] })
+		const totalMarks = getTotalMarks()
+		const { value: assessmentTotal, hasValue: hasAssessmentTotal } = getAssessmentTotalInfo()
+		if (totalMarks > 0) {
+			const manualTotal = hasAssessmentTotal ? `/${assessmentTotal}` : ''
+			headerLines.push({ text: `Total Marks: ${totalMarks}${manualTotal}`, color: [255, 0, 0] })
+		}
+		const lineSpacing = 10
+		const headerHeight = headerLines.length * lineSpacing
+		let headerY = pageHeight - margin - headerHeight
 		doc.setFont('helvetica', 'bold')
 		doc.setFontSize(10)
-		if (subjectName) {
-			doc.text(`Subject: ${subjectName}`, margin, yPosition)
-			yPosition += 8
-		}
-		
-		if (assessmentName) {
-			doc.text(`Assessment: ${assessmentName}`, margin, yPosition)
-			yPosition += 6
-		}
-		
-		if (studentName) {
-			doc.text(`Student: ${studentName}`, margin, yPosition)
-			yPosition += 6
-			}
-			
-			// Add total marks in red color
-			const totalMarks = getTotalMarks()
-			const { value: assessmentTotal, hasValue: hasAssessmentTotal } = getAssessmentTotalInfo()
-			if (totalMarks > 0) {
-				doc.setTextColor(255, 0, 0) // Red color
-				doc.setFontSize(10) // Same font size as name and subject
-				const manualTotal = hasAssessmentTotal ? `/${assessmentTotal}` : ''
-				doc.text(`Total Marks: ${totalMarks}${manualTotal}`, margin, yPosition)
-				doc.setTextColor(0, 0, 0) // Reset to black
-				yPosition += 8
-			}
+		headerLines.forEach(({ text, color }) => {
+			doc.setTextColor(...color)
+			doc.text(text, margin, headerY)
+			headerY += lineSpacing
+		})
+		doc.setTextColor(0, 0, 0)
 		
 		// Move all report content to a new page after the header block
 		doc.addPage()
@@ -3836,7 +3836,7 @@
 		// Content with smaller font and bold category names
 		doc.setFontSize(10) // Smaller font size
 		const lineHeight = 4 // Further reduced line height for tighter spacing
-		const pageHeight = doc.internal.pageSize.getHeight()
+		const pageHeightBody = doc.internal.pageSize.getHeight()
 		let currentCategory = null
 		let skipCurrentCategory = false
 		
