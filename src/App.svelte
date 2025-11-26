@@ -2,6 +2,7 @@
 	import { invoke } from '@tauri-apps/api/core'
 	import { onMount } from 'svelte'
 	import jsPDF from 'jspdf'
+	import html2canvas from 'html2canvas'
 	import Sidebar from './lib/Sidebar.svelte'
 	import WelcomeScreen from './lib/WelcomeScreen.svelte'
 	import SubjectOverview from './lib/SubjectOverview.svelte'
@@ -61,6 +62,7 @@
 	// Note: knowledgeAreas are now stored as assignment properties (currentAssessment.knowledgeAreas)
 	let categoryMarks = $state({}) // Store marks for each category
 	let manualTotalMarks = $state('') // Store manually entered total marks
+	let assessmentHtml = $state('') // Custom HTML snippet stored on the assessment
 	let showTotalMarksWarning = $state(false) // Show warning modal
 	let categoryWarnings = $state({}) // Store per-category warning state (missing paragraphs/marks)
 	let showNotification = $state(false) // Show success notification
@@ -476,6 +478,11 @@
 					if (currentAssessment && parsed.headerPhoto) {
 						currentAssessment.headerPhoto = parsed.headerPhoto
 					}
+					// Load assessment HTML snippet if available
+					if (currentAssessment && parsed.rubricHtml !== undefined) {
+						currentAssessment.rubricHtml = parsed.rubricHtml
+					}
+					assessmentHtml = currentAssessment?.rubricHtml || ''
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -560,6 +567,11 @@
 					if (currentAssessment && parsed.headerPhoto) {
 						currentAssessment.headerPhoto = parsed.headerPhoto
 					}
+					// Load assessment HTML snippet if available
+					if (currentAssessment && parsed.rubricHtml !== undefined) {
+						currentAssessment.rubricHtml = parsed.rubricHtml
+					}
+					assessmentHtml = currentAssessment?.rubricHtml || ''
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -581,6 +593,7 @@
 		selectedParagraphs = new Set()
 		studentName = ''
 		// No studentImage - only header photo for assessment
+		assessmentHtml = ''
 		categoryMarks = {}
 		manualTotalMarks = ''
 		
@@ -604,6 +617,10 @@
 		// STRICT VALIDATION: Ensure no student-specific data is being saved to assessment
 		console.log('STRICT SAVING CRITERIA: Saving to assessment file - no student selected')
 
+		if (currentAssessment) {
+			currentAssessment.rubricHtml = assessmentHtml
+		}
+
 		const data = {
 			paragraphs,
 			selectedParagraphs: Array.from(selectedParagraphs),
@@ -611,6 +628,7 @@
 			studentName: '',
 			// No studentImage - only header photo for assessment
 			headerPhoto: currentAssessment?.headerPhoto || '',
+			rubricHtml: assessmentHtml,
 			categoryMarks,
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks
 		}
@@ -728,6 +746,7 @@
 			currentAssessmentId = assessment.id
 			currentAssessment = assessment
 			manualTotalMarks = assessment.totalMarks ?? ''
+			assessmentHtml = assessment.rubricHtml || ''
 
 		// Backward compatibility: Initialize markingMode if not present
 		if (!currentAssessment.markingMode) {
@@ -3285,6 +3304,224 @@
 		return finalText
 	}
 
+	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth) {
+		const htmlContent = (assessmentHtml || '').trim()
+		if (!htmlContent) return startY
+
+		const pageHeight = doc.internal.pageSize.getHeight()
+		const highlightColor = '#fff4b8' // soft yellow highlight
+		const pxPerMm = 96 / 25.4 // approximate CSS pixel density
+		const maxContentWidthMm = pageWidth - (margin * 2)
+		const maxContentWidthPx = maxContentWidthMm * pxPerMm
+		const container = document.createElement('div')
+		container.style.position = 'absolute'
+		container.style.left = '-99999px'
+		container.style.top = '0'
+		container.style.display = 'inline-block'
+		container.style.width = 'fit-content'
+		container.style.maxWidth = `${maxContentWidthPx}px`
+		container.innerHTML = htmlContent
+
+		// Auto-highlight rubric cells based on category marks and row names
+		try {
+			const normalize = (str) => (str || '')
+				.toString()
+				.replace(/\u00a0/g, ' ')
+				.replace(/\([^)]*\)/g, '') // drop parenthetical mark hints
+				.replace(/\s+/g, ' ')
+				.trim()
+				.toLowerCase()
+
+			const extractNumber = (str) => {
+				const match = (str || '').match(/(-?\d+(\.\d+)?)/)
+				return match ? Number.parseFloat(match[1]) : null
+			}
+
+			const marksMap = {}
+			Object.entries(categoryMarks || {}).forEach(([name, value]) => {
+				const num = Number.parseFloat(value)
+				if (Number.isFinite(num)) {
+					marksMap[normalize(name)] = num
+				}
+			})
+
+			// Fallback: derive marks from selected paragraphs/colors
+			const colorToMark = { green: 3, lightgreen: 2, yellow: 1, orange: 1, red: 0 }
+			const selectedMarkMap = {}
+			const selectedCategoryKeys = new Set()
+			Object.keys(marksMap).forEach(key => selectedCategoryKeys.add(key))
+			const grouped = getGroupedParagraphs()
+			grouped.forEach(group => {
+				Object.values(group.knowledgeAreas || {}).forEach(paras => {
+					paras.forEach(p => {
+						if (!selectedParagraphs.has(p.id)) return
+						selectedCategoryKeys.add(normalize(group.category))
+						const catKey = normalize(group.category)
+						let candidate = null
+						if (p.markInfo && Number.isFinite(p.markInfo.numericValue)) {
+							candidate = p.markInfo.numericValue
+						} else if (p.color && colorToMark[p.color] !== undefined) {
+							candidate = colorToMark[p.color]
+						}
+						if (candidate !== null) {
+							if (!(catKey in selectedMarkMap) || candidate > selectedMarkMap[catKey]) {
+								selectedMarkMap[catKey] = candidate
+							}
+						}
+					})
+				})
+			})
+
+			Object.entries(selectedMarkMap).forEach(([key, val]) => {
+				if (!(key in marksMap)) {
+					marksMap[key] = val
+				}
+			})
+
+			const tables = Array.from(container.querySelectorAll('table'))
+		tables.forEach(table => {
+			const rows = Array.from(table.querySelectorAll('tr'))
+			if (!rows.length) return
+
+			const headerCells = Array.from(rows[0].children)
+			const dataStartIndex = headerCells.length > 1 ? 1 : 0 // assume first column is row label
+			let marksColumnIndex = -1
+			headerCells.forEach((cell, idx) => {
+				const text = normalize(cell.textContent || '')
+				if (text.includes('marks')) {
+					marksColumnIndex = idx
+				}
+			})
+			const headerTextsRaw = headerCells.slice(dataStartIndex).map(cell => cell.textContent || '')
+			const headerValueCandidates = headerTextsRaw.map(text => extractNumber(text)).filter(val => Number.isFinite(val))
+			const headerIsPresent = headerCells.some(cell => cell.tagName === 'TH') || headerValueCandidates.length > 0
+			const headerTexts = headerIsPresent ? headerTextsRaw : []
+			const headerValues = headerIsPresent ? headerTextsRaw.map(text => extractNumber(text)) : []
+
+				const dataRows = headerIsPresent ? rows.slice(1) : rows
+
+				const allowedRows = selectedCategoryKeys.size > 0 ? selectedCategoryKeys : null
+				dataRows.forEach(row => {
+					const cells = Array.from(row.children)
+					if (cells.length <= dataStartIndex) return
+					const rawLabel = cells[0].textContent || ''
+					const rowKey = normalize(rawLabel)
+					if (allowedRows && !allowedRows.has(rowKey)) {
+						return
+					}
+					const markValue = marksMap[rowKey]
+					if (!Number.isFinite(markValue)) return
+
+					// Populate Marks column text if present
+					if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
+						const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === rowKey)
+						const allocated = categoryObj?.allocatedMarks
+						cells[marksColumnIndex].textContent = allocated ? `${markValue} / ${allocated}` : `${markValue}`
+					}
+
+					// Find matching column by numeric header value, otherwise fallback
+					let columnIndex = -1
+					if (headerValues.length) {
+						const exactIdx = headerValues.findIndex(val => Number.isFinite(val) && val === markValue)
+						if (exactIdx !== -1) {
+							columnIndex = dataStartIndex + exactIdx
+						} else {
+							// pick closest numeric header
+							let bestIdx = -1
+							let bestDiff = Number.POSITIVE_INFINITY
+							headerValues.forEach((val, idx) => {
+								if (!Number.isFinite(val)) return
+								const diff = Math.abs(val - markValue)
+								if (diff < bestDiff) {
+									bestDiff = diff
+									bestIdx = idx
+								}
+							})
+							if (bestIdx !== -1) {
+								columnIndex = dataStartIndex + bestIdx
+							}
+						}
+					}
+
+					// Fallback: assume columns are ordered from highest mark on the left to lowest on the right
+					if (columnIndex === -1) {
+						const dataColumnsCount = cells.length - dataStartIndex
+						const maxMarkGuess = Math.max(markValue, ...Object.values(marksMap).filter(Number.isFinite))
+						const denominator = Math.max(1, maxMarkGuess)
+						const relative = (maxMarkGuess - markValue) / denominator
+						const idxFromValue = Math.round(relative * (dataColumnsCount - 1))
+						const clampedIdx = Math.max(0, Math.min(dataColumnsCount - 1, idxFromValue))
+						columnIndex = dataStartIndex + clampedIdx
+					}
+
+					if (columnIndex > 0 && columnIndex < cells.length) {
+						const targetCell = cells[columnIndex]
+						targetCell.setAttribute('data-color', 'yellow')
+					}
+				})
+			})
+		} catch (err) {
+			console.error('Auto-highlight rubric cells failed:', err)
+		}
+
+		container.querySelectorAll('[data-color]').forEach(el => {
+			el.style.backgroundColor = highlightColor
+			el.style.color = '#000'
+		})
+
+		document.body.appendChild(container)
+
+		let nextY = startY
+		try {
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
+			const naturalWidthMm = canvas.width / pxPerMm
+			const naturalHeightMm = canvas.height / pxPerMm
+			const maxDrawableHeightMm = pageHeight - (margin * 2)
+			const scaleForWidth = maxContentWidthMm / naturalWidthMm
+			const scale = scaleForWidth // fill available text width; slice vertically as needed
+			const targetWidthMm = maxContentWidthMm
+			const targetHeightMm = naturalHeightMm * scale
+			const xOffset = margin
+			let consumedMm = 0
+
+			while (consumedMm < targetHeightMm - 0.01) {
+				if (nextY > pageHeight - margin - 5) {
+					doc.addPage()
+					nextY = margin
+				}
+
+				const availableMm = pageHeight - margin - nextY
+				if (availableMm <= 0) {
+					doc.addPage()
+					nextY = margin
+				}
+
+				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
+				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
+				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
+
+				const sliceCanvas = document.createElement('canvas')
+				sliceCanvas.width = canvas.width
+				sliceCanvas.height = slicePxHeight
+				const ctx = sliceCanvas.getContext('2d')
+				ctx.drawImage(canvas, 0, -slicePxTop)
+
+				const sliceData = sliceCanvas.toDataURL('image/png')
+				doc.addImage(sliceData, 'PNG', xOffset, nextY, targetWidthMm, drawMm)
+
+				nextY += drawMm + 2
+				consumedMm += drawMm
+			}
+		} catch (error) {
+			console.error('Failed to render assessment HTML into PDF:', error)
+		} finally {
+			document.body.removeChild(container)
+		}
+
+		return nextY
+	}
+
+
 	function getSelectedText() {
 		const orderedParagraphs = getOrderedParagraphs()
 		
@@ -3455,7 +3692,7 @@
 			.catch(() => showSuccessNotification('❌ Copy failed - unable to access clipboard. Please try again or copy manually.'))
 	}
 
-		function generatePDF() {
+		async function generatePDF() {
 			console.log('📄 generatePDF called')
 			let selectedText = getSelectedTextInVisualOrder()
 			
@@ -3491,43 +3728,51 @@
 		const margin = 20
 		const pageWidth = doc.internal.pageSize.getWidth()
 		const maxLineWidth = pageWidth - (margin * 2)
-		let yPosition = 0 // Start at very top of page
+		
+		const runPdf = async (startY) => {
+			await generateRestOfPDF(doc, startY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
+		}
 		
 		// Add full-width header image if available
 		if (currentAssessment?.headerPhoto) {
 			try {
-				// Create a temporary image to get dimensions
-				const img = new Image()
-				img.onload = function() {
-					// Calculate dimensions maintaining aspect ratio
-					const aspectRatio = img.width / img.height
-					
-					// Use full width with margins (not edge to edge)
-					let imageWidth = pageWidth - (margin * 2)
-					let imageHeight = imageWidth / aspectRatio
-					
-					// Position with margin from top and sides
-					const xPosition = margin
-					const yPosition = margin
-					
-					doc.addImage(currentAssessment.headerPhoto, 'JPEG', xPosition, yPosition, imageWidth, imageHeight)
-					
-					// Continue with the rest of the PDF generation
-					let currentY = yPosition + imageHeight + 15
-					generateRestOfPDF(doc, currentY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
-				}
-				img.src = currentAssessment.headerPhoto
-				return // Exit here as the rest will be handled in onload
+				await new Promise((resolve) => {
+					const img = new Image()
+					img.onload = async function() {
+						const aspectRatio = img.width / img.height
+						
+						// Use full width with margins (not edge to edge)
+						let imageWidth = pageWidth - (margin * 2)
+						let imageHeight = imageWidth / aspectRatio
+						
+						// Position with margin from top and sides
+						const xPosition = margin
+						const yPosition = margin
+						
+						doc.addImage(currentAssessment.headerPhoto, 'JPEG', xPosition, yPosition, imageWidth, imageHeight)
+						
+						// Continue with the rest of the PDF generation
+						let currentY = yPosition + imageHeight + 15
+						await runPdf(currentY)
+						resolve()
+					}
+					img.onerror = async function() {
+						await runPdf(margin)
+						resolve()
+					}
+					img.src = currentAssessment.headerPhoto
+				})
+				return
 			} catch (error) {
 				console.log('Could not add image to PDF:', error)
 			}
 		}
 		
 		// If no image, continue with normal PDF generation (with margin)
-		generateRestOfPDF(doc, margin, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
+		await runPdf(margin)
 	}
 
-		function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName) {
+		async function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName) {
 			// Try to set a font that's closer to Oxygen (Arial or Helvetica)
 			try {
 				doc.setFont('helvetica', 'normal')
@@ -3569,6 +3814,21 @@
 		// Reset font to normal for content
 		doc.setFont('helvetica', 'normal')
 		
+		// Render assessment HTML (as-is) into the PDF before content
+		yPosition = await renderAssessmentHtmlToPdf(doc, yPosition, margin, pageWidth)
+
+		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
+		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
+		const skipCategories = new Set()
+		if (hasAssessmentHtml) {
+			Object.entries(categoryMarks || {}).forEach(([name, val]) => {
+				const num = parseFloat(val)
+				if (Number.isFinite(num) && num > 0) {
+					skipCategories.add(normalizeCategoryName(name))
+				}
+			})
+		}
+
 		// Add separator line with reduced spacing
 		yPosition += 3
 		doc.setLineWidth(0.5)
@@ -3579,6 +3839,8 @@
 		doc.setFontSize(10) // Smaller font size
 		const lineHeight = 4 // Further reduced line height for tighter spacing
 		const pageHeight = doc.internal.pageSize.getHeight()
+		let currentCategory = null
+		let skipCurrentCategory = false
 		
 		// Split the text into lines and process each line
 		const textLines = selectedText.split('\n')
@@ -3596,30 +3858,28 @@
 				return
 			}
 			
-			// Check if this line is a category header (contains ':' and optionally marks)
+			// Check if this line is a category header (contains ':')
 			if (line.includes(':')) {
 				// Extract category name (everything before the colon)
 				const categoryName = line.split(':')[0].trim()
-				
-				// Get marks for this category
-				const categoryMarksValue = categoryMarks[categoryName] || 0
-				// Get allocated marks for this category
-				const allocatedMarks = currentAssessment?.categories?.find(cat => cat.name === categoryName)?.allocatedMarks
-				const marksText = categoryMarksValue > 0 ? 
-					allocatedMarks ? ` [${categoryMarksValue}/${allocatedMarks} Marks]` : ` [${categoryMarksValue} Marks]` : ''
-				
-				// Bold font for category headers and marks
+				currentCategory = normalizeCategoryName(categoryName)
+				skipCurrentCategory = hasAssessmentHtml && skipCategories.size > 0 && skipCategories.has(currentCategory)
+				if (skipCurrentCategory) {
+					return
+				}
+
+				// Bold font for category headers only (no marks)
 				doc.setFont('helvetica', 'bold')
 				doc.setFontSize(10) // Same size as other content
-				
-				// Draw category name and marks (both will be bold)
-				doc.text(`${categoryName}: ${marksText}`, margin, yPosition)
-				
+
+				doc.text(`${categoryName}:`, margin, yPosition)
+
 				// Reset font to normal for content
 				doc.setFont('helvetica', 'normal')
 				doc.setFontSize(10) // Back to small font
 				yPosition += lineHeight + 1 // Minimal extra spacing after headers
 			} else {
+				if (skipCurrentCategory) return
 				// Regular content - split long lines
 				const wrappedLines = doc.splitTextToSize(line, maxLineWidth)
 				wrappedLines.forEach((wrappedLine) => {
@@ -3628,7 +3888,7 @@
 						yPosition = margin + 10
 					}
 					doc.text(wrappedLine, margin, yPosition)
-			yPosition += lineHeight
+					yPosition += lineHeight
 				})
 			}
 		})
@@ -3863,8 +4123,8 @@
 										<i class="bi bi-arrow-left me-2"></i>Back to Assessments
 									</button>
 								</div>
-							</div>
 						</div>
+					</div>
 						
 						<!-- Assessment Header Photo Section -->
 						<div class="row mb-3">
@@ -3897,14 +4157,46 @@
 								</div>
 							</div>
 						</div>
+
+						<!-- Assessment HTML (for PDF) -->
+						<div class="row mb-3">
+							<div class="col-12">
+								<div class="card border-warning">
+									<div class="card-header bg-warning text-dark py-2">
+										<h5 class="card-title mb-0">
+											<i class="bi bi-table me-2"></i>Assessment HTML (included in PDF)
+										</h5>
+									</div>
+									<div class="card-body py-3">
+										<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
+										<textarea
+											id="assessmentHtmlInput"
+											class="form-control"
+											rows="6"
+											bind:value={assessmentHtml}
+											oninput={(e) => {
+												assessmentHtml = e.target.value
+												if (currentAssessment) {
+													currentAssessment.rubricHtml = assessmentHtml
+												}
+											}}
+											placeholder="&lt;table&gt;...&lt;/table&gt;"
+										></textarea>
+										<small class="text-muted d-block mt-2">
+											Use <code>data-color=&quot;yellow&quot;</code> on a cell to highlight it (e.g., <code>&lt;td data-color=&quot;yellow&quot;&gt;Value&lt;/td&gt;</code>). The HTML is inserted into the PDF as-is after the header.
+										</small>
+									</div>
+								</div>
+							</div>
+						</div>
 					
 					
 					<!-- Student Info Section -->
-					<div class="row mb-2">
-						<div class="col-12">
-							<div class="card border-info">
-								<div class="card-header bg-info text-white py-2">
-									<h5 class="card-title mb-0">
+						<div class="row mb-2">
+							<div class="col-12">
+								<div class="card border-info">
+									<div class="card-header bg-info text-white py-2">
+										<h5 class="card-title mb-0">
 										<i class="bi bi-person-circle me-2"></i>Student Information
 									</h5>
 								</div>
@@ -4351,13 +4643,18 @@
 												type="number"
 													class="form-control form-control-sm"
 													id="total-marks-input"
-													style="width: 80px;"
+													style="width: 110px;"
 													placeholder="0"
 													value={manualTotalMarks ?? ''}
 													oninput={(e) => updateTotalMarks(e.currentTarget.value)}
 													min="0"
 													step="0.5"
 												>
+											{#if currentAssessment}
+												<div class="text-white-50 small ms-1">
+													({currentAssessment.totalMarks ?? 0} allocated)
+												</div>
+											{/if}
 										</div>
 									</div>
 								</div>
@@ -4383,22 +4680,24 @@
 															</div>
 															{#if group.category}
 																<div class="d-flex align-items-center gap-2">
-									<input 
-										type="number" 
-										class="form-control form-control-sm w-auto" 
-										id="marks-{group.category}"
-										style="width: 60px;"
-										placeholder="0"
-										value={categoryMarks[group.category] || ''}
-										oninput={(e) => updateCategoryMarks(group.category, e.currentTarget.value)}
-										min="0"
-										step="0.5"
-									>
-																	{#if currentAssessment.categories.find(cat => cat.name === group.category)?.allocatedMarks}
-																		<span class="text-white fw-bold" style="font-size: 0.9rem;">
-																			{currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
-																	</span>
-																	{/if}
+									<div class="d-flex align-items-center gap-2">
+										<input 
+											type="number" 
+											class="form-control form-control-sm w-auto" 
+											id="marks-{group.category}"
+											style="width: 70px;"
+											placeholder="0"
+											value={categoryMarks[group.category] || ''}
+											oninput={(e) => updateCategoryMarks(group.category, e.currentTarget.value)}
+											min="0"
+											step="0.5"
+										>
+										{#if currentAssessment.categories.find(cat => cat.name === group.category)?.allocatedMarks}
+											<span class="text-white-50 small fw-bold">
+												/ {currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
+											</span>
+										{/if}
+									</div>
 																	<!-- Category reordering buttons (only in assignment mode) -->
 																	{#if !currentStudentId}
 																		{@const sortedCategories = normalizeCategoryOrder(currentAssessment.categories)}
