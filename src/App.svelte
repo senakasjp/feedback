@@ -3827,7 +3827,9 @@
 		
 		// Render assessment HTML (as-is) into the PDF before content
 		const matchedCategoriesFromTable = new Set()
-		yPosition = await renderAssessmentHtmlToPdf(doc, yPosition, margin, pageWidth, matchedCategoriesFromTable)
+		const afterTableY = await renderAssessmentHtmlToPdf(doc, yPosition, margin, pageWidth, matchedCategoriesFromTable)
+		// Reduce whitespace between table and subsequent comments
+		yPosition = Math.max(margin, afterTableY - 6)
 
 		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
 		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
@@ -4186,6 +4188,7 @@
 									{#if showAssessmentHtml}
 										<div class="card-body py-3">
 											<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
+											<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
 											<textarea
 												id="assessmentHtmlInput"
 												class="form-control"
@@ -4199,9 +4202,6 @@
 												}}
 												placeholder="&lt;table&gt;...&lt;/table&gt;"
 											></textarea>
-											<small class="text-muted d-block mt-2">
-												Use <code>data-color=&quot;yellow&quot;</code> on a cell to highlight it (e.g., <code>&lt;td data-color=&quot;yellow&quot;&gt;Value&lt;/td&gt;</code>). The HTML is inserted into the PDF as-is after the header.
-											</small>
 										</div>
 									{/if}
 								</div>
