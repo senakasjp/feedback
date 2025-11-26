@@ -3730,11 +3730,27 @@
 			}
 
 		const doc = new jsPDF()
+		const headingText = 'Feedback Report'
+		const headingFontSize = 16
 		
 		// Page dimensions
 		const margin = 20
 		const pageWidth = doc.internal.pageSize.getWidth()
 		const maxLineWidth = pageWidth - (margin * 2)
+
+		// Prepare heading metrics up-front so spacing is consistent
+		doc.setFont('helvetica', 'bold')
+		doc.setFontSize(headingFontSize)
+		const headingMetrics = doc.getTextDimensions
+			? doc.getTextDimensions(headingText)
+			: { h: doc.internal.getLineHeight() }
+		const headingHeight = headingMetrics?.h || doc.internal.getLineHeight()
+
+		const drawHeading = () => {
+			doc.setFont('helvetica', 'bold')
+			doc.setFontSize(headingFontSize)
+			doc.text(headingText, pageWidth / 2, margin, { align: 'center' })
+		}
 		
 		const runPdf = async (startY) => {
 			await generateRestOfPDF(doc, startY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
@@ -3746,6 +3762,8 @@
 				await new Promise((resolve) => {
 					const img = new Image()
 					img.onload = async function() {
+						drawHeading()
+
 						const aspectRatio = img.width / img.height
 						
 						// Use full width with margins (not edge to edge)
@@ -3754,7 +3772,7 @@
 						
 						// Position with margin from top and sides
 						const xPosition = margin
-						const yPosition = margin
+						const yPosition = margin + headingHeight + 2
 						
 						doc.addImage(currentAssessment.headerPhoto, 'JPEG', xPosition, yPosition, imageWidth, imageHeight)
 						
@@ -3764,7 +3782,8 @@
 						resolve()
 					}
 					img.onerror = async function() {
-						await runPdf(margin)
+						drawHeading()
+						await runPdf(margin + headingHeight + 6)
 						resolve()
 					}
 					img.src = currentAssessment.headerPhoto
@@ -3775,8 +3794,9 @@
 			}
 		}
 		
-		// If no image, continue with normal PDF generation (with margin)
-		await runPdf(margin)
+		// If no image, continue with normal PDF generation (with heading and margin)
+		drawHeading()
+		await runPdf(margin + headingHeight + 6)
 	}
 
 		async function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName) {
@@ -3787,12 +3807,6 @@
 			// Fallback to default font if helvetica is not available
 			console.log('Helvetica not available, using default font')
 		}
-		
-		// Title after header image (or at top if no image)
-		doc.setFont('helvetica', 'bold')
-		doc.setFontSize(16)
-		doc.text('Feedback Report', pageWidth / 2, yPosition, { align: 'center' })
-		yPosition += 8
 		
 		// Header info anchored at bottom-left of first page
 		const pageHeight = doc.internal.pageSize.getHeight()
