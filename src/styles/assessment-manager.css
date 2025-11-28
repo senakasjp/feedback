@@ -46,3 +46,12 @@
   display: flex;
   min-width: 0;
 }
+
+/* Align table-row-to-category mapping controls */
+.table-row-map .list-group-item {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+.table-row-map .form-select-sm {
+  min-height: calc(2rem + 2px);
+}

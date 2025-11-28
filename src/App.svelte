@@ -72,6 +72,7 @@
 	let showStudentTransferModal = $state(false) // Show student transfer modal
 	let showImportModal = $state(false) // Show import paragraphs modal
 	let showExportModal = $state(false) // Show export assignment settings modal
+	let tableRowCategoryMap = $state({}) // Manual mapping: table row label -> category name
 	let quickAddKnowledgeArea = $state({}) // Store quick-add knowledge area selection per category
 	let quickAddText = $state({}) // Store quick-add paragraph text per category
 	let showAboutModal = $state(false) // Show about modal
@@ -310,6 +311,7 @@
 	let selectedCategory = $state('')
 	let selectedTopic = $state('')
 	let selectedKnowledgeArea = $state('')
+	const tableRowLabels = $derived(extractTableRowLabels(assessmentHtml))
 	
 	// pdrCategories is now imported from utils/constants.js
 
@@ -323,6 +325,61 @@
 	// ensureParagraphsHaveIds function is now imported from utils/helpers.js
 
 	// ensureCategoriesHaveOrder function is now imported from utils/helpers.js
+
+	function normalizeCategoryLabel(str) {
+		return (str || '')
+			.toString()
+			.replace(/\u00a0/g, ' ')
+			.replace(/\([^)]*\)/g, '')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.toLowerCase()
+	}
+
+	function extractTableRowLabels(html) {
+		if (!html) return []
+		const temp = document.createElement('div')
+		temp.innerHTML = html
+		const labels = new Set()
+		const rows = Array.from(temp.querySelectorAll('table tr'))
+		rows.forEach(row => {
+			const firstCell = row.cells?.[0]
+			if (!firstCell) return
+			const text = (firstCell.textContent || '').replace(/\u00a0/g, ' ').trim()
+			if (text) labels.add(text)
+		})
+		return Array.from(labels)
+	}
+
+	function shouldUseLandscapeForHtml(html, marginMm = 20) {
+		if (!html) return false
+		const pxPerMm = 96 / 25.4
+		const portraitWidthMm = 210 // A4 portrait width
+		const maxContentWidthMm = portraitWidthMm - (marginMm * 2)
+		const maxContentWidthPx = maxContentWidthMm * pxPerMm
+		const temp = document.createElement('div')
+		temp.className = 'pdf-assessment-html'
+		temp.style.position = 'absolute'
+		temp.style.left = '-99999px'
+		temp.style.top = '0'
+		temp.style.display = 'inline-block'
+		temp.style.width = 'auto'
+		temp.style.fontFamily = 'Arial, sans-serif'
+		temp.style.fontSize = '12px'
+		temp.style.lineHeight = '1.35'
+		temp.innerHTML = html
+		document.body.appendChild(temp)
+		let needs = false
+		try {
+			const contentWidthPx = temp.scrollWidth
+			needs = contentWidthPx > maxContentWidthPx
+		} catch (e) {
+			console.warn('Failed to measure HTML width for orientation detection:', e)
+		} finally {
+			document.body.removeChild(temp)
+		}
+		return needs
+	}
 
 
 	async function loadSubjects() {
@@ -573,8 +630,12 @@
 					if (currentAssessment && parsed.rubricHtml !== undefined) {
 						currentAssessment.rubricHtml = parsed.rubricHtml
 					}
+					if (currentAssessment && parsed.tableRowCategoryMap !== undefined) {
+						currentAssessment.tableRowCategoryMap = parsed.tableRowCategoryMap || {}
+					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
-					showAssessmentHtml = !!assessmentHtml
+					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
+					showAssessmentHtml = !!(assessmentHtml || Object.keys(tableRowCategoryMap || {}).length)
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -598,6 +659,7 @@
 		// No studentImage - only header photo for assessment
 		assessmentHtml = ''
 		showAssessmentHtml = false
+		tableRowCategoryMap = {}
 		categoryMarks = {}
 		manualTotalMarks = ''
 		
@@ -621,10 +683,6 @@
 		// STRICT VALIDATION: Ensure no student-specific data is being saved to assessment
 		console.log('STRICT SAVING CRITERIA: Saving to assessment file - no student selected')
 
-		if (currentAssessment) {
-			currentAssessment.rubricHtml = assessmentHtml
-		}
-
 		const data = {
 			paragraphs,
 			selectedParagraphs: Array.from(selectedParagraphs),
@@ -633,6 +691,7 @@
 			// No studentImage - only header photo for assessment
 			headerPhoto: currentAssessment?.headerPhoto || '',
 			rubricHtml: assessmentHtml,
+			tableRowCategoryMap,
 			categoryMarks,
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks
 		}
@@ -751,6 +810,7 @@
 			currentAssessment = assessment
 			manualTotalMarks = assessment.totalMarks ?? ''
 			assessmentHtml = assessment.rubricHtml || ''
+			tableRowCategoryMap = assessment.tableRowCategoryMap || {}
 
 		// Backward compatibility: Initialize markingMode if not present
 		if (!currentAssessment.markingMode) {
@@ -3317,14 +3377,59 @@
 		const pxPerMm = 96 / 25.4 // approximate CSS pixel density
 		const maxContentWidthMm = pageWidth - (margin * 2)
 		const maxContentWidthPx = maxContentWidthMm * pxPerMm
+		const rowCategoryMap = currentAssessment?.tableRowCategoryMap || tableRowCategoryMap || {}
+		const getMappedCategory = (key) => {
+			if (!key) return null
+			const direct = rowCategoryMap[key]
+			if (direct) return direct
+			const normalized = normalizeCategoryLabel(key)
+			if (rowCategoryMap[normalized]) return rowCategoryMap[normalized]
+			return null
+		}
 		const container = document.createElement('div')
+		container.className = 'pdf-assessment-html'
 		container.style.position = 'absolute'
 		container.style.left = '-99999px'
 		container.style.top = '0'
-		container.style.display = 'inline-block'
-		container.style.width = 'fit-content'
+		container.style.display = 'block'
+		container.style.boxSizing = 'border-box'
+		container.style.width = `${maxContentWidthPx}px`
 		container.style.maxWidth = `${maxContentWidthPx}px`
+		container.style.fontFamily = 'Arial, sans-serif'
+		container.style.fontSize = '12px'
+		container.style.lineHeight = '1.35'
 		container.innerHTML = htmlContent
+		// Strip inline padding/line-height on cells so our injected styles win
+		container.querySelectorAll('th, td').forEach(cell => {
+			cell.style.padding = ''
+			cell.style.lineHeight = ''
+		})
+
+		// Normalize spacing inside pasted HTML so tables don't blow up the PDF
+		const styleElement = document.createElement('style')
+		styleElement.textContent = `
+			.pdf-assessment-html { width: 100%; box-sizing: border-box; }
+			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
+			.pdf-assessment-html th,
+			.pdf-assessment-html td {
+				padding: 12px 10px !important;
+				line-height: 1.35 !important;
+				vertical-align: top !important;
+				word-break: break-word !important;
+				overflow-wrap: anywhere !important;
+				white-space: normal !important;
+				hyphens: auto !important;
+				max-width: 0 !important; /* allow fixed-layout columns to wrap instead of stretching */
+				box-sizing: border-box !important;
+			}
+			.pdf-assessment-html p { margin: 0; line-height: 1.4; }
+			.pdf-assessment-html p + p { margin-top: 6px; }
+			.pdf-assessment-html ul, .pdf-assessment-html ol { margin: 0 0 6px 18px; padding-left: 18px; }
+			.pdf-assessment-html li { margin: 0; line-height: 1.3; }
+			.pdf-assessment-html img { max-width: 100%; height: auto; }
+			.pdf-assessment-html * { box-sizing: border-box; }
+		`
+		container.prepend(styleElement)
 
 		// Auto-highlight rubric cells based on category marks and row names
 		try {
@@ -3404,32 +3509,60 @@
 
 				const dataRows = headerIsPresent ? rows.slice(1) : rows
 
-				const allowedRows = selectedCategoryKeys.size > 0 ? selectedCategoryKeys : null
+				const findBestMatchKey = (rowKey) => {
+					const cleaned = rowKey.replace(/\d+/g, '').replace(/marks?/gi, '').trim()
+					let best = null
+					let bestLength = 0
+					Object.keys(marksMap).forEach(key => {
+						if (cleaned && (cleaned.includes(key) || key.includes(cleaned))) {
+							if (key.length > bestLength) {
+								best = key
+								bestLength = key.length
+							}
+						}
+					})
+					return best
+				}
+
 				dataRows.forEach(row => {
 					const cells = Array.from(row.children)
 					if (cells.length <= dataStartIndex) return
 					const rawLabel = cells[0].textContent || ''
 				const rowKey = normalize(rawLabel)
-				if (allowedRows && !allowedRows.has(rowKey)) {
-					return
-				}
-				const markValue = marksMap[rowKey]
+				const mappedCategoryName = getMappedCategory(rowKey)
+				const mappedKey = mappedCategoryName ? normalize(mappedCategoryName) : null
+				const bestMatchKey = mappedKey || findBestMatchKey(rowKey)
+				const effectiveKey = bestMatchKey || rowKey
+				const markValue = marksMap[effectiveKey] ?? marksMap[rowKey]
 				if (!Number.isFinite(markValue)) return
 
 				// Track that this category is represented in the table (even if mark is 0)
-				matchedCategories.add(rowKey)
+				matchedCategories.add(effectiveKey)
 
 				// Populate Marks column text if present
 				if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
-					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === rowKey)
-					const allocated = categoryObj?.allocatedMarks
-						cells[marksColumnIndex].textContent = allocated ? `${markValue} / ${allocated}` : `${markValue}`
+					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey)
+					const allocated = Number.parseFloat(categoryObj?.allocatedMarks)
+						cells[marksColumnIndex].textContent = Number.isFinite(allocated) && allocated > 0 ? `${markValue} / ${allocated}` : `${markValue}`
 					}
 
 					// Find matching column by numeric header value, otherwise fallback
 					let columnIndex = -1
+					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey)
+					let allocatedMarksForPercent = Number.parseFloat(categoryObj?.allocatedMarks)
+					if (!Number.isFinite(allocatedMarksForPercent) || allocatedMarksForPercent <= 0) {
+						const labelNumber = extractNumber(rawLabel)
+						if (Number.isFinite(labelNumber) && labelNumber > 0) {
+							allocatedMarksForPercent = labelNumber
+						}
+					}
+					const percentHeaders = headerValues.filter(Number.isFinite).every(val => val >= 0 && val <= 100)
+					const valueForHeaderMatch = percentHeaders && Number.isFinite(allocatedMarksForPercent) && allocatedMarksForPercent > 0
+						? (markValue / allocatedMarksForPercent) * 100
+						: markValue
+
 					if (headerValues.length) {
-						const exactIdx = headerValues.findIndex(val => Number.isFinite(val) && val === markValue)
+						const exactIdx = headerValues.findIndex(val => Number.isFinite(val) && val === valueForHeaderMatch)
 						if (exactIdx !== -1) {
 							columnIndex = dataStartIndex + exactIdx
 						} else {
@@ -3438,7 +3571,7 @@
 							let bestDiff = Number.POSITIVE_INFINITY
 							headerValues.forEach((val, idx) => {
 								if (!Number.isFinite(val)) return
-								const diff = Math.abs(val - markValue)
+								const diff = Math.abs(val - valueForHeaderMatch)
 								if (diff < bestDiff) {
 									bestDiff = diff
 									bestIdx = idx
@@ -3729,12 +3862,14 @@
 				return
 			}
 
-		const doc = new jsPDF()
+		const defaultMargin = 20
+		const needsLandscape = shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
+		const doc = new jsPDF({ orientation: 'portrait' }) // keep first page portrait; switch later if needed
 		const headingText = 'Feedback Report'
 		const headingFontSize = 16
 		
 		// Page dimensions
-		const margin = 20
+		const margin = defaultMargin
 		const pageWidth = doc.internal.pageSize.getWidth()
 		const maxLineWidth = pageWidth - (margin * 2)
 
@@ -3753,7 +3888,7 @@
 		}
 		
 		const runPdf = async (startY) => {
-			await generateRestOfPDF(doc, startY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name)
+			await generateRestOfPDF(doc, startY, margin, pageWidth, maxLineWidth, selectedText, studentName, currentSubject?.name, currentAssessment?.name, needsLandscape)
 		}
 		
 		// Add full-width header image if available
@@ -3762,8 +3897,6 @@
 				await new Promise((resolve) => {
 					const img = new Image()
 					img.onload = async function() {
-						drawHeading()
-
 						const aspectRatio = img.width / img.height
 						
 						// Use full width with margins (not edge to edge)
@@ -3772,12 +3905,18 @@
 						
 						// Position with margin from top and sides
 						const xPosition = margin
-						const yPosition = margin + headingHeight + 2
+						const yPosition = margin
 						
 						doc.addImage(currentAssessment.headerPhoto, 'JPEG', xPosition, yPosition, imageWidth, imageHeight)
 						
+						// Draw heading beneath the image
+						const headingY = yPosition + imageHeight + headingHeight + 2
+						doc.setFont('helvetica', 'bold')
+						doc.setFontSize(headingFontSize)
+						doc.text(headingText, pageWidth / 2, headingY, { align: 'center' })
+						
 						// Continue with the rest of the PDF generation
-						let currentY = yPosition + imageHeight + 15
+						let currentY = headingY + 10
 						await runPdf(currentY)
 						resolve()
 					}
@@ -3799,12 +3938,12 @@
 		await runPdf(margin + headingHeight + 6)
 	}
 
-		async function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName) {
-			// Try to set a font that's closer to Oxygen (Arial or Helvetica)
-			try {
-				doc.setFont('helvetica', 'normal')
-			} catch (e) {
-			// Fallback to default font if helvetica is not available
+	async function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName, useLandscapeForContent = false) {
+		// Try to set a font that's closer to Oxygen (Arial or Helvetica)
+		try {
+			doc.setFont('helvetica', 'normal')
+		} catch (e) {
+		// Fallback to default font if helvetica is not available
 			console.log('Helvetica not available, using default font')
 		}
 		
@@ -3832,9 +3971,21 @@
 		})
 		doc.setTextColor(0, 0, 0)
 		
+		const contentTopMargin = 12
+		const addContentPage = () => {
+			if (useLandscapeForContent) {
+				doc.addPage('a4', 'landscape')
+			} else {
+				doc.addPage()
+			}
+		}
+
 		// Move all report content to a new page after the header block
-		doc.addPage()
-		yPosition = margin
+		addContentPage()
+		yPosition = contentTopMargin
+		let contentPageWidth = doc.internal.pageSize.getWidth()
+		let pageHeightBody = doc.internal.pageSize.getHeight()
+		let contentMaxLineWidth = contentPageWidth - (margin * 2)
 		const contentStartPage = typeof doc.internal.getCurrentPageInfo === 'function'
 			? doc.internal.getCurrentPageInfo().pageNumber
 			: doc.internal.getNumberOfPages()
@@ -3844,7 +3995,7 @@
 		
 		// Render assessment HTML (as-is) into the PDF before content
 		const matchedCategoriesFromTable = new Set()
-		const afterTableY = await renderAssessmentHtmlToPdf(doc, yPosition, margin, pageWidth, matchedCategoriesFromTable)
+		const afterTableY = await renderAssessmentHtmlToPdf(doc, yPosition, margin, contentPageWidth, matchedCategoriesFromTable)
 		// Keep table close to the first point without squeezing the rest of the content
 		const gapAfterTable = 2
 		yPosition = Math.max(margin, afterTableY - gapAfterTable)
@@ -3880,19 +4031,24 @@
 			doc.setFontSize(currentBodyFontSize)
 		}
 		applyBodyFontForCurrentPage()
-		const pageHeightBody = doc.internal.pageSize.getHeight()
 		let currentCategory = null
 		let skipCurrentCategory = false
 		
 		// Split the text into lines and process each line
 		const textLines = selectedText.split('\n')
+		while (textLines.length && textLines[0].trim() === '') {
+			textLines.shift()
+		}
 		
 		textLines.forEach((line) => {
 			// Check if we need a new page
-			if (yPosition > pageHeight - margin) {
-				doc.addPage()
+			if (yPosition > pageHeightBody - margin) {
+				addContentPage()
+				contentPageWidth = doc.internal.pageSize.getWidth()
+				pageHeightBody = doc.internal.pageSize.getHeight()
+				contentMaxLineWidth = contentPageWidth - (margin * 2)
 				applyBodyFontForCurrentPage()
-				yPosition = margin + 10
+				yPosition = contentTopMargin
 			}
 			// Skip empty lines but keep comfortable spacing between points
 			if (line.trim() === '') {
@@ -3923,12 +4079,15 @@
 			} else {
 				if (skipCurrentCategory) return
 				// Regular content - split long lines
-				const wrappedLines = doc.splitTextToSize(line, maxLineWidth)
+				const wrappedLines = doc.splitTextToSize(line, contentMaxLineWidth)
 				wrappedLines.forEach((wrappedLine) => {
-					if (yPosition > pageHeight - margin) {
-						doc.addPage()
+					if (yPosition > pageHeightBody - margin) {
+						addContentPage()
+						contentPageWidth = doc.internal.pageSize.getWidth()
+						pageHeightBody = doc.internal.pageSize.getHeight()
+						contentMaxLineWidth = contentPageWidth - (margin * 2)
 						applyBodyFontForCurrentPage()
-						yPosition = margin + 10
+						yPosition = contentTopMargin
 					}
 					doc.text(wrappedLine, margin, yPosition)
 					yPosition += lineHeight
@@ -4220,7 +4379,7 @@
 										</div>
 									</div>
 									{#if showAssessmentHtml}
-										<div class="card-body py-3">
+										<div class="card-body py-2">
 											<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
 											<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
 											<textarea
@@ -4232,10 +4391,62 @@
 													assessmentHtml = e.target.value
 													if (currentAssessment) {
 														currentAssessment.rubricHtml = assessmentHtml
+														if (!currentAssessment.tableRowCategoryMap) {
+															currentAssessment.tableRowCategoryMap = {}
+														}
 													}
 												}}
 												placeholder="&lt;table&gt;...&lt;/table&gt;"
 											></textarea>
+											{#if tableRowLabels.length}
+												<div class="mt-3">
+													<div class="d-flex align-items-center justify-content-between mb-2">
+														<span class="fw-bold">Match table rows to categories</span>
+														<span class="text-muted small">First column labels detected</span>
+													</div>
+													<div class="list-group table-row-map">
+														{#each tableRowLabels as label (label)}
+															<div class="list-group-item py-2">
+																<div class="row align-items-center g-2">
+																	<div class="col-12 col-md-6">
+																		<div class="small text-muted">Row label</div>
+																		<div class="fw-semibold text-break">{label}</div>
+																	</div>
+																	<div class="col-12 col-md-6">
+																		<label class="small text-muted mb-1 d-block">Match to category</label>
+																		<select
+																			class="form-select form-select-sm w-100"
+																			value={tableRowCategoryMap[normalizeCategoryLabel(label)] || ''}
+																			onchange={(e) => {
+																				const selected = e.currentTarget.value
+																				const key = normalizeCategoryLabel(label)
+																				const updated = { ...tableRowCategoryMap }
+																				if (selected) {
+																					updated[key] = selected
+																				} else {
+																					delete updated[key]
+																				}
+																				tableRowCategoryMap = updated
+																				if (currentAssessment) {
+																					currentAssessment.tableRowCategoryMap = updated
+																				}
+																				if (!currentStudentId) {
+																					saveAssessmentData()
+																				}
+																			}}
+																		>
+																			<option value="">Auto (match by name)</option>
+																			{#each (currentAssessment?.categories || []) as cat (cat.id)}
+																				<option value={cat.name}>{cat.name}</option>
+																			{/each}
+																		</select>
+																	</div>
+																</div>
+															</div>
+														{/each}
+													</div>
+												</div>
+											{/if}
 										</div>
 									{/if}
 								</div>

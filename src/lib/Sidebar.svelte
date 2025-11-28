@@ -222,10 +222,10 @@
 						
 						<!-- Current Session Info - Only show in feedback page (3rd level) -->
 						{#if currentView === 'feedback' && currentAssessment}
-							<div class="mt-4 mb-4">
+							<div class="mt-2 mb-2">
 								<div class="card bg-light">
-									<div class="card-body p-3">
-										<h6 class="card-title text-primary mb-3">
+									<div class="card-body p-1">
+										<h6 class="card-title text-primary mb-1">
 											<i class="bi bi-info-circle me-2"></i>Current Session
 										</h6>
 										<div class="small">
