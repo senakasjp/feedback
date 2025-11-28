@@ -541,7 +541,8 @@
 						currentAssessment.rubricHtml = parsed.rubricHtml
 					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
-					showAssessmentHtml = !!assessmentHtml
+					// Keep HTML card collapsed by default; user can expand manually
+					showAssessmentHtml = false
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -635,7 +636,8 @@
 					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
-					showAssessmentHtml = !!(assessmentHtml || Object.keys(tableRowCategoryMap || {}).length)
+					// Keep HTML card collapsed by default; user can expand manually
+					showAssessmentHtml = false
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -3862,7 +3864,7 @@
 				return
 			}
 
-		const defaultMargin = 20
+		const defaultMargin = 25 // Slightly larger margin for better breathing room
 		const needsLandscape = shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
 		const doc = new jsPDF({ orientation: 'portrait' }) // keep first page portrait; switch later if needed
 		const headingText = 'Feedback Report'
@@ -3971,7 +3973,7 @@
 		})
 		doc.setTextColor(0, 0, 0)
 		
-		const contentTopMargin = 12
+		const contentTopMargin = margin // Keep top padding consistent with page margins
 		const addContentPage = () => {
 			if (useLandscapeForContent) {
 				doc.addPage('a4', 'landscape')
