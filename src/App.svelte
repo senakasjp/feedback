@@ -541,7 +541,7 @@
 						currentAssessment.rubricHtml = parsed.rubricHtml
 					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
-					showAssessmentHtml = !!assessmentHtml
+					showAssessmentHtml = currentStudentId ? false : !!(assessmentHtml || Object.keys(tableRowCategoryMap || {}).length)
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -635,7 +635,7 @@
 					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
-					showAssessmentHtml = !!(assessmentHtml || Object.keys(tableRowCategoryMap || {}).length)
+					showAssessmentHtml = currentStudentId ? false : !!(assessmentHtml || Object.keys(tableRowCategoryMap || {}).length)
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -1917,6 +1917,8 @@
 				await loadAssessmentData(currentSubjectId, currentAssessmentId, false)
 				return
 			}
+		// Collapse assessment HTML panel when a student is selected
+		showAssessmentHtml = false
 		
 		const student = students.find(s => s.id === studentId)
 		if (student) {
@@ -3971,7 +3973,7 @@
 		})
 		doc.setTextColor(0, 0, 0)
 		
-		const contentTopMargin = 12
+		const contentTopMargin = 20
 		const addContentPage = () => {
 			if (useLandscapeForContent) {
 				doc.addPage('a4', 'landscape')
@@ -3998,7 +4000,7 @@
 		const afterTableY = await renderAssessmentHtmlToPdf(doc, yPosition, margin, contentPageWidth, matchedCategoriesFromTable)
 		// Keep table close to the first point without squeezing the rest of the content
 		const gapAfterTable = 2
-		yPosition = Math.max(margin, afterTableY - gapAfterTable)
+		yPosition = Math.max(contentTopMargin, afterTableY - gapAfterTable)
 
 		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
 		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
