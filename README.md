@@ -5,6 +5,14 @@
 
 A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, contamination prevention, visual debugging tools, real-time total marks display, and enhanced text formatting capabilities.
 
+## 📄 PDF Table / Paragraph Rendering Logic (marks-aware)
+- The rubric table (HTML pasted into the assessment) is rendered first in the PDF; it auto-highlights mark cells by matching category names and marks.
+- A category is considered “covered by the table” when it matches/mapped to a rubric row, or when that category has marks (entered category marks or paragraph-level marks, including ranges).
+- Selected paragraphs for a category that is covered by the table:
+  - Paragraphs with marks/ranges are **skipped** under the table (to avoid duplication).
+  - Paragraphs without marks/ranges are **printed** under the table (so unmarked feedback still appears).
+- Matching uses normalized category names and paragraph info (including markInfo) to decide coverage; normalized paragraph text is compared when skipping lines to avoid false duplicates.
+
 ## 🎉 Version 3.2.4 - Category Marking Modes & Percentage Display
 
 This incremental release focuses on making assessment categories smarter and ensuring percentage-based color feedback stays visible:

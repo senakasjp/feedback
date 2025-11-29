@@ -3508,6 +3508,9 @@
 			const headerIsPresent = headerCells.some(cell => cell.tagName === 'TH') || headerValueCandidates.length > 0
 			const headerTexts = headerIsPresent ? headerTextsRaw : []
 			const headerValues = headerIsPresent ? headerTextsRaw.map(text => extractNumber(text)) : []
+			const inferredColumns = Math.max(1, headerCells.length - dataStartIndex)
+			// Treat all data columns as mark-bearing columns; any content there counts as a mark line
+			const reservedMarkColumns = inferredColumns
 
 				const dataRows = headerIsPresent ? rows.slice(1) : rows
 
@@ -3536,10 +3539,13 @@
 				const bestMatchKey = mappedKey || findBestMatchKey(rowKey)
 				const effectiveKey = bestMatchKey || rowKey
 				const markValue = marksMap[effectiveKey] ?? marksMap[rowKey]
-				if (!Number.isFinite(markValue)) return
+				const markCells = cells.slice(dataStartIndex, dataStartIndex + reservedMarkColumns)
+				const hasMarkContent = markCells.some(cell => (cell.textContent || '').trim().length > 0)
 
-				// Track that this category is represented in the table (even if mark is 0)
-				matchedCategories.add(effectiveKey)
+				// Track that this category is represented in the table when it has marks entered (numeric or any mark content in reserved mark columns)
+				if ((Number.isFinite(markValue) && markValue >= 0) || hasMarkContent) {
+					matchedCategories.add(effectiveKey)
+				}
 
 				// Populate Marks column text if present
 				if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
@@ -3594,6 +3600,12 @@
 						const idxFromValue = Math.round(relative * (dataColumnsCount - 1))
 						const clampedIdx = Math.max(0, Math.min(dataColumnsCount - 1, idxFromValue))
 						columnIndex = dataStartIndex + clampedIdx
+					}
+
+					// Clamp highlighting to the reserved mark columns; cells after that are treated as non-mark paragraphs
+					const maxMarkColumnIndex = Math.min(cells.length - 1, dataStartIndex + reservedMarkColumns - 1)
+					if (columnIndex > maxMarkColumnIndex) {
+						columnIndex = maxMarkColumnIndex
 					}
 
 					if (columnIndex > 0 && columnIndex < cells.length) {
@@ -4004,15 +4016,63 @@
 
 		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
 		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
-		const skipCategories = new Set()
+
+		const categoriesWithMarks = new Set()
+		const mappedCategories = new Set()
+		const categoriesWithParagraphMarks = new Set()
+		const categoriesWithUnmarkedSelections = new Set()
+		const paragraphInfoIndex = buildParagraphInfoIndex()
+		const paragraphsToSkip = new Set()
+		const normalizeLine = (val) => (val || '').toString().replace(/\u00a0/g, ' ').trim()
+
 		if (hasAssessmentHtml) {
 			Object.entries(categoryMarks || {}).forEach(([name, val]) => {
 				const num = parseFloat(val)
 				if (Number.isFinite(num)) {
-					skipCategories.add(normalizeCategoryName(name))
+					categoriesWithMarks.add(normalizeCategoryName(name))
 				}
 			})
-			matchedCategoriesFromTable.forEach(cat => skipCategories.add(cat))
+			Object.values(currentAssessment?.tableRowCategoryMap || {}).forEach(value => {
+				mappedCategories.add(normalizeCategoryName(value))
+			})
+		}
+
+		// Track categories that have selected paragraphs without a mark badge/value
+		selectedParagraphs.forEach(id => {
+			const info = paragraphInfoIndex[id]
+			const para = info || paragraphs.find(p => p.id === id)
+			if (!para) return
+			const text = typeof para === 'string' ? para : para.text || ''
+			const categoryText = info?.category || (text.includes(': ') ? text.split(': ')[0] : '')
+			const normalized = normalizeCategoryName(categoryText)
+			const markInfo = info?.markInfo || (typeof para === 'object' ? para.markInfo : undefined)
+			const hasNumericMark = !!markInfo && [markInfo.numericValue, markInfo.value, markInfo.min, markInfo.max]
+				.some(val => Number.isFinite(parseNumericMarkValue(val)))
+			const hasRangeMark = !!markInfo && !!parseNumericRange(markInfo.value)
+			const hasParaMark = hasNumericMark || hasRangeMark
+			const categoryCovered = matchedCategoriesFromTable.has(normalized) || mappedCategories.has(normalized) || categoriesWithMarks.has(normalized) || categoriesWithParagraphMarks.has(normalized)
+			if (categoryCovered && hasParaMark) {
+				const cleaned = cleanParagraphTextForDisplay(info?.fullText || text)
+				const normalizedText = normalizeLine(cleaned)
+				const normalizedRaw = normalizeLine(text)
+				if (normalizedText.length > 0) paragraphsToSkip.add(normalizedText)
+				if (normalizedRaw.length > 0) paragraphsToSkip.add(normalizedRaw)
+			}
+			if (hasParaMark) {
+				categoriesWithParagraphMarks.add(normalized)
+			} else {
+				categoriesWithUnmarkedSelections.add(normalized)
+			}
+		})
+
+		const isCategoryCoveredByTable = (normalizedCategory) => {
+			if (!hasAssessmentHtml) return false
+			// If any selected paragraph in this category has no mark/range, render it under the table
+			if (categoriesWithUnmarkedSelections.has(normalizedCategory)) return false
+			// Table match/mapping or entered marks/paragraph marks treat it as covered
+			if (matchedCategoriesFromTable.has(normalizedCategory) || mappedCategories.has(normalizedCategory)) return true
+			if (categoriesWithMarks.has(normalizedCategory) || categoriesWithParagraphMarks.has(normalizedCategory)) return true
+			return false
 		}
 
 		// Content with comfortable spacing and bold category names
@@ -4063,7 +4123,7 @@
 				// Extract category name (everything before the colon)
 				const categoryName = line.split(':')[0].trim()
 				currentCategory = normalizeCategoryName(categoryName)
-				skipCurrentCategory = hasAssessmentHtml && skipCategories.size > 0 && skipCategories.has(currentCategory)
+				skipCurrentCategory = isCategoryCoveredByTable(currentCategory)
 				if (skipCurrentCategory) {
 					return
 				}
@@ -4080,6 +4140,7 @@
 				yPosition += lineHeight + 1 // Natural gap after headers
 			} else {
 				if (skipCurrentCategory) return
+				if (paragraphsToSkip.has(normalizeLine(line))) return
 				// Regular content - split long lines
 				const wrappedLines = doc.splitTextToSize(line, contentMaxLineWidth)
 				wrappedLines.forEach((wrappedLine) => {
