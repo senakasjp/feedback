@@ -4102,7 +4102,9 @@
 			textLines.shift()
 		}
 		
-		textLines.forEach((line) => {
+		let previousBlank = false
+		for (let i = 0; i < textLines.length; i++) {
+			const line = textLines[i]
 			// Check if we need a new page
 			if (yPosition > pageHeightBody - margin) {
 				addContentPage()
@@ -4114,9 +4116,13 @@
 			}
 			// Skip empty lines but keep comfortable spacing between points
 			if (line.trim() === '') {
-				yPosition += lineHeight * 0.6 // smaller gap for empty lines
-				return
+				if (!previousBlank) {
+					yPosition += lineHeight * 0.6 // smaller gap for empty lines
+				}
+				previousBlank = true
+				continue
 			}
+			previousBlank = false
 			
 			// Check if this line is a category header (contains ':')
 			if (line.includes(':')) {
@@ -4125,7 +4131,7 @@
 				currentCategory = normalizeCategoryName(categoryName)
 				skipCurrentCategory = isCategoryCoveredByTable(currentCategory)
 				if (skipCurrentCategory) {
-					return
+					continue
 				}
 
 				// Bold font for category headers only (no marks)
@@ -4139,8 +4145,8 @@
 				doc.setFontSize(currentBodyFontSize) // Back to regular size
 				yPosition += lineHeight + 1 // Natural gap after headers
 			} else {
-				if (skipCurrentCategory) return
-				if (paragraphsToSkip.has(normalizeLine(line))) return
+				if (skipCurrentCategory) continue
+				if (paragraphsToSkip.has(normalizeLine(line))) continue
 				// Regular content - split long lines
 				const wrappedLines = doc.splitTextToSize(line, contentMaxLineWidth)
 				wrappedLines.forEach((wrappedLine) => {
@@ -4156,7 +4162,7 @@
 					yPosition += lineHeight
 				})
 			}
-		})
+		}
 		
 		// Generate filename with subject, assessment, and student name
 		let filename = 'Feedback-report'
