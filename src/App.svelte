@@ -278,6 +278,7 @@
 				selectedParagraphs = new Set()
 				categoryMarks = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				quickAddText = {}
 				
 				// Reload assignment paragraphs only (no student data)
 				loadAssessmentData(currentSubjectId, currentAssessmentId, false)
@@ -546,6 +547,7 @@
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				quickAddText = {}
 			} else {
 				// Initialize empty data for new assessment
 				initializeEmptyData()
@@ -641,6 +643,7 @@
 					// Reset all marks to zero
 					categoryMarks = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				quickAddText = {}
 				} else {
 					// Initialize empty data for new assessment
 					initializeEmptyData()
@@ -664,7 +667,8 @@
 		tableRowCategoryMap = {}
 		categoryMarks = {}
 		manualTotalMarks = ''
-		
+		quickAddText = {}
+
 		// Clear student selection to prevent cross-contamination
 		currentStudentId = null
 		
@@ -1878,6 +1882,7 @@
 				selectedParagraphs.clear()
 				categoryMarks = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				quickAddText = {}
 			}
 		
 		// Clear loading state and close modal
@@ -1914,6 +1919,7 @@
 				selectedParagraphs = new Set()
 				categoryMarks = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				quickAddText = {}
 				
 				// Reload assignment paragraphs only (no student data)
 				await loadAssessmentData(currentSubjectId, currentAssessmentId, false)
@@ -2023,10 +2029,17 @@
 
 		// STRICT SAVING CRITERIA 2: Only save to Student if student IS selected
 		console.log('STRICT SAVING CRITERIA: Saving to student file - student selected')
-		
+
 		// STRICT VALIDATION: Ensure student is actually selected
 		if (!currentStudentId) {
 			console.log('STRICT SAVING CRITERIA: Cannot save student data when no student is selected')
+			return
+		}
+
+		// Check for unentered text in quick-add textareas
+		const hasUnenteredText = Object.values(quickAddText).some(text => text && text.trim() !== '')
+		if (hasUnenteredText) {
+			showSuccessNotification('⚠️ Cannot save - you have unentered text in the "Add paragraph" field. Please click "Add paragraph" button or clear the text first.')
 			return
 		}
 
@@ -2103,6 +2116,7 @@
 				selectedParagraphs = new Set()
 				categoryMarks = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
+				quickAddText = {}
 			}
 		} catch (error) {
 			console.error('Failed to deselect student after save', error)
@@ -2111,6 +2125,7 @@
 			selectedParagraphs = new Set()
 			categoryMarks = {}
 			manualTotalMarks = currentAssessment?.totalMarks ?? ''
+			quickAddText = {}
 		} finally {
 			if (!currentStudentId) {
 				currentStudentId = null
@@ -3375,7 +3390,7 @@
 		if (!htmlContent) return startY
 
 		const pageHeight = doc.internal.pageSize.getHeight()
-		const highlightColor = '#fff4b8' // soft yellow highlight
+		const highlightColor = '#ffe066' // slightly darker yellow highlight
 		const pxPerMm = 96 / 25.4 // approximate CSS pixel density
 		const maxContentWidthMm = pageWidth - (margin * 2)
 		const maxContentWidthPx = maxContentWidthMm * pxPerMm
@@ -3421,7 +3436,6 @@
 				overflow-wrap: anywhere !important;
 				white-space: normal !important;
 				hyphens: auto !important;
-				max-width: 0 !important; /* allow fixed-layout columns to wrap instead of stretching */
 				box-sizing: border-box !important;
 			}
 			.pdf-assessment-html p { margin: 0; line-height: 1.4; }
@@ -3430,6 +3444,11 @@
 			.pdf-assessment-html li { margin: 0; line-height: 1.3; }
 			.pdf-assessment-html img { max-width: 100%; height: auto; }
 			.pdf-assessment-html * { box-sizing: border-box; }
+			.pdf-assessment-html table,
+			.pdf-assessment-html th,
+			.pdf-assessment-html td {
+				border: 1px solid #222 !important;
+			}
 		`
 		container.prepend(styleElement)
 
@@ -3848,6 +3867,15 @@
 
 		async function generatePDF() {
 			console.log('📄 generatePDF called')
+		// Check for unentered text in quick-add textareas
+		if (currentStudentId) {
+			const hasUnenteredText = Object.values(quickAddText).some(text => text && text.trim() !== '')
+			if (hasUnenteredText) {
+				showSuccessNotification('⚠️ Cannot generate PDF - you have unentered text in the "Add paragraph" field. Please click "Add paragraph" button or clear the text first.')
+				return
+			}
+		}
+
 			let selectedText = getSelectedTextInVisualOrder()
 			
 		// Convert HTML to plain text for PDF
@@ -4165,21 +4193,39 @@
 		}
 		
 		// Generate filename with subject, assessment, and student name
-		let filename = 'Feedback-report'
-		if (subjectName) filename += `-${subjectName.replace(/[^a-zA-Z0-9]/g, '-')}`
-		if (assessmentName) filename += `-${assessmentName.replace(/[^a-zA-Z0-9]/g, '-')}`
-		if (studentName) filename += `-${studentName.replace(/[^a-zA-Z0-9]/g, '-')}`
-		filename += '.pdf'
-		
-		// Save the PDF
+	let filename = 'Feedback-report'
+	if (subjectName) filename += `-${subjectName.replace(/[^a-zA-Z0-9]/g, '-')}`
+	if (assessmentName) filename += `-${assessmentName.replace(/[^a-zA-Z0-9]/g, '-')}`
+	if (studentName) filename += `-${studentName.replace(/[^a-zA-Z0-9]/g, '-')}`
+	filename += '.pdf'
+
+	// Try to save to assessment folder using Tauri, fallback to browser download
+	try {
+		// Get PDF as byte array
+		const pdfData = doc.output('arraybuffer')
+		const pdfBytes = new Uint8Array(pdfData)
+
+		// Save to assessment-specific folder via Tauri
+		const savedPath = await invoke('save_pdf_to_folder', {
+			pdfData: Array.from(pdfBytes),
+			subjectName: subjectName || null,
+			assessmentName: assessmentName || null,
+			studentName: studentName || null
+		})
+
+		showSuccessNotification(`✅ PDF saved to: ${savedPath}`)
+	} catch (error) {
+		// Fallback to browser download if Tauri is not available
+		console.log('Tauri not available, using browser download', error)
 		doc.save(filename)
 		showSuccessNotification('ℹ️ PDF generated and downloaded - feedback document ready with selected paragraphs and marks')
-		
-		// Auto-save student evaluation data when generating PDF
-		if (currentStudentId) {
-			saveStudentEvaluation()
-		}
 	}
+
+	// Auto-save student evaluation data when generating PDF
+	if (currentStudentId) {
+		saveStudentEvaluation()
+	}
+}
 
 
 	onMount(() => {

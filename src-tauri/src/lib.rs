@@ -3,7 +3,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file, write_student_evaluation, read_student_evaluation, write_student_paragraphs, read_student_paragraphs, delete_student_evaluation, delete_student_paragraphs, delete_all_student_files, export_csv_file])
+        .invoke_handler(tauri::generate_handler![portable_data_dir, write_portable, read_portable, write_subject_data, read_subject_data, generate_pdf_file, write_student_evaluation, read_student_evaluation, write_student_paragraphs, read_student_paragraphs, delete_student_evaluation, delete_student_paragraphs, delete_all_student_files, export_csv_file, save_pdf_to_folder])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -308,4 +308,50 @@ fn export_csv_file(content: String, subject_name: String) -> Result<String, Stri
     std::fs::write(&csv_path, content).map_err(|e| e.to_string())?;
     
     Ok(csv_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn save_pdf_to_folder(
+    pdf_data: Vec<u8>,
+    subject_name: Option<String>,
+    assessment_name: Option<String>,
+    student_name: Option<String>,
+) -> Result<String, String> {
+    // Get Downloads directory
+    let downloads_dir = dirs::download_dir()
+        .ok_or("Could not find Downloads directory")?;
+
+    // Create folder structure: Downloads/Feedback-PDFs/[AssessmentName]/
+    let pdfs_dir = downloads_dir.join("Feedback-PDFs");
+    std::fs::create_dir_all(&pdfs_dir).map_err(|e| e.to_string())?;
+
+    // Create assessment-specific folder if assessment name is provided
+    let target_dir = if let Some(assessment) = &assessment_name {
+        let safe_assessment = assessment.replace(|c: char| !c.is_alphanumeric() && c != ' ', "-");
+        let assessment_dir = pdfs_dir.join(&safe_assessment);
+        std::fs::create_dir_all(&assessment_dir).map_err(|e| e.to_string())?;
+        assessment_dir
+    } else {
+        pdfs_dir
+    };
+
+    // Generate filename
+    let mut filename = "Feedback-report".to_string();
+    if let Some(subject) = &subject_name {
+        filename = format!("{}-{}", filename, subject.replace(|c: char| !c.is_alphanumeric(), "-"));
+    }
+    if let Some(assessment) = &assessment_name {
+        filename = format!("{}-{}", filename, assessment.replace(|c: char| !c.is_alphanumeric(), "-"));
+    }
+    if let Some(student) = &student_name {
+        filename = format!("{}-{}", filename, student.replace(|c: char| !c.is_alphanumeric(), "-"));
+    }
+    filename = format!("{}.pdf", filename);
+
+    let pdf_path = target_dir.join(&filename);
+
+    // Write PDF data to file
+    std::fs::write(&pdf_path, pdf_data).map_err(|e| e.to_string())?;
+
+    Ok(pdf_path.to_string_lossy().to_string())
 }

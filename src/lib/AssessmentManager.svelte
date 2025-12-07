@@ -313,16 +313,16 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			return total + numMarks;
 		}, 0);
 		
-		// Prioritize calculated total from category marks, use manual total only if calculated is 0
-		// This ensures we show the actual marks from categories
+		// Prioritize calculated total from category marks; only use manual total when no category marks exist
+		const hasCategoryMarks = Object.keys(categoryMarks).length > 0;
 		const manualTotalNum = manualTotal ? parseFloat(String(manualTotal)) : 0;
-		const finalTotal = Number(calculatedTotal) > 0 ? Number(calculatedTotal) : manualTotalNum;
+		const finalTotal = hasCategoryMarks ? Number(calculatedTotal) : manualTotalNum;
 		
 		
 		return {
 			categoryMarks,
 			total: finalTotal,
-			hasMarks: Object.keys(categoryMarks).length > 0
+			hasMarks: hasCategoryMarks
 		};
 	}
 
@@ -1744,7 +1744,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 											style="min-width: 260px; max-height: 320px; overflow-y: auto; z-index: 1100;"
 										>
 											<p class="text-muted small mb-2">Check the columns you want to hide.</p>
-										{#each exportColumnOptions as column}
+										{#each exportColumnOptions as column, index (column.id)}
 											<div class="form-check mb-2">
 												<input
 													class="form-check-input"
@@ -1760,6 +1760,9 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 													{/if}
 												</label>
 											</div>
+											{#if index < exportColumnOptions.length - 1}
+												<hr class="dropdown-divider my-2" />
+											{/if}
 										{/each}
 										{#if exportColumnOptions.length === 0}
 											<p class="text-muted small mb-0">No columns available.</p>
