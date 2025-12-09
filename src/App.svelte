@@ -4142,10 +4142,16 @@
 		let skipCurrentCategory = false
 		
 		// Split the text into lines and process each line
-		const textLines = selectedText.split('\n')
-		while (textLines.length && textLines[0].trim() === '') {
-			textLines.shift()
+		const rawLines = selectedText.split('\n')
+		while (rawLines.length && rawLines[0].trim() === '') {
+			rawLines.shift()
 		}
+		const textLines = []
+		rawLines.forEach((line) => {
+			const trimmed = line.trim()
+			if (trimmed === '' && (textLines[textLines.length - 1] || '').trim() === '') return
+			textLines.push(line)
+		})
 		
 		const blankLineGap = () => lineHeight * 0.35
 		const headerGap = () => lineHeight * 0.7
@@ -4162,8 +4168,13 @@
 				applyBodyFontForCurrentPage()
 				yPosition = contentTopMargin
 			}
+			const isBlank = line.trim() === ''
+			// Skip blanks entirely when current category is being skipped
+			if (skipCurrentCategory && isBlank) {
+				continue
+			}
 			// Skip empty lines but keep comfortable spacing between points
-			if (line.trim() === '') {
+			if (isBlank) {
 				if (!previousBlank) {
 					yPosition += blankLineGap()
 				}
