@@ -1,10 +1,17 @@
-# Feature Implementation Summary - Version 3.2.4
+# Feature Implementation Summary - Version 3.2.6
 
-> **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
+> **New:** PDF rubric highlighting now mirrors the UI using row label + selected paragraph position, backed by saved manual mappings.
 
 
 ## Overview
-This document summarizes the major features implemented in Feedback Manager version 3.2.4. This update focuses on per-category marking modes, smarter percentage handling, and incremental UX polish that keeps feedback creation transparent and predictable.
+This document summarizes the major features implemented in Feedback Manager version 3.2.6. This update focuses on reliable PDF rubric highlighting that aligns with on-screen selections while keeping manual mappings authoritative.
+
+## Version 3.2.6 - Manual Rubric Highlighting Reliability
+
+### 🟨 **Accurate Column Highlighting**
+- Row label is treated as the category; highlighted column is chosen from the selected paragraph’s position (top-down) using manual paragraph-position → column mapping.
+- Row → category and position → column mappings persist with the assessment even when a student is selected.
+- PDF highlight now mirrors the checkbox selection order seen in the UI.
 
 ## Version 3.2.4 - Category Marking Modes & Percentage Display
 

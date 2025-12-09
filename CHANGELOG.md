@@ -5,6 +5,17 @@
 
 ## Version History
 
+### v3.2.6 - Manual Rubric Highlighting Reliability - December 2025
+
+#### 🟨 PDF Highlighting Accuracy
+- Row label is treated as the category; highlighted column is chosen from the **selected paragraph’s position** (top-down) using your manual paragraph-position → column mapping.
+- Row→category and position→column mappings persist with the assessment even when a student is selected.
+- PDF highlight now mirrors the checkbox selection order seen in the UI.
+
+**Files Updated**:
+- `src/App.svelte` – PDF highlighting logic (row/position mapping) and mapping persistence
+- `README.md`, `FEATURE_SUMMARY.md`, `USER_GUIDE.md`, `API_REFERENCE.md`, `ARCHITECTURE.md`, `CHANGELOG.md` – documentation updates for 3.2.6
+
 ### v3.2.4 - Category Marking Modes & Percentage Display - January 2025
 
 #### 🔢 Per-Category Marking Modes

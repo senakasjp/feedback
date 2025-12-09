@@ -565,7 +565,15 @@
 					if (currentAssessment && parsed.rubricHtml !== undefined) {
 						currentAssessment.rubricHtml = parsed.rubricHtml
 					}
+					if (currentAssessment && parsed.tableRowCategoryMap !== undefined) {
+						currentAssessment.tableRowCategoryMap = parsed.tableRowCategoryMap || {}
+					}
+					if (currentAssessment && parsed.tableColumnMarkMap !== undefined) {
+						currentAssessment.tableColumnMarkMap = parsed.tableColumnMarkMap || {}
+					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
+					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
+					tableColumnMarkMap = currentAssessment?.tableColumnMarkMap || {}
 					// Keep HTML card collapsed by default; user can expand manually
 					showAssessmentHtml = false
 					// Reset all marks to zero
@@ -706,21 +714,26 @@
 		console.log('STRICT DATA SEPARATION: All data cleared before entering assessment')
 	}
 
-	async function saveAssessmentData() {
+	async function saveAssessmentData(options = {}) {
+		const { force = false, skipSelections = false } = options
 		if (!currentSubjectId || !currentAssessmentId) return
 		
 		// STRICT SAVING CRITERIA 1: Only save to Assessment if student is NOT selected
-		if (currentStudentId) {
+		if (currentStudentId && !force) {
 			console.log('STRICT SAVING CRITERIA: Cannot save assessment data when student is selected - use saveStudentEvaluation instead')
 			return
 		}
 		
 		// STRICT VALIDATION: Ensure no student-specific data is being saved to assessment
-		console.log('STRICT SAVING CRITERIA: Saving to assessment file - no student selected')
+		if (currentStudentId && force) {
+			console.log('STRICT SAVING CRITERIA: Forced save of assessment metadata while student is selected (student data excluded)')
+		} else {
+			console.log('STRICT SAVING CRITERIA: Saving to assessment file - no student selected')
+		}
 
 		const data = {
 			paragraphs,
-			selectedParagraphs: Array.from(selectedParagraphs),
+			selectedParagraphs: Array.from(currentStudentId && (force || skipSelections) ? new Set() : selectedParagraphs),
 			// Assignment data should never contain student-specific information
 			studentName: '',
 			// No studentImage - only header photo for assessment
@@ -3424,14 +3437,14 @@
 		const pxPerMm = 96 / 25.4 // approximate CSS pixel density
 		const maxContentWidthMm = pageWidth - (margin * 2)
 		const maxContentWidthPx = maxContentWidthMm * pxPerMm
-		const rowCategoryMap = currentAssessment?.tableRowCategoryMap || tableRowCategoryMap || {}
-		const getMappedCategory = (key) => {
-			if (!key) return null
-			const direct = rowCategoryMap[key]
-			if (direct) return direct
-			const normalized = normalizeCategoryLabel(key)
-			if (rowCategoryMap[normalized]) return rowCategoryMap[normalized]
-			return null
+		const paragraphInfoIndex = buildParagraphInfoIndex()
+		const getParagraphCategoryKey = (para) => {
+			const info = para?.id ? paragraphInfoIndex[para.id] : null
+			if (info?.category) return normalize(info.category)
+			const paraText = typeof para === 'string' ? para : para?.text || ''
+			if (!paraText) return ''
+			const prefix = paraText.split(':')[0]
+			return normalize(prefix)
 		}
 		const container = document.createElement('div')
 		container.className = 'pdf-assessment-html'
@@ -3538,6 +3551,19 @@
 				}
 			})
 
+			// Build UI-order paragraph cache by category for position lookup
+			const groupedParagraphs = getGroupedParagraphs()
+			const getCategoryParagraphsInOrder = (catKey) => {
+				const result = []
+				groupedParagraphs.forEach(group => {
+					if (normalize(group.category) !== catKey) return
+					Object.values(group.knowledgeAreas || {}).forEach(list => {
+						list.forEach(p => result.push(p))
+					})
+				})
+				return result
+			}
+
 			const tables = Array.from(container.querySelectorAll('table'))
 		tables.forEach(table => {
 			const rows = Array.from(table.querySelectorAll('tr'))
@@ -3568,75 +3594,38 @@
 					if (cells.length <= dataStartIndex) return
 					const rawLabel = cells[0].textContent || ''
 				const rowKey = normalize(rawLabel)
-				const mappedCategoryName = getMappedCategory(rowKey)
-				const mappedKey = mappedCategoryName ? normalize(mappedCategoryName) : null
-				// Use ONLY manual mapping - no auto-detection fallback
-				const effectiveKey = mappedKey || rowKey
-				const markValue = marksMap[effectiveKey] ?? marksMap[rowKey]
-				const markCells = cells.slice(dataStartIndex, dataStartIndex + reservedMarkColumns)
-				const hasMarkContent = markCells.some(cell => (cell.textContent || '').trim().length > 0)
+				const effectiveKey = rowKey // Row label is the category; no other mapping
 
-				// Track that this category is represented in the table when it has marks entered (numeric or any mark content in reserved mark columns)
-				if ((Number.isFinite(markValue) && markValue >= 0) || hasMarkContent) {
-					matchedCategories.add(effectiveKey)
-				}
-
-				// Populate Marks column text if present
+				// Populate Marks column text if present (keep existing behavior)
 				if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
 					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey)
+					const markValue = marksMap[effectiveKey] ?? marksMap[rowKey]
 					const allocated = Number.parseFloat(categoryObj?.allocatedMarks)
-						cells[marksColumnIndex].textContent = Number.isFinite(allocated) && allocated > 0 ? `${markValue} / ${allocated}` : `${markValue}`
-					}
+					cells[marksColumnIndex].textContent = Number.isFinite(allocated) && allocated > 0 ? `${markValue} / ${allocated}` : `${markValue}`
+				}
 
-					// Use ONLY manual column mapping
-					let columnIndex = -1
-					const columnMarkMap = currentAssessment?.tableColumnMarkMap || tableColumnMarkMap || {}
-					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey)
-					let allocatedMarksForPercent = Number.parseFloat(categoryObj?.allocatedMarks)
-					if (!Number.isFinite(allocatedMarksForPercent) || allocatedMarksForPercent <= 0) {
-						const labelNumber = extractNumber(rawLabel)
-						if (Number.isFinite(labelNumber) && labelNumber > 0) {
-							allocatedMarksForPercent = labelNumber
-						}
-					}
+				// Use ONLY row label + paragraph position -> column mapping for highlighting
+				let columnIndex = -1
+				const columnMarkMap = currentAssessment?.tableColumnMarkMap || tableColumnMarkMap || {}
+				
+				if (Object.keys(columnMarkMap).length > 0) {
+					// Get all paragraphs for this row/category in UI order
+					const categoryParagraphsList = getCategoryParagraphsInOrder(effectiveKey)
 					
-					// Calculate the value to match (percentage or raw mark)
-					const percentHeaders = headerValues.filter(Number.isFinite).every(val => val >= 0 && val <= 100)
-					const valueForHeaderMatch = percentHeaders && Number.isFinite(allocatedMarksForPercent) && allocatedMarksForPercent > 0
-						? (markValue / allocatedMarksForPercent) * 100
-						: markValue
-
-					// Use manual column mappings ONLY
-					if (Object.keys(columnMarkMap).length > 0) {
-						// columnMarkMap now contains: colIndex -> header text
-						// Extract mark values from the header text and find closest match
-						let bestColIdx = -1
-						let bestDiff = Number.POSITIVE_INFINITY
+					// Use the top-most selected paragraph (in UI order)
+					const selectedPara = categoryParagraphsList.find(p => selectedParagraphs.has(p.id))
+					
+					if (selectedPara) {
+						// Paragraph position is its index within the full category list (1-based)
+						const paragraphPosition = categoryParagraphsList.findIndex(p => p.id === selectedPara.id) + 1
 						
-						for (const [colIndexStr, headerText] of Object.entries(columnMarkMap)) {
-							if (!headerText) continue // Skip empty mappings
-							
-							const colIdx = parseInt(colIndexStr, 10)
-							// Extract numeric value from header text (e.g., "80-100%" -> 80 or 100)
-							const numbers = (headerText || '').match(/\d+(\.\d+)?/g)
-							if (!numbers || numbers.length === 0) continue
-							
-							// Take the highest number from the header (for ranges like "80-100", take 100)
-							const mappedMarkNum = Math.max(...numbers.map(n => Number.parseFloat(n)))
-							
-							if (!Number.isFinite(mappedMarkNum)) continue
-							
-							const diff = Math.abs(mappedMarkNum - valueForHeaderMatch)
-							if (diff < bestDiff) {
-								bestDiff = diff
-								bestColIdx = colIdx
-							}
-						}
-						
-						if (bestColIdx !== -1) {
-							columnIndex = bestColIdx
+						// Look up which column this position should highlight
+						const mappedColumnIndex = columnMarkMap[paragraphPosition]
+						if (mappedColumnIndex !== undefined && mappedColumnIndex !== null && mappedColumnIndex !== '') {
+							columnIndex = parseInt(mappedColumnIndex, 10)
 						}
 					}
+				}
 
 					// Clamp highlighting to the reserved mark columns; cells after that are treated as non-mark paragraphs
 					const maxMarkColumnIndex = Math.min(cells.length - 1, dataStartIndex + reservedMarkColumns - 1)
@@ -3647,6 +3636,7 @@
 					if (columnIndex > 0 && columnIndex < cells.length) {
 						const targetCell = cells[columnIndex]
 						targetCell.setAttribute('data-color', 'yellow')
+						matchedCategories.add(effectiveKey)
 					}
 				})
 			})
@@ -4254,7 +4244,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.2.4</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.2.6</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
@@ -4546,6 +4536,7 @@
 															</thead>
 															<tbody>
 																{#each tableRowLabels as label (label)}
+																	{@const normalizedLabel = normalizeCategoryLabel(label)}
 																	<tr>
 																		<td class="align-middle">
 																			<small class="fw-semibold text-break">{label}</small>
@@ -4553,10 +4544,10 @@
 																		<td>
 																			<select
 																				class="form-select form-select-sm"
-																				value={tableRowCategoryMap[normalizeCategoryLabel(label)] || ''}
+																				value={tableRowCategoryMap[normalizedLabel] || ''}
 																				onchange={(e) => {
 																					const selected = e.currentTarget.value
-																					const key = normalizeCategoryLabel(label)
+																					const key = normalizedLabel
 																					const updated = { ...tableRowCategoryMap }
 																					if (selected) {
 																						updated[key] = selected
@@ -4567,9 +4558,7 @@
 																					if (currentAssessment) {
 																						currentAssessment.tableRowCategoryMap = updated
 																					}
-																					if (!currentStudentId) {
-																						saveAssessmentData()
-																					}
+																					saveAssessmentData({ force: true, skipSelections: true })
 																				}}
 																			>
 																				<option value="">Auto (match by name)</option>
@@ -4588,32 +4577,32 @@
 											{#if tableColumnHeaders.length}
 												<div class="mt-3">
 													<div class="d-flex align-items-center justify-content-between mb-2">
-														<span class="fw-bold">Map table columns</span>
-														<span class="text-muted small">{tableColumnHeaders.length} column{tableColumnHeaders.length !== 1 ? 's' : ''} detected</span>
+														<span class="fw-bold">Map paragraph position to table columns</span>
+														<span class="text-muted small">Map which paragraph (1st, 2nd, etc.) highlights which column</span>
 													</div>
 													<div class="table-responsive">
 														<table class="table table-sm table-bordered mb-2">
 															<thead class="table-light">
 																<tr>
-																	<th style="width: 120px;">Column</th>
-																	<th>Header Text</th>
+																	<th style="width: 150px;">Paragraph Position</th>
+																	<th>Highlights Column</th>
 																</tr>
 															</thead>
 															<tbody>
-																{#each tableColumnHeaders as { index, text } (index)}
+																{#each Array(5).fill(0).map((_, i) => i + 1) as position (position)}
 																	<tr>
 																		<td class="text-center align-middle">
-																			<span class="badge bg-secondary">Col {index}</span>
+																			<span class="badge bg-info">{position}{position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th'} paragraph</span>
 																		</td>
 																		<td>
 																			<select
 																				class="form-select form-select-sm"
-																				bind:value={tableColumnMarkMap[index]}
-																				onchange={() => saveAssessmentData()}
+																				bind:value={tableColumnMarkMap[position]}
+																				onchange={() => saveAssessmentData({ force: true, skipSelections: true })}
 																			>
-																				<option value="">Select header...</option>
+																				<option value="">Select column...</option>
 																				{#each tableColumnHeaders as header (header.index)}
-																					<option value={header.text}>{header.text}</option>
+																					<option value={header.index}>{header.text}</option>
 																				{/each}
 																			</select>
 																		</td>

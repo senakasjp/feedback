@@ -3,6 +3,13 @@
 > **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
 
 
+## Version 3.2.6 - Manual Rubric Highlighting Reliability
+
+### PDF Rubric Highlighting
+- Row label is treated as the category; the highlighted column is chosen from the selected paragraph’s position (top-down) using your paragraph-position → column mapping.
+- Row → category and position → column mappings persist with the assessment even when a student is selected.
+- PDF highlight matches the checkbox selection order visible in the UI.
+
 ## Version 3.2.4 - Total Marks Display & Enhanced Text Formatting
 
 ### 🎯 **Total Marks Display**
