@@ -76,6 +76,7 @@
 	let tableColumnMarkMap = $state({}) // Manual mapping: column index -> mark value (for rubric highlighting)
 	let quickAddKnowledgeArea = $state({}) // Store quick-add knowledge area selection per category
 	let quickAddText = $state({}) // Store quick-add paragraph text per category
+	let quickAddToAssessmentWhenStudentSelected = $state(false) // Override to save quick-add to assessment even when a student is selected
 	let showAboutModal = $state(false) // Show about modal
 	
 	// Visual debug for checkbox issue
@@ -280,6 +281,7 @@
 				categoryMarks = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
 				quickAddText = {}
+				quickAddToAssessmentWhenStudentSelected = false
 				
 				// Reload assignment paragraphs only (no student data)
 				loadAssessmentData(currentSubjectId, currentAssessmentId, false)
@@ -705,6 +707,7 @@
 		categoryMarks = {}
 		manualTotalMarks = ''
 		quickAddText = {}
+		quickAddToAssessmentWhenStudentSelected = false
 
 		// Clear student selection to prevent cross-contamination
 		currentStudentId = null
@@ -988,8 +991,15 @@
 		paragraphs.push(newPara)
 		quickAddText = { ...quickAddText, [categoryName]: '' }
 
-		saveAssessmentData()
-		if (currentStudentId) {
+		const addToAssessment = currentStudentId && quickAddToAssessmentWhenStudentSelected
+
+		if (addToAssessment) {
+			saveAssessmentData({ force: true, skipSelections: true })
+		} else {
+			saveAssessmentData()
+		}
+
+		if (currentStudentId && !addToAssessment) {
 			saveStudentParagraphs()
 		}
 		refreshCategoryWarnings()
@@ -4113,8 +4123,8 @@
 		// Content with comfortable spacing and bold category names
 		const firstPageBodyFontSize = 10
 		const nextPagesBodyFontSize = 10
-		const firstPageLineHeight = 5.5
-		const nextPagesLineHeight = 5.5 // Tighter spacing to reduce paragraph gaps
+		const firstPageLineHeight = 5
+		const nextPagesLineHeight = 5 // Tighter spacing to reduce paragraph gaps
 		let lineHeight = nextPagesLineHeight
 		let currentBodyFontSize = nextPagesBodyFontSize
 		const applyBodyFontForCurrentPage = () => {
@@ -4137,6 +4147,9 @@
 			textLines.shift()
 		}
 		
+		const blankLineGap = () => lineHeight * 0.35
+		const headerGap = () => lineHeight * 0.7
+		const paragraphGap = () => lineHeight * 0.35
 		let previousBlank = false
 		for (let i = 0; i < textLines.length; i++) {
 			const line = textLines[i]
@@ -4152,7 +4165,7 @@
 			// Skip empty lines but keep comfortable spacing between points
 			if (line.trim() === '') {
 				if (!previousBlank) {
-					yPosition += lineHeight * 0.6 // smaller gap for empty lines
+					yPosition += blankLineGap()
 				}
 				previousBlank = true
 				continue
@@ -4178,7 +4191,7 @@
 				// Reset font to normal for content
 				doc.setFont('helvetica', 'normal')
 				doc.setFontSize(currentBodyFontSize) // Back to regular size
-				yPosition += lineHeight + 1 // Natural gap after headers
+				yPosition += headerGap() // Controlled gap after headers
 			} else {
 				if (skipCurrentCategory) continue
 				if (paragraphsToSkip.has(normalizeLine(line))) continue
@@ -4196,6 +4209,7 @@
 					doc.text(wrappedLine, margin, yPosition)
 					yPosition += lineHeight
 				})
+				yPosition += paragraphGap() // slight gap between paragraphs
 			}
 		}
 		
@@ -4244,7 +4258,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.2.6</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.2.7</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
@@ -5386,7 +5400,7 @@
 																</select>
 															{/if}
 														</div>
-														<div class="d-flex flex-column flex-sm-row gap-2">
+															<div class="d-flex flex-column flex-sm-row gap-2">
 															<textarea
 																id={quickAddInputId(group.category)}
 																class="form-control form-control-sm"
@@ -5416,6 +5430,18 @@
 																>
 																	Use main editor
 																</button>
+																{#if currentStudentId}
+																	<label class="form-check small mb-0">
+																		<input
+																			type="checkbox"
+																			class="form-check-input me-1"
+																			bind:checked={quickAddToAssessmentWhenStudentSelected}
+																		/>
+																		<span class="form-check-label text-muted">
+																			Save to assessment
+																		</span>
+																	</label>
+																{/if}
 															</div>
 														</div>
 													</div>
