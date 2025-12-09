@@ -73,6 +73,7 @@
 	let showImportModal = $state(false) // Show import paragraphs modal
 	let showExportModal = $state(false) // Show export assignment settings modal
 	let tableRowCategoryMap = $state({}) // Manual mapping: table row label -> category name
+	let tableColumnMarkMap = $state({}) // Manual mapping: column index -> mark value (for rubric highlighting)
 	let quickAddKnowledgeArea = $state({}) // Store quick-add knowledge area selection per category
 	let quickAddText = $state({}) // Store quick-add paragraph text per category
 	let showAboutModal = $state(false) // Show about modal
@@ -313,7 +314,8 @@
 	let selectedTopic = $state('')
 	let selectedKnowledgeArea = $state('')
 	const tableRowLabels = $derived(extractTableRowLabels(assessmentHtml))
-	
+	const tableColumnHeaders = $derived(extractTableColumnHeaders(assessmentHtml))
+
 	// pdrCategories is now imported from utils/constants.js
 
 	// studio4Categories is now imported from utils/constants.js
@@ -350,6 +352,28 @@
 			if (text) labels.add(text)
 		})
 		return Array.from(labels)
+	}
+
+	function extractTableColumnHeaders(html) {
+		if (!html) return []
+		const temp = document.createElement('div')
+		temp.innerHTML = html
+		const table = temp.querySelector('table')
+		if (!table) return []
+
+		// Get first row (usually headers)
+		const firstRow = table.querySelector('tr')
+		if (!firstRow) return []
+
+		const headers = []
+		const cells = Array.from(firstRow.querySelectorAll('th, td'))
+		cells.forEach((cell, index) => {
+			const text = (cell.textContent || '').replace(/\u00a0/g, ' ').trim()
+			if (text && index > 0) { // Skip first column (row labels)
+				headers.push({ index, text })
+			}
+		})
+		return headers
 	}
 
 	function shouldUseLandscapeForHtml(html, marginMm = 20) {
@@ -636,8 +660,12 @@
 					if (currentAssessment && parsed.tableRowCategoryMap !== undefined) {
 						currentAssessment.tableRowCategoryMap = parsed.tableRowCategoryMap || {}
 					}
+					if (currentAssessment && parsed.tableColumnMarkMap !== undefined) {
+						currentAssessment.tableColumnMarkMap = parsed.tableColumnMarkMap || {}
+					}
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
+					tableColumnMarkMap = currentAssessment?.tableColumnMarkMap || {}
 					// Keep HTML card collapsed by default; user can expand manually
 					showAssessmentHtml = false
 					// Reset all marks to zero
@@ -665,6 +693,7 @@
 		assessmentHtml = ''
 		showAssessmentHtml = false
 		tableRowCategoryMap = {}
+		tableColumnMarkMap = {}
 		categoryMarks = {}
 		manualTotalMarks = ''
 		quickAddText = {}
@@ -698,6 +727,7 @@
 			headerPhoto: currentAssessment?.headerPhoto || '',
 			rubricHtml: assessmentHtml,
 			tableRowCategoryMap,
+			tableColumnMarkMap,
 			categoryMarks,
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks
 		}
@@ -3533,21 +3563,6 @@
 
 				const dataRows = headerIsPresent ? rows.slice(1) : rows
 
-				const findBestMatchKey = (rowKey) => {
-					const cleaned = rowKey.replace(/\d+/g, '').replace(/marks?/gi, '').trim()
-					let best = null
-					let bestLength = 0
-					Object.keys(marksMap).forEach(key => {
-						if (cleaned && (cleaned.includes(key) || key.includes(cleaned))) {
-							if (key.length > bestLength) {
-								best = key
-								bestLength = key.length
-							}
-						}
-					})
-					return best
-				}
-
 				dataRows.forEach(row => {
 					const cells = Array.from(row.children)
 					if (cells.length <= dataStartIndex) return
@@ -3555,8 +3570,8 @@
 				const rowKey = normalize(rawLabel)
 				const mappedCategoryName = getMappedCategory(rowKey)
 				const mappedKey = mappedCategoryName ? normalize(mappedCategoryName) : null
-				const bestMatchKey = mappedKey || findBestMatchKey(rowKey)
-				const effectiveKey = bestMatchKey || rowKey
+				// Use ONLY manual mapping - no auto-detection fallback
+				const effectiveKey = mappedKey || rowKey
 				const markValue = marksMap[effectiveKey] ?? marksMap[rowKey]
 				const markCells = cells.slice(dataStartIndex, dataStartIndex + reservedMarkColumns)
 				const hasMarkContent = markCells.some(cell => (cell.textContent || '').trim().length > 0)
@@ -3573,8 +3588,9 @@
 						cells[marksColumnIndex].textContent = Number.isFinite(allocated) && allocated > 0 ? `${markValue} / ${allocated}` : `${markValue}`
 					}
 
-					// Find matching column by numeric header value, otherwise fallback
+					// Use ONLY manual column mapping
 					let columnIndex = -1
+					const columnMarkMap = currentAssessment?.tableColumnMarkMap || tableColumnMarkMap || {}
 					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey)
 					let allocatedMarksForPercent = Number.parseFloat(categoryObj?.allocatedMarks)
 					if (!Number.isFinite(allocatedMarksForPercent) || allocatedMarksForPercent <= 0) {
@@ -3583,42 +3599,43 @@
 							allocatedMarksForPercent = labelNumber
 						}
 					}
+					
+					// Calculate the value to match (percentage or raw mark)
 					const percentHeaders = headerValues.filter(Number.isFinite).every(val => val >= 0 && val <= 100)
 					const valueForHeaderMatch = percentHeaders && Number.isFinite(allocatedMarksForPercent) && allocatedMarksForPercent > 0
 						? (markValue / allocatedMarksForPercent) * 100
 						: markValue
 
-					if (headerValues.length) {
-						const exactIdx = headerValues.findIndex(val => Number.isFinite(val) && val === valueForHeaderMatch)
-						if (exactIdx !== -1) {
-							columnIndex = dataStartIndex + exactIdx
-						} else {
-							// pick closest numeric header
-							let bestIdx = -1
-							let bestDiff = Number.POSITIVE_INFINITY
-							headerValues.forEach((val, idx) => {
-								if (!Number.isFinite(val)) return
-								const diff = Math.abs(val - valueForHeaderMatch)
-								if (diff < bestDiff) {
-									bestDiff = diff
-									bestIdx = idx
-								}
-							})
-							if (bestIdx !== -1) {
-								columnIndex = dataStartIndex + bestIdx
+					// Use manual column mappings ONLY
+					if (Object.keys(columnMarkMap).length > 0) {
+						// columnMarkMap now contains: colIndex -> header text
+						// Extract mark values from the header text and find closest match
+						let bestColIdx = -1
+						let bestDiff = Number.POSITIVE_INFINITY
+						
+						for (const [colIndexStr, headerText] of Object.entries(columnMarkMap)) {
+							if (!headerText) continue // Skip empty mappings
+							
+							const colIdx = parseInt(colIndexStr, 10)
+							// Extract numeric value from header text (e.g., "80-100%" -> 80 or 100)
+							const numbers = (headerText || '').match(/\d+(\.\d+)?/g)
+							if (!numbers || numbers.length === 0) continue
+							
+							// Take the highest number from the header (for ranges like "80-100", take 100)
+							const mappedMarkNum = Math.max(...numbers.map(n => Number.parseFloat(n)))
+							
+							if (!Number.isFinite(mappedMarkNum)) continue
+							
+							const diff = Math.abs(mappedMarkNum - valueForHeaderMatch)
+							if (diff < bestDiff) {
+								bestDiff = diff
+								bestColIdx = colIdx
 							}
 						}
-					}
-
-					// Fallback: assume columns are ordered from highest mark on the left to lowest on the right
-					if (columnIndex === -1) {
-						const dataColumnsCount = cells.length - dataStartIndex
-						const maxMarkGuess = Math.max(markValue, ...Object.values(marksMap).filter(Number.isFinite))
-						const denominator = Math.max(1, maxMarkGuess)
-						const relative = (maxMarkGuess - markValue) / denominator
-						const idxFromValue = Math.round(relative * (dataColumnsCount - 1))
-						const clampedIdx = Math.max(0, Math.min(dataColumnsCount - 1, idxFromValue))
-						columnIndex = dataStartIndex + clampedIdx
+						
+						if (bestColIdx !== -1) {
+							columnIndex = bestColIdx
+						}
 					}
 
 					// Clamp highlighting to the reserved mark columns; cells after that are treated as non-mark paragraphs
@@ -4517,48 +4534,97 @@
 												<div class="mt-3">
 													<div class="d-flex align-items-center justify-content-between mb-2">
 														<span class="fw-bold">Match table rows to categories</span>
-														<span class="text-muted small">First column labels detected</span>
+														<span class="text-muted small">{tableRowLabels.length} row{tableRowLabels.length !== 1 ? 's' : ''} detected</span>
 													</div>
-													<div class="list-group table-row-map">
-														{#each tableRowLabels as label (label)}
-															<div class="list-group-item py-2">
-																<div class="row align-items-center g-2">
-																	<div class="col-12 col-md-6">
-																		<div class="small text-muted">Row label</div>
-																		<div class="fw-semibold text-break">{label}</div>
-																	</div>
-																	<div class="col-12 col-md-6">
-																		<label class="small text-muted mb-1 d-block">Match to category</label>
-																		<select
-																			class="form-select form-select-sm w-100"
-																			value={tableRowCategoryMap[normalizeCategoryLabel(label)] || ''}
-																			onchange={(e) => {
-																				const selected = e.currentTarget.value
-																				const key = normalizeCategoryLabel(label)
-																				const updated = { ...tableRowCategoryMap }
-																				if (selected) {
-																					updated[key] = selected
-																				} else {
-																					delete updated[key]
-																				}
-																				tableRowCategoryMap = updated
-																				if (currentAssessment) {
-																					currentAssessment.tableRowCategoryMap = updated
-																				}
-																				if (!currentStudentId) {
-																					saveAssessmentData()
-																				}
-																			}}
-																		>
-																			<option value="">Auto (match by name)</option>
-																			{#each (currentAssessment?.categories || []) as cat (cat.id)}
-																				<option value={cat.name}>{cat.name}</option>
-																			{/each}
-																		</select>
-																	</div>
-																</div>
-															</div>
-														{/each}
+													<div class="table-responsive">
+														<table class="table table-sm table-bordered mb-0">
+															<thead class="table-light">
+																<tr>
+																	<th style="width: 40%;">Row Label</th>
+																	<th>Match to Category</th>
+																</tr>
+															</thead>
+															<tbody>
+																{#each tableRowLabels as label (label)}
+																	<tr>
+																		<td class="align-middle">
+																			<small class="fw-semibold text-break">{label}</small>
+																		</td>
+																		<td>
+																			<select
+																				class="form-select form-select-sm"
+																				value={tableRowCategoryMap[normalizeCategoryLabel(label)] || ''}
+																				onchange={(e) => {
+																					const selected = e.currentTarget.value
+																					const key = normalizeCategoryLabel(label)
+																					const updated = { ...tableRowCategoryMap }
+																					if (selected) {
+																						updated[key] = selected
+																					} else {
+																						delete updated[key]
+																					}
+																					tableRowCategoryMap = updated
+																					if (currentAssessment) {
+																						currentAssessment.tableRowCategoryMap = updated
+																					}
+																					if (!currentStudentId) {
+																						saveAssessmentData()
+																					}
+																				}}
+																			>
+																				<option value="">Auto (match by name)</option>
+																				{#each (currentAssessment?.categories || []) as cat (cat.id)}
+																					<option value={cat.name}>{cat.name}</option>
+																				{/each}
+																			</select>
+																		</td>
+																	</tr>
+																{/each}
+															</tbody>
+														</table>
+													</div>
+												</div>
+											{/if}
+											{#if tableColumnHeaders.length}
+												<div class="mt-3">
+													<div class="d-flex align-items-center justify-content-between mb-2">
+														<span class="fw-bold">Map table columns</span>
+														<span class="text-muted small">{tableColumnHeaders.length} column{tableColumnHeaders.length !== 1 ? 's' : ''} detected</span>
+													</div>
+													<div class="table-responsive">
+														<table class="table table-sm table-bordered mb-2">
+															<thead class="table-light">
+																<tr>
+																	<th style="width: 120px;">Column</th>
+																	<th>Header Text</th>
+																</tr>
+															</thead>
+															<tbody>
+																{#each tableColumnHeaders as { index, text } (index)}
+																	<tr>
+																		<td class="text-center align-middle">
+																			<span class="badge bg-secondary">Col {index}</span>
+																		</td>
+																		<td>
+																			<select
+																				class="form-select form-select-sm"
+																				bind:value={tableColumnMarkMap[index]}
+																				onchange={() => saveAssessmentData()}
+																			>
+																				<option value="">Select header...</option>
+																				{#each tableColumnHeaders as header (header.index)}
+																					<option value={header.text}>{header.text}</option>
+																				{/each}
+																			</select>
+																		</td>
+																	</tr>
+																{/each}
+															</tbody>
+														</table>
+													</div>
+													<div class="alert alert-info mt-1 mb-0 py-2 small">
+														<i class="bi bi-info-circle me-1"></i>
+														Column highlighting happens automatically based on marks or paragraph colors (green=high, yellow=medium, red=low).
 													</div>
 												</div>
 											{/if}
@@ -4567,8 +4633,8 @@
 								</div>
 							</div>
 						</div>
-					
-					
+
+
 					<!-- Student Info Section -->
 						<div class="row mb-2">
 							<div class="col-12">
