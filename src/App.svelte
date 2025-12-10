@@ -3604,14 +3604,20 @@
 					if (cells.length <= dataStartIndex) return
 					const rawLabel = cells[0].textContent || ''
 				const rowKey = normalize(rawLabel)
-				const effectiveKey = rowKey // Row label is the category; no other mapping
+				// Allow manual row->category mapping to drive mark lookup/highlighting when labels differ
+				const mappedCategoryName = tableRowCategoryMap?.[rowKey]
+				const mappedCategoryKey = mappedCategoryName ? normalize(mappedCategoryName) : ''
+				const effectiveKey = mappedCategoryKey || rowKey
 
 				// Populate Marks column text if present (keep existing behavior)
 				if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
-					const categoryObj = currentAssessment?.categories?.find(cat => normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey)
-					const markValue = marksMap[effectiveKey] ?? marksMap[rowKey]
+					const categoryObj = currentAssessment?.categories?.find(cat =>
+						normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey || normalize(cat.name) === mappedCategoryKey
+					)
+					const markValue = marksMap[effectiveKey] ?? marksMap[rowKey] ?? marksMap[mappedCategoryKey]
 					const allocated = Number.parseFloat(categoryObj?.allocatedMarks)
-					cells[marksColumnIndex].textContent = Number.isFinite(allocated) && allocated > 0 ? `${markValue} / ${allocated}` : `${markValue}`
+					const markDisplay = markValue ?? '—'
+					cells[marksColumnIndex].textContent = Number.isFinite(allocated) && allocated > 0 ? `${markDisplay} / ${allocated}` : `${markDisplay}`
 				}
 
 				// Use ONLY row label + paragraph position -> column mapping for highlighting
@@ -3646,7 +3652,7 @@
 					if (columnIndex > 0 && columnIndex < cells.length) {
 						const targetCell = cells[columnIndex]
 						targetCell.setAttribute('data-color', 'yellow')
-						matchedCategories.add(effectiveKey)
+						matchedCategories.add(effectiveKey || rowKey)
 					}
 				})
 			})
@@ -4269,7 +4275,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.2.7</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.2.8</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>

@@ -5,6 +5,13 @@
 
 ## Version History
 
+### v3.2.8 - PDF Rubric Mapping Reliability - January 2026
+
+- Fixed PDF export to honor manual row → category mapping when rendering marks and highlighting rubric cells (no `undefined` cells; mapped rows highlight correctly).
+- Marks column now falls back to `—` when no numeric value is present.
+- Updated version strings/UI banner to 3.2.8.
+- Documentation refreshed (`README.md`, `FEATURE_SUMMARY.md`, `USER_GUIDE.md`, `API_REFERENCE.md`, `ARCHITECTURE.md`, `DEVELOPMENT.md`, `TROUBLESHOOTING.md`).
+
 ### v3.2.6 - Manual Rubric Highlighting Reliability - December 2025
 
 #### 🟨 PDF Highlighting Accuracy

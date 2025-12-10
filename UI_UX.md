@@ -7,7 +7,7 @@
 
 This document provides a complete guide to recreate the UI/UX system used in the Feedback Manager application. The system is built on Bootstrap 5 with custom Svelte components, featuring a modern, professional design with consistent patterns for modals, notifications, cards, interactive elements, and comprehensive debugging tools.
 
-## Latest UI/UX Improvements (v3.2.4)
+## Latest UI/UX Improvements (v3.2.8)
 
 ### Total Marks Display System
 - **Real-time Feedback**: Total marks displayed in red for immediate visual emphasis

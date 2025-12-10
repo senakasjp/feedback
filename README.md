@@ -1,6 +1,6 @@
-# Feedback Manager v3.2.6
+# Feedback Manager v3.2.8
 
-> **New:** PDF rubric highlighting now uses row label + selected paragraph position, with manual row/column mappings saved to the assessment.
+> **New:** PDF rubric export now respects manual row → category mapping for marks and highlighting, so cells never show `undefined` and the mapped row highlights correctly.
 
 
 A comprehensive desktop application built with Tauri and Svelte for managing student feedback with hierarchical organization, professional PDF generation, advanced assessment management capabilities, comprehensive grade distribution analysis, automatic data saving, intelligent paragraph merging, strict data separation policy, contamination prevention, visual debugging tools, real-time total marks display, and enhanced text formatting capabilities.
@@ -43,13 +43,14 @@ Set up mappings in the Assessment HTML card:
   - Paragraphs with marks/ranges are **skipped** under the table (to avoid duplication)
   - Paragraphs without marks/ranges are **printed** under the table (so unmarked feedback still appears)
 
-## 🎉 Version 3.2.6 - Manual Rubric Highlighting Reliability
+## 🎉 Version 3.2.8 - PDF Rubric Mapping Reliability
 
-This release tightens PDF rubric highlighting so it always reflects your selections and mappings:
+This release tightens PDF rubric highlighting so it always reflects your selections and mappings—including manually mapped row labels:
 
 ### 🟨 **Accurate Column Highlighting**
 - Row label is the category; column is chosen from the selected paragraph’s position within that category (top-down)
 - Uses only your manual row/column mappings—no auto-detection
+- Marks column resolves against mapped categories and falls back to `—` instead of `undefined`
 
 ### 💾 **Mapping Persistence**
 - Row → category and paragraph-position → column mappings persist with the assessment (even with a student selected)
@@ -58,4 +59,4 @@ This release tightens PDF rubric highlighting so it always reflects your selecti
 - Selected paragraph determines the highlighted cell; matches the on-screen checkboxes and order
 
 ## Release Notes
-- For full history, see `CHANGELOG.md`. This README highlights the current release (v3.2.6) focused on reliable manual rubric highlighting.
+- For full history, see `CHANGELOG.md`. This README highlights the current release (v3.2.8) focused on reliable manual rubric highlighting with mapped rows.
