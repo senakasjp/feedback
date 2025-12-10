@@ -1,4 +1,4 @@
-# Feedback Manager v3.2.8
+# Feedback Manager v3.2.9
 
 > **New:** PDF rubric export now respects manual row → category mapping for marks and highlighting, so cells never show `undefined` and the mapped row highlights correctly.
 
@@ -43,7 +43,7 @@ Set up mappings in the Assessment HTML card:
   - Paragraphs with marks/ranges are **skipped** under the table (to avoid duplication)
   - Paragraphs without marks/ranges are **printed** under the table (so unmarked feedback still appears)
 
-## 🎉 Version 3.2.8 - PDF Rubric Mapping Reliability
+## 🎉 Version 3.2.9 - PDF Rubric Mapping Reliability
 
 This release tightens PDF rubric highlighting so it always reflects your selections and mappings—including manually mapped row labels:
 
@@ -59,4 +59,4 @@ This release tightens PDF rubric highlighting so it always reflects your selecti
 - Selected paragraph determines the highlighted cell; matches the on-screen checkboxes and order
 
 ## Release Notes
-- For full history, see `CHANGELOG.md`. This README highlights the current release (v3.2.8) focused on reliable manual rubric highlighting with mapped rows.
+- For full history, see `CHANGELOG.md`. This README highlights the current release (v3.2.9) focused on reliable manual rubric highlighting with mapped rows.

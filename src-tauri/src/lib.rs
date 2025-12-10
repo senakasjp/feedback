@@ -310,6 +310,30 @@ fn export_csv_file(content: String, subject_name: String) -> Result<String, Stri
     Ok(csv_path.to_string_lossy().to_string())
 }
 
+fn sanitize_component(value: &str) -> String {
+    let mut result = String::new();
+    let mut last_was_hyphen = false;
+
+    for c in value.chars() {
+        if c.is_alphanumeric() {
+            result.push(c);
+            last_was_hyphen = false;
+        } else if !last_was_hyphen {
+            result.push('-');
+            last_was_hyphen = true;
+        }
+    }
+
+    while result.ends_with('-') {
+        result.pop();
+    }
+    while result.starts_with('-') {
+        result.remove(0);
+    }
+
+    result
+}
+
 #[tauri::command]
 fn save_pdf_to_folder(
     pdf_data: Vec<u8>,
@@ -317,17 +341,17 @@ fn save_pdf_to_folder(
     assessment_name: Option<String>,
     student_name: Option<String>,
 ) -> Result<String, String> {
-    // Get Downloads directory
-    let downloads_dir = dirs::download_dir()
-        .ok_or("Could not find Downloads directory")?;
+    // Get Documents directory
+    let documents_dir = dirs::document_dir()
+        .ok_or("Could not find Documents directory")?;
 
-    // Create folder structure: Downloads/Feedback-PDFs/[AssessmentName]/
-    let pdfs_dir = downloads_dir.join("Feedback-PDFs");
+    // Create folder structure: Documents/Feedback-PDFs/[AssessmentName]/
+    let pdfs_dir = documents_dir.join("Feedback-PDFs");
     std::fs::create_dir_all(&pdfs_dir).map_err(|e| e.to_string())?;
 
     // Create assessment-specific folder if assessment name is provided
     let target_dir = if let Some(assessment) = &assessment_name {
-        let safe_assessment = assessment.replace(|c: char| !c.is_alphanumeric() && c != ' ', "-");
+        let safe_assessment = sanitize_component(assessment);
         let assessment_dir = pdfs_dir.join(&safe_assessment);
         std::fs::create_dir_all(&assessment_dir).map_err(|e| e.to_string())?;
         assessment_dir
@@ -338,13 +362,22 @@ fn save_pdf_to_folder(
     // Generate filename
     let mut filename = "Feedback-report".to_string();
     if let Some(subject) = &subject_name {
-        filename = format!("{}-{}", filename, subject.replace(|c: char| !c.is_alphanumeric(), "-"));
+        let safe_subject = sanitize_component(subject);
+        if !safe_subject.is_empty() {
+            filename = format!("{}-{}", filename, safe_subject);
+        }
     }
     if let Some(assessment) = &assessment_name {
-        filename = format!("{}-{}", filename, assessment.replace(|c: char| !c.is_alphanumeric(), "-"));
+        let safe_assessment = sanitize_component(assessment);
+        if !safe_assessment.is_empty() {
+            filename = format!("{}-{}", filename, safe_assessment);
+        }
     }
     if let Some(student) = &student_name {
-        filename = format!("{}-{}", filename, student.replace(|c: char| !c.is_alphanumeric(), "-"));
+        let safe_student = sanitize_component(student);
+        if !safe_student.is_empty() {
+            filename = format!("{}-{}", filename, safe_student);
+        }
     }
     filename = format!("{}.pdf", filename);
 

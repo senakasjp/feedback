@@ -3,7 +3,7 @@
 > **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
 
 
-## Latest Architecture Updates (v3.2.8)
+## Latest Architecture Updates (v3.2.9)
 
 ### Total Marks Display Architecture
 The application now includes a comprehensive real-time total marks display system:

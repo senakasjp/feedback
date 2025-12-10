@@ -3,7 +3,7 @@
 > **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
 
 
-## Latest Updates (v3.2.8)
+## Latest Updates (v3.2.9)
 
 ### Total Marks Display Implementation
 - **Real-time Calculation**: Added `getTotalMarks()` function for reactive total calculation
@@ -316,7 +316,7 @@ npm run build
 ```json
 {
   "name": "feedback-app",
-  "version": "3.2.8",
+  "version": "3.2.9",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -344,7 +344,7 @@ npm run build
 {
   "package": {
     "productName": "Feedback Manager",
-    "version": "3.2.8"
+    "version": "3.2.9"
   },
   "build": {
     "distDir": "../dist",

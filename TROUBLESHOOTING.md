@@ -3,14 +3,14 @@
 > **New:** PDF rubric export now respects manual row → category mapping for marks/highlighting (no more `undefined` marks in the PDF).
 
 
-## Version 3.2.8 - Latest Issues and Solutions
+## Version 3.2.9 - Latest Issues and Solutions
 
 ### PDF Rubric Shows `undefined` or Doesn’t Highlight
 
 **Symptoms**: Marks column shows `undefined` or mapped row doesn’t highlight in the PDF.
 **Diagnosis**: Older builds ignored manual row → category mapping during PDF generation.
 **Solutions**:
-- Upgrade to v3.2.8 (manual row → category mapping is used for marks and highlighting).
+- Upgrade to v3.2.9 (manual row → category mapping is used for marks and highlighting).
 - Ensure each rubric row is mapped to the correct category in the Assessment HTML card.
 - Verify paragraph-position → column mapping is set for the category’s paragraph order.
 
@@ -236,7 +236,7 @@ await loadStudentEvaluation(); // Reload from storage
 ### Support Information
 
 #### Version Check
-Current version: 3.2.8
+Current version: 3.2.9
 - Real-time total marks display
 - Enhanced text formatting with font colors
 - Student-centric selection storage

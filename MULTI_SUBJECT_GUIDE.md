@@ -7,7 +7,7 @@
 
 The Feedback Manager has been enhanced to support multiple subjects, each containing multiple assessments. This allows for better organization of feedback data, separate PDF generation for different contexts, and comprehensive debugging tools for troubleshooting issues.
 
-## Latest Features (v3.2.8)
+## Latest Features (v3.2.9)
 
 ### Total Marks Display System
 - **Multi-Subject Support**: Total marks display works across all subjects and assessments
