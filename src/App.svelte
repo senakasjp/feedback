@@ -21,6 +21,7 @@
 	
 	// Import data services
 	import { studentsService } from './services/dataService.js'
+	import { improveEnglish, isOpenAIConfigured } from './services/openaiService.js'
 	
 	// Import constants
 	import { PDR_CATEGORIES, STUDIO4_CATEGORIES, STUDIO5_CATEGORIES } from './utils/constants.js'
@@ -78,6 +79,7 @@
 	let quickAddText = $state({}) // Store quick-add paragraph text per category
 	let quickAddToAssessmentWhenStudentSelected = $state(false) // Override to save quick-add to assessment even when a student is selected
 	let showAboutModal = $state(false) // Show about modal
+	let improvingText = $state({}) // Track which category text is being improved by AI
 	
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
@@ -963,6 +965,34 @@
 		if (quickInput) {
 			quickInput.scrollIntoView({ behavior: 'smooth', block: 'center' })
 			quickInput.focus()
+		}
+	}
+
+	async function improveTextWithAI(categoryName) {
+		const text = (quickAddText[categoryName] || '').trim()
+		if (!text) {
+			showSuccessNotification('⚠️ Please enter some text first')
+			return
+		}
+
+		if (!isOpenAIConfigured()) {
+			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+			return
+		}
+
+		// Set loading state
+		improvingText = { ...improvingText, [categoryName]: true }
+
+		try {
+			const improvedText = await improveEnglish(text)
+			quickAddText = { ...quickAddText, [categoryName]: improvedText }
+			showSuccessNotification('✨ Text improved successfully!')
+		} catch (error) {
+			console.error('Failed to improve text:', error)
+			showSuccessNotification(`❌ Failed to improve text: ${error.message}`)
+		} finally {
+			// Clear loading state
+			improvingText = { ...improvingText, [categoryName]: false }
 		}
 	}
 
@@ -3469,10 +3499,67 @@
 		container.style.fontSize = '12px'
 		container.style.lineHeight = '1.35'
 		container.innerHTML = htmlContent
+
+		// Clean up Microsoft Word HTML markup that can break rendering
+		container.querySelectorAll('[style*="mso-"]').forEach(el => {
+			// Remove mso-specific styles but keep the element and content
+			const style = el.getAttribute('style')
+			if (style) {
+				// Keep only essential styles, remove all mso-* properties
+				const cleanStyle = style
+					.split(';')
+					.filter(prop => !prop.trim().toLowerCase().startsWith('mso-'))
+					.join(';')
+				if (cleanStyle.trim()) {
+					el.setAttribute('style', cleanStyle)
+				} else {
+					el.removeAttribute('style')
+				}
+			}
+		})
+
+		// Remove mso-bookmark spans that wrap content unnecessarily
+		container.querySelectorAll('span[style*="mso-bookmark"]').forEach(span => {
+			// Replace span with its content
+			const parent = span.parentNode
+			while (span.firstChild) {
+				parent.insertBefore(span.firstChild, span)
+			}
+			parent.removeChild(span)
+		})
+
 		// Strip inline padding/line-height on cells so our injected styles win
 		container.querySelectorAll('th, td').forEach(cell => {
 			cell.style.padding = ''
 			cell.style.lineHeight = ''
+
+			// Fix text color visibility - ensure text is visible on all backgrounds
+			const bgColor = cell.style.backgroundColor || window.getComputedStyle(cell).backgroundColor
+			const currentColor = cell.style.color
+
+			// If background is dark (red, green, blue with low RGB values), ensure white text
+			// If background is light (yellow, white, light colors), ensure black text
+			if (bgColor) {
+				const rgb = bgColor.match(/\d+/g)
+				if (rgb && rgb.length >= 3) {
+					const r = parseInt(rgb[0])
+					const g = parseInt(rgb[1])
+					const b = parseInt(rgb[2])
+					// Calculate brightness using standard formula
+					const brightness = (r * 299 + g * 587 + b * 114) / 1000
+
+					// If dark background (brightness < 128), use white text
+					// If light background, use black text
+					if (brightness < 128) {
+						cell.style.color = '#ffffff'
+					} else {
+						cell.style.color = '#000000'
+					}
+				}
+			} else if (!currentColor || currentColor === 'white' || currentColor === '#ffffff') {
+				// If no background but text is white, make it black
+				cell.style.color = '#000000'
+			}
 		})
 
 		// Normalize spacing inside pasted HTML so tables don't blow up the PDF
@@ -4275,7 +4362,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.2.9</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.3.0</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
@@ -5432,6 +5519,20 @@
 																}}
 															></textarea>
 															<div class="d-flex flex-column gap-2">
+																<button
+																	class="btn btn-outline-primary btn-sm"
+																	type="button"
+																	onclick={() => improveTextWithAI(group.category)}
+																	disabled={improvingText[group.category] || !quickAddText[group.category]?.trim()}
+																	title="Improve English with AI"
+																>
+																	{#if improvingText[group.category]}
+																		<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+																		Improving...
+																	{:else}
+																		<i class="bi bi-stars me-1"></i>Improve with AI
+																	{/if}
+																</button>
 																<button
 																	class="btn btn-outline-secondary btn-sm"
 																	type="button"
