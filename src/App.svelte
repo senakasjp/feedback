@@ -2533,11 +2533,21 @@
 
 		console.log('SELECTION DEBUG: After mapping:', {
 			mappedSelections: Array.from(mappedSelections),
-			mappedCount: mappedSelections.size
+			mappedCount: mappedSelections.size,
+			savedCount: savedSelectedParagraphs.size
 		})
 
 		// Apply the mapped selections and marks
-		selectedParagraphs = mappedSelections
+		// Only update selections if mapping was successful (had saved selections and got mapped results)
+		// OR if there were no saved selections to begin with
+		if (savedSelectedParagraphs.size === 0 || mappedSelections.size > 0) {
+			selectedParagraphs = mappedSelections
+			console.log('✅ SELECTIONS: Applied mapped selections')
+		} else {
+			console.log('⚠️ SELECTIONS: Mapping failed - keeping existing selections to prevent data loss')
+			console.log('⚠️ SELECTIONS: This may indicate paragraph ID mismatch. Saved IDs:', Array.from(savedSelectedParagraphs))
+			console.log('⚠️ SELECTIONS: Available merged IDs:', mergedParagraphs.map(p => p.id))
+		}
 		// Preserve the student's display name if no saved name exists
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		// No studentImage - only header photo for assessment
@@ -2759,14 +2769,14 @@
 	// Helper function to map saved selections to merged paragraph IDs
 	function mapSelectionsToMergedParagraphs(savedSelections, assignmentParagraphs, studentParagraphs, mergedParagraphs) {
 		const mappedSelections = new Set()
-		
+
 		console.log('DEBUG: mapSelectionsToMergedParagraphs called with:', {
 			savedSelections: Array.from(savedSelections),
 			assignmentParagraphs: assignmentParagraphs.length,
 			studentParagraphs: studentParagraphs.length,
 			mergedParagraphs: mergedParagraphs.length
 		})
-		
+
 		// Create maps to find paragraph by ID
 		const assignmentParagraphMap = new Map()
 		assignmentParagraphs.forEach(para => {
@@ -2774,28 +2784,28 @@
 				assignmentParagraphMap.set(para.id, para)
 			}
 		})
-		
+
 		const studentParagraphMap = new Map()
 		studentParagraphs.forEach(para => {
 			if (para && para.id) {
 				studentParagraphMap.set(para.id, para)
 			}
 		})
-		
+
 		const mergedParagraphMap = new Map()
 		mergedParagraphs.forEach(para => {
 			if (para && para.id) {
 				mergedParagraphMap.set(para.id, para)
 			}
 		})
-		
+
 		console.log('DEBUG: Paragraph maps created:', {
 			assignmentMapSize: assignmentParagraphMap.size,
 			studentMapSize: studentParagraphMap.size,
 			mergedMapSize: mergedParagraphMap.size,
 			mergedParagraphIds: Array.from(mergedParagraphMap.keys())
 		})
-		
+
 		// Map each saved selection (now treating as IDs)
 		for (const savedId of savedSelections) {
 			console.log(`DEBUG: Checking saved ID: ${savedId}`)
@@ -2804,10 +2814,33 @@
 				console.log(`DEBUG: Found saved ID ${savedId} in merged paragraphs`)
 				mappedSelections.add(savedId)
 			} else {
-				console.log(`DEBUG: Saved ID ${savedId} NOT found in merged paragraphs`)
+				// Try to find by content matching as fallback
+				console.log(`DEBUG: Saved ID ${savedId} NOT found - trying content match`)
+
+				// Get the original paragraph from assignment or student lists
+				const originalPara = assignmentParagraphMap.get(savedId) || studentParagraphMap.get(savedId)
+
+				if (originalPara) {
+					const originalText = (originalPara.text || '').trim()
+					const originalColor = originalPara.color || ''
+
+					// Find matching paragraph in merged list by text and color
+					const matchingMerged = mergedParagraphs.find(merged => {
+						const mergedText = (merged.text || '').trim()
+						const mergedColor = merged.color || ''
+						return mergedText === originalText && mergedColor === originalColor
+					})
+
+					if (matchingMerged) {
+						console.log(`DEBUG: Found content match for ${savedId} -> ${matchingMerged.id}`)
+						mappedSelections.add(matchingMerged.id)
+					} else {
+						console.log(`DEBUG: No content match found for ${savedId}`)
+					}
+				}
 			}
 		}
-		
+
 		console.log('DEBUG: Final mapped selections:', Array.from(mappedSelections))
 		return mappedSelections
 	}
