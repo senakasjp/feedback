@@ -32,11 +32,11 @@ export async function improveEnglish(text) {
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful assistant that improves English text for clarity, grammar, and professionalism. IMPORTANT: Use British English spelling and conventions (e.g., "organise" not "organize", "colour" not "color"). Ensure the text is contextually correct and appropriate for educational feedback. Maintain the original meaning and tone. Only return the improved text without explanations or additional commentary.'
+            content: 'You are a helpful assistant that improves English text for clarity, grammar, and professionalism. IMPORTANT: Use British English spelling and conventions (e.g., "organise" not "organize", "colour" not "color"). Use simple, clear English that is easy to understand - avoid complex or advanced vocabulary. Write like a non-native English speaker would - use common, everyday words instead of sophisticated or academic language. Ensure the text is contextually correct and appropriate for educational feedback. Maintain the original meaning and tone. Only return the improved text without explanations or additional commentary.'
           },
           {
             role: 'user',
-            content: `Please improve the following text using British English spelling and ensure it is contextually correct:\n\n${text}`
+            content: `Please improve the following text using British English spelling and simple, easy-to-understand words. Avoid complex vocabulary - use normal, everyday English:\n\n${text}`
           }
         ],
         temperature: 0.3, // Lower temperature for more consistent, focused improvements

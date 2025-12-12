@@ -4362,7 +4362,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.3.0</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.3.1</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>

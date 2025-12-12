@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Feedback",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "identifier": "com.senaka.feedback",
   "build": {
     "frontendDist": "../dist",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Feedback Manager v3.3.0",
+        "title": "Feedback Manager v3.3.1",
         "width": 1800,
         "height": 1100,
         "minWidth": 1400,
