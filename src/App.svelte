@@ -80,6 +80,7 @@
 	let quickAddToAssessmentWhenStudentSelected = $state(false) // Override to save quick-add to assessment even when a student is selected
 	let showAboutModal = $state(false) // Show about modal
 	let improvingText = $state({}) // Track which category text is being improved by AI
+	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
@@ -986,6 +987,8 @@
 		try {
 			const improvedText = await improveEnglish(text)
 			quickAddText = { ...quickAddText, [categoryName]: improvedText }
+			// Mark this text as AI-improved for styling
+			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
 			showSuccessNotification('✨ Text improved successfully!')
 		} catch (error) {
 			console.error('Failed to improve text:', error)
@@ -1020,6 +1023,8 @@
 
 		paragraphs.push(newPara)
 		quickAddText = { ...quickAddText, [categoryName]: '' }
+		// Clear AI-improved flag when paragraph is added
+		aiImprovedText = { ...aiImprovedText, [categoryName]: false }
 
 		const addToAssessment = currentStudentId && quickAddToAssessmentWhenStudentSelected
 
@@ -5540,7 +5545,7 @@
 															<div class="d-flex flex-column flex-sm-row gap-2">
 															<textarea
 																id={quickAddInputId(group.category)}
-																class="form-control form-control-sm"
+																class="form-control form-control-sm {aiImprovedText[group.category] ? 'ai-improved-text' : ''}"
 																rows="2"
 																placeholder={`Add paragraph to ${group.category}...`}
 																value={quickAddText[group.category] || ''}
@@ -5548,6 +5553,10 @@
 																	quickAddText = {
 																		...quickAddText,
 																		[group.category]: e.currentTarget.value
+																	}
+																	// Clear AI-improved flag when user manually edits
+																	if (aiImprovedText[group.category]) {
+																		aiImprovedText = { ...aiImprovedText, [group.category]: false }
 																	}
 																}}
 															></textarea>
@@ -5741,6 +5750,20 @@
 	@keyframes spin {
 		from { transform: rotate(0deg); }
 		to { transform: rotate(360deg); }
+	}
+
+	/* AI-improved text styling - works in both light and dark themes */
+	:global(.ai-improved-text) {
+		background-color: #e8f5e9 !important; /* Light green background for light theme */
+		border-color: #4caf50 !important; /* Green border */
+		color: #1b5e20 !important; /* Dark green text */
+	}
+
+	/* Dark theme support */
+	:global([data-bs-theme="dark"] .ai-improved-text) {
+		background-color: #1b3a1f !important; /* Dark green background for dark theme */
+		border-color: #66bb6a !important; /* Lighter green border */
+		color: #a5d6a7 !important; /* Light green text */
 	}
 	
 	:global(.col-lg-9 .col-12) {
