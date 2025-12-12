@@ -1022,6 +1022,11 @@
 		}
 
 		paragraphs.push(newPara)
+
+		// Automatically select the newly added paragraph
+		selectedParagraphs.add(newPara.id)
+		selectedParagraphs = new Set(selectedParagraphs) // Trigger reactivity
+
 		quickAddText = { ...quickAddText, [categoryName]: '' }
 		// Clear AI-improved flag when paragraph is added
 		aiImprovedText = { ...aiImprovedText, [categoryName]: false }
@@ -4400,7 +4405,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.3.1</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.3.2</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
