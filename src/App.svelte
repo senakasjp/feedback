@@ -4405,7 +4405,7 @@
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.3.2</a>
+		<a class="navbar-brand" href="/">Feedback Manager v3.3.4</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
@@ -4566,6 +4566,7 @@
 								assessments={currentSubject?.assessments || []}
 								students={students}
 								subjectName={currentSubject?.name || 'Unknown Subject'}
+								subjectId={currentSubjectId || ''}
 								onSelectAssessment={(assessment) => {
 									// STRICT FILTER: Clear ALL data before entering assessment feedback page
 									initializeEmptyData()

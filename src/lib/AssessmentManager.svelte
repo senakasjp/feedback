@@ -31,6 +31,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
     assessments = [], 
     students = [],
     subjectName = 'Unknown Subject',
+    subjectId = '',
     onSelectAssessment, 
     onUpdateAssessments,
 		showAddAssessment = false,
@@ -1249,62 +1250,64 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 
 		try {
 			// Create a deep copy of the assessment with a new ID
-				const newAssessment = {
-					id: generateAssessmentId(),
-					name: duplicateAssessmentName.trim(),
-					topics: assessmentToDuplicate.topics ? JSON.parse(JSON.stringify(assessmentToDuplicate.topics)) : [],
-					categories: assessmentToDuplicate.categories ? JSON.parse(JSON.stringify(assessmentToDuplicate.categories)) : [],
-					weight: assessmentToDuplicate.weight,
-					headerPhoto: assessmentToDuplicate.headerPhoto,
-				// Copy other assessment properties
+			const newAssessment = {
+				id: generateAssessmentId(),
+				name: duplicateAssessmentName.trim(),
+				topics: assessmentToDuplicate.topics ? JSON.parse(JSON.stringify(assessmentToDuplicate.topics)) : [],
+				categories: assessmentToDuplicate.categories ? JSON.parse(JSON.stringify(assessmentToDuplicate.categories)) : [],
+				weight: assessmentToDuplicate.weight,
+				headerPhoto: assessmentToDuplicate.headerPhoto,
 				knowledgeAreas: (assessmentToDuplicate as any).knowledgeAreas ? JSON.parse(JSON.stringify((assessmentToDuplicate as any).knowledgeAreas)) : [],
 				totalMarks: (assessmentToDuplicate as any).totalMarks,
 				markingMode: (assessmentToDuplicate as any).markingMode,
 				percentageRanges: (assessmentToDuplicate as any).percentageRanges ? JSON.parse(JSON.stringify((assessmentToDuplicate as any).percentageRanges)) : []
 			};
 
-			// Copy paragraphs from the original assessment (from Tauri storage or localStorage)
-			try {
-				// Try to read paragraphs from Tauri storage
-				const paragraphsData = await invoke('read_assessment_paragraphs', {
-					assessmentId: assessmentToDuplicate.id
-				});
+			// Copy assessment data (paragraphs, mappings, etc.) using existing storage keys
+			if (subjectId) {
+				const sourceKey = `${subjectId}-${assessmentToDuplicate.id}`;
+				const targetKey = `${subjectId}-${newAssessment.id}`;
+				let assessmentData: any = null;
 
-					if (paragraphsData) {
-						// Regenerate paragraph IDs to keep the copy independent
-						const parsed = JSON.parse(String(paragraphsData));
-						const updatedParagraphs = Array.isArray(parsed)
-							? parsed.map((para: any, index: number) => {
-									if (para && typeof para === 'object') {
-										return { ...para, id: generateParagraphId(index) };
-									}
-									return para;
-								})
-							: parsed;
-
-						// Save the paragraphs to the new assessment
-						await invoke('write_assessment_paragraphs', {
-							assessmentId: newAssessment.id,
-							data: JSON.stringify(updatedParagraphs, null, 2)
-						});
+				try {
+					const stored = await invoke('read_subject_data', { subjectId: sourceKey });
+					if (stored) {
+						assessmentData = JSON.parse(String(stored));
 					}
 				} catch (error) {
-				// Fallback to localStorage
-				const key = `assessment-paragraphs-${assessmentToDuplicate.id}`;
-				const paragraphsData = localStorage.getItem(key);
-				if (paragraphsData) {
-					const parsed = JSON.parse(String(paragraphsData));
-					const updatedParagraphs = Array.isArray(parsed)
-						? parsed.map((para: any, index: number) => {
+					const legacyKey = `assessment-data-${sourceKey}`;
+					const currentKey = `feedback-assessment-${sourceKey}`;
+					const stored = localStorage.getItem(currentKey) || localStorage.getItem(legacyKey);
+					if (stored) {
+						assessmentData = JSON.parse(String(stored));
+					}
+				}
+
+				if (assessmentData) {
+					const updatedParagraphs = Array.isArray(assessmentData.paragraphs)
+						? assessmentData.paragraphs.map((para: any, index: number) => {
 								if (para && typeof para === 'object') {
 									return { ...para, id: generateParagraphId(index) };
 								}
 								return para;
 							})
-						: parsed;
+						: assessmentData.paragraphs;
 
-					const newKey = `assessment-paragraphs-${newAssessment.id}`;
-					localStorage.setItem(newKey, JSON.stringify(updatedParagraphs, null, 2));
+					const duplicatedData = {
+						...assessmentData,
+						paragraphs: updatedParagraphs || [],
+						selectedParagraphs: []
+					};
+
+					try {
+						await invoke('write_subject_data', {
+							subjectId: targetKey,
+							data: JSON.stringify(duplicatedData, null, 2)
+						});
+					} catch (error) {
+						const fallbackKey = `feedback-assessment-${targetKey}`;
+						localStorage.setItem(fallbackKey, JSON.stringify(duplicatedData, null, 2));
+					}
 				}
 			}
 
@@ -1704,8 +1707,8 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			{/each}
 		</div>
 		
-		<!-- Students with Marks Table -->
-		{#if studentsWithMarks.length > 0 && assessments.length > 0}
+		<!-- Students with Marks Table & Performance Overview -->
+		{#if studentsWithMarks.length > 0}
 			<div class="row mt-5">
 				<div class="col-12">
 					<div class="card">
@@ -1997,11 +2000,11 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 										{/each}
 									</tbody>
 								</table>
-							</div>
 						</div>
 					</div>
 				</div>
-  </div>
+			</div>
+			</div>
 
 			<!-- Performance Highlights Cards for Each Assessment -->
 			<div class="performance-highlights-grid mt-4">
@@ -2154,14 +2157,14 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 					</div>
 				</div>
 			</div>
-		{:else if studentsWithMarks.length === 0 && students.length > 0}
+		{:else}
 			<div class="row mt-5">
 				<div class="col-12">
 					<div class="card border-0 shadow-sm">
 						<div class="card-body text-center py-4">
 							<i class="bi bi-clipboard-x text-muted mb-3" style="font-size: 3rem;"></i>
 							<h5 class="text-muted mb-2">No Students with Marks</h5>
-							<p class="text-muted mb-0">No students have marks recorded for assessments in this subject yet.</p>
+							<p class="text-muted mb-0">Add marks to students to see the marksheet, performance cards, and grading chart.</p>
 						</div>
 					</div>
 				</div>
@@ -2170,7 +2173,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 	{:else}
 		<div class="row">
 			<div class="col-12">
-    <div class="text-center py-5">
+				<div class="text-center py-5">
 					<div class="card border-0 shadow-sm">
 						<div class="card-body py-5">
 							<i class="bi bi-clipboard-check text-muted mb-3" style="font-size: 4rem;"></i>
@@ -2180,8 +2183,8 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 					</div>
 				</div>
 			</div>
-    </div>
-  {/if}
+		</div>
+	{/if}
 </div>
 
 <!-- Custom Delete Confirmation Dialog -->
