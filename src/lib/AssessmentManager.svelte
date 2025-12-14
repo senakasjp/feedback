@@ -653,17 +653,25 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		const availableWidth = pageWidth - (margin * 2);
 		const hiddenColumns = hiddenColumnsSet || new Set();
 
+		// Calculate the longest student name to size the name column appropriately
+		const longestName = studentsWithMarks.reduce((longest, student) => {
+			const name = student.name || '';
+			return name.length > longest.length ? name : longest;
+		}, '');
+		const nameWidth = Math.max(doc.getTextWidth(longestName) + 4, 20); // Add minimal padding, minimum 20
+		const nameRatio = Math.min(nameWidth / availableWidth, 0.25); // Cap at 25% of available width
+
 		const basicColumnBlueprints = [
 			{
 				header: '#',
-				ratio: 0.08,
+				ratio: 0.025,
 				aliases: ['#', 'number', 'row'],
-				allowWrap: false,
+				allowWrap: true,
 				getValue: (_student, index) => String(index + 1)
 			},
 			{
 				header: 'Student Name',
-				ratio: 0.25,
+				ratio: nameRatio,
 				aliases: ['student name', 'student'],
 				allowWrap: true,
 				getValue: (student) => student.name
@@ -687,7 +695,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			if (!isColumnHidden(hiddenColumns, marksHeader, `${assessment.name} (marks)`)) {
 				visibleAssessmentColumns.push({
 					header: marksHeader,
-					allowWrap: false,
+					allowWrap: true,
 					width: 0,
 					getValue: (student) => {
 						const marks = getStudentMarks(student.id, assessment.id);
@@ -700,7 +708,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			if (!isColumnHidden(hiddenColumns, weightHeader, `${assessment.name} (%)`, `${assessment.name} percent`, `${assessment.name} weight`)) {
 				visibleAssessmentColumns.push({
 					header: weightHeader,
-					allowWrap: false,
+					allowWrap: true,
 					width: 0,
 					getValue: (student) => {
 						const weighted = getWeightedMarks(student.id, assessment.id);
@@ -715,7 +723,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			? {
 					header: 'Final Grade',
 					ratio: 0.1,
-					allowWrap: false,
+					allowWrap: true,
 					width: 0,
 					getValue: (student) => getFinalGrade(student.id)
 				}
@@ -765,7 +773,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 
 		const drawHeaderRow = () => {
 			doc.setFont('helvetica', 'bold');
-			doc.setFontSize(10);
+			doc.setFontSize(9);
 			doc.setFillColor(248, 249, 250);
 			doc.rect(margin, yPosition - 5, availableWidth, headerHeight, 'F');
 
@@ -778,7 +786,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			doc.setTextColor(0, 0, 0);
 			yPosition += headerHeight + 5;
 			doc.setFont('helvetica', 'normal');
-			doc.setFontSize(10);
+			doc.setFontSize(9);
 		};
 
 		drawHeaderRow();
@@ -815,7 +823,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		
 		// Add table data (same as feedback report)
 		doc.setFont('helvetica', 'normal');
-		doc.setFontSize(10); // Same as feedback report
+		doc.setFontSize(9); // Smaller font for compact table
 		
 		studentsWithMarks.forEach((student, index) => {
 			// Check if we need a new page for each row
