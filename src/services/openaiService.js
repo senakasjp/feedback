@@ -6,6 +6,20 @@
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 
+async function getErrorMessage(response) {
+  try {
+    const error = await response.json()
+    return error.error?.message || error.message || null
+  } catch {
+    try {
+      const text = await response.text()
+      return text || null
+    } catch {
+      return null
+    }
+  }
+}
+
 /**
  * Improve the English grammar and clarity of the given text
  * @param {string} text - The text to improve
@@ -45,8 +59,8 @@ export async function improveEnglish(text) {
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error?.message || `API request failed with status ${response.status}`)
+      const message = await getErrorMessage(response)
+      throw new Error(message || `API request failed with status ${response.status}`)
     }
 
     const data = await response.json()
@@ -68,5 +82,5 @@ export async function improveEnglish(text) {
  * @returns {boolean} - True if API key is configured
  */
 export function isOpenAIConfigured() {
-  return OPENAI_API_KEY && OPENAI_API_KEY !== 'your-api-key-here'
+  return Boolean(OPENAI_API_KEY && OPENAI_API_KEY !== 'your-api-key-here')
 }

@@ -14,8 +14,9 @@ import { buildHiddenColumnSet, isColumnHidden } from '../utils/exportColumns.js'
  * @param {Function} getStudentMarks - Function to get student marks for an assessment
  * @param {Function} getWeightedMarks - Function to get weighted marks for an assessment
  * @param {Function} getFinalGrade - Function to get final grade for a student
+ * @param {Function} getFinalSummary - Function to get final percentage/total info for a student
  */
-export function printToDownload(studentsWithMarks, assessments, subjectName, getStudentMarks, getWeightedMarks, getFinalGrade) {
+export function printToDownload(studentsWithMarks, assessments, subjectName, getStudentMarks, getWeightedMarks, getFinalGrade, getFinalSummary) {
     console.log('printToDownload called with:', { studentsWithMarks: studentsWithMarks.length, assessments: assessments.length, subjectName });
     
     if (studentsWithMarks.length === 0 || assessments.length === 0) {
@@ -59,6 +60,7 @@ export function printToDownload(studentsWithMarks, assessments, subjectName, get
             headers.push(`${assessment.name} (Marks)`);
             headers.push(`${assessment.name} (Weighted)`);
         });
+        headers.push('Total (%)');
         headers.push('Final Grade');
         
         // Calculate column widths
@@ -107,9 +109,13 @@ export function printToDownload(studentsWithMarks, assessments, subjectName, get
                 rowData.push(marksValue, weightedValue);
             });
             
-            // Add final grade
+            // Add total percentage and final grade
+            const summary = typeof getFinalSummary === 'function' ? getFinalSummary(student.id) : null;
+            const totalValue = summary && summary.isComplete && summary.percentage !== null
+                ? summary.percentage.toFixed(1)
+                : 'N/A';
             const finalGrade = getFinalGrade(student.id);
-            rowData.push(finalGrade);
+            rowData.push(totalValue, finalGrade);
             
             // Draw table row
             xPosition = margin;
@@ -157,9 +163,10 @@ export function printToDownload(studentsWithMarks, assessments, subjectName, get
  * @param {Function} getStudentMarks - Function to get student marks for an assessment
  * @param {Function} getWeightedMarks - Function to get weighted marks for an assessment
  * @param {Function} getFinalGrade - Function to get final grade for a student
+ * @param {Function} getFinalSummary - Function to get final percentage/total info for a student
  * @returns {string} CSV content
  */
-export function generateCSVContent(studentsWithMarks, assessments, getStudentMarks, getWeightedMarks, getFinalGrade, hiddenColumnsInput = new Set()) {
+export function generateCSVContent(studentsWithMarks, assessments, getStudentMarks, getWeightedMarks, getFinalGrade, getFinalSummary, hiddenColumnsInput = new Set()) {
     console.log('🔄 CSV Generation: Starting CSV generation');
     console.log('📊 CSV Generation: Input data -', {
         studentsCount: studentsWithMarks.length,
@@ -180,6 +187,7 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
     const includeStudentName = !isColumnHidden(hiddenColumns, 'Student Name', 'student');
     const includeStudentId = !isColumnHidden(hiddenColumns, 'Student ID', 'id');
     const includeGradeColumn = !isColumnHidden(hiddenColumns, 'Grade', 'Final Grade');
+    const includeTotalColumn = !isColumnHidden(hiddenColumns, 'Total (%)', 'total', 'overall total', 'percentage total');
 
     const assessmentColumnVisibility = assessments.map(assessment => {
         const marksHeader = `${assessment.name} (Marks)`;
@@ -202,6 +210,7 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
         if (showWeight) headers.push(weightHeader);
     });
 
+    if (includeTotalColumn) headers.push('Total (%)');
     if (includeGradeColumn) headers.push('Grade');
 
     if (headers.length === 0) {
@@ -262,6 +271,14 @@ export function generateCSVContent(studentsWithMarks, assessments, getStudentMar
             }
         });
         
+        if (includeTotalColumn) {
+            const summary = typeof getFinalSummary === 'function' ? getFinalSummary(student.id) : null;
+            const totalValue = summary && summary.isComplete && summary.percentage !== null
+                ? summary.percentage.toFixed(1)
+                : 'N/A';
+            row.push(`"${totalValue}"`);
+        }
+
         if (includeGradeColumn) {
             const finalGrade = getFinalGrade(student.id);
             console.log(`📊 CSV Generation: Final grade for ${student.name}:`, finalGrade);

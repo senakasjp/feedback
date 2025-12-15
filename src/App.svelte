@@ -2240,6 +2240,11 @@
 
 		try {
 			console.log('🔄 TRANSFER: Starting data transfer from', currentStudentId, 'to', targetStudentId)
+			const paragraphsForContext = ensureParagraphsHaveIds(paragraphs).map(para => ({
+				...para,
+				subjectId: currentSubjectId,
+				assessmentId: currentAssessmentId
+			}))
 
 			// 1. Transfer selected paragraphs (stored in student properties)
 			const sourceStudent = students.find(s => s.id === currentStudentId)
@@ -2268,7 +2273,53 @@
 				console.log('⚠️ TRANSFER: No selected paragraphs to transfer')
 			}
 
-			// 2. Transfer evaluation data (marks, etc.)
+			// 2. Transfer paragraph content for this assessment/subject
+			try {
+				let existingTargetParagraphs = []
+				try {
+					const data = await invoke('read_student_paragraphs', { studentId: targetStudentId })
+					if (data) {
+						existingTargetParagraphs = JSON.parse(data).paragraphs || []
+					}
+				} catch (readError) {
+					console.log('Tauri not available for target paragraphs, using browser storage')
+					const data = localStorage.getItem(`student-paragraphs-${targetStudentId}`)
+					if (data) {
+						existingTargetParagraphs = JSON.parse(data).paragraphs || []
+					}
+				}
+
+				// Remove any existing paragraphs for this subject/assessment to avoid mixing data
+				const preservedParagraphs = existingTargetParagraphs.filter(
+					para => para.subjectId !== currentSubjectId || para.assessmentId !== currentAssessmentId
+				)
+				const mergedParagraphs = [...preservedParagraphs, ...paragraphsForContext]
+
+				const paragraphPayload = {
+					studentId: targetStudentId,
+					paragraphs: mergedParagraphs,
+					savedAt: new Date().toISOString()
+				}
+
+				try {
+					await invoke('write_student_paragraphs', {
+						studentId: targetStudentId,
+						data: JSON.stringify(paragraphPayload, null, 2)
+					})
+					console.log('✅ TRANSFER: Paragraph content transferred (Tauri)')
+				} catch (writeError) {
+					console.log('Tauri not available, using browser storage for paragraph transfer')
+					localStorage.setItem(
+						`student-paragraphs-${targetStudentId}`,
+						JSON.stringify(paragraphPayload, null, 2)
+					)
+					console.log('✅ TRANSFER: Paragraph content transferred (localStorage)')
+				}
+			} catch (paragraphError) {
+				console.error('⚠️ TRANSFER: Failed to transfer paragraph content', paragraphError)
+			}
+
+			// 3. Transfer evaluation data (marks, etc.)
 				const evaluationData = {
 					studentId: targetStudentId,
 					assessmentId: currentAssessmentId,
@@ -4816,6 +4867,7 @@
 													type="button"
 													onclick={() => showAddStudent = true}
 													title="Add new student"
+													aria-label="Add new student"
 												>
 													<i class="bi bi-person-plus"></i>
 												</button>
@@ -4824,6 +4876,7 @@
 													type="button"
 													onclick={() => showStudentManager = true}
 													title="Manage students"
+													aria-label="Manage students"
 												>
 													<i class="bi bi-gear"></i>
 												</button>
@@ -4855,7 +4908,7 @@
 								<div class="card-body">
 									<!-- Category Marking Mode Display -->
 									<div class="mb-3">
-										<label class="form-label fw-bold">Category Type:</label>
+										<div class="form-label fw-bold">Category Type:</div>
 										{#if selectedCategory}
 											{@const categoryMode = getCategoryMarkingMode(selectedCategory)}
 											<div class="alert alert-light border d-flex align-items-center mb-0">
@@ -5023,10 +5076,11 @@
 													class="btn btn-link p-0 text-decoration-none text-dark"
 													onclick={() => showCategoriesKnowledgeSection = !showCategoriesKnowledgeSection}
 													title={showCategoriesKnowledgeSection ? 'Collapse' : 'Expand'}
+													aria-label={showCategoriesKnowledgeSection ? 'Collapse assessment configuration' : 'Expand assessment configuration'}
 												>
 													<i class="bi bi-{showCategoriesKnowledgeSection ? 'dash' : 'plus'}-square me-1"></i>
 												</button>
-												<label class="form-label fw-bold mb-0">Assessment Configuration:</label>
+												<div class="form-label fw-bold mb-0">Assessment Configuration:</div>
 												<small class="text-muted">{currentAssessment?.categories?.length || 0} categories, {(currentAssessment?.knowledgeAreas || []).length} areas</small>
 											</div>
 											<button
@@ -5040,7 +5094,7 @@
 										{#if showCategoriesKnowledgeSection}
 											<!-- Knowledge Areas Section -->
 											<div class="mb-3">
-												<label class="form-label fw-bold">Knowledge Areas:</label>
+												<div class="form-label fw-bold">Knowledge Areas:</div>
 												{#if showAddCategoryKnowledgeArea}
 											<!-- Add Knowledge Area Form -->
 											<div class="mb-3">
@@ -5094,7 +5148,7 @@
 									<!-- Category Management -->
 									<div class="mb-3">
 										<div class="d-flex justify-content-between align-items-center mb-2">
-											<label class="form-label fw-bold mb-0">Categories:</label>
+											<div class="form-label fw-bold mb-0">Categories:</div>
 											<small class="text-muted">{currentAssessment?.categories?.length || 0} categories</small>
 										</div>
 										
@@ -5173,6 +5227,7 @@
 																style="font-size: 0.7rem; line-height: 0.8; padding: 0.05rem 0.2rem;"
 																onclick={() => openCategoryEditModal(category)}
 																title="Edit category marking mode"
+																aria-label="Edit category marking mode"
 															>
 																<i class="bi bi-pencil"></i>
 															</button>
@@ -5304,6 +5359,7 @@
 																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
 																				onclick={() => moveCategoryUp(categoryObj.id)}
 																				title="Move category up"
+																				aria-label="Move category up"
 																				disabled={categoryIndex <= 0}
 																			>
 																				<i class="bi bi-chevron-up"></i>
@@ -5313,6 +5369,7 @@
 																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
 																				onclick={() => moveCategoryDown(categoryObj.id)}
 																				title="Move category down"
+																				aria-label="Move category down"
 																				disabled={categoryIndex === -1 || categoryIndex >= sortedCategories.length - 1}
 																			>
 																				<i class="bi bi-chevron-down"></i>
@@ -5659,6 +5716,7 @@
 							<button 
 								class="btn btn-sm btn-outline-dark float-end" 
 								onclick={() => showCheckboxDebug = false}
+								aria-label="Close checkbox debug panel"
 							>
 								<i class="bi bi-x"></i>
 							</button>
@@ -5869,11 +5927,11 @@
 					<h5 class="modal-title">
 						<i class="bi bi-pencil me-2"></i>Edit Category: {editingCategory.name}
 					</h5>
-					<button type="button" class="btn-close btn-close-white" onclick={() => { showCategoryEditModal = false; editingCategory = null; }}></button>
+					<button type="button" class="btn-close btn-close-white" onclick={() => { showCategoryEditModal = false; editingCategory = null; }} aria-label="Close category edit modal"></button>
 				</div>
 					<div class="modal-body">
 						<div class="mb-3">
-							<label class="form-label fw-bold">Category Marking Mode:</label>
+							<div class="form-label fw-bold">Category Marking Mode:</div>
 							<select class="form-select" bind:value={editingCategory.markingMode}>
 								<option value="none">None - No color marking</option>
 								<option value="percentage">Percentage - Use percentage ranges</option>
@@ -5920,7 +5978,7 @@
 					<h5 class="modal-title">
 						<i class="bi bi-person-plus me-2"></i>Add New Student
 					</h5>
-					<button type="button" class="btn-close btn-close-white" onclick={() => showAddStudent = false}></button>
+					<button type="button" class="btn-close btn-close-white" onclick={() => showAddStudent = false} aria-label="Close add student modal"></button>
 				</div>
 				<div class="modal-body">
 					<div class="mb-3">
@@ -5966,7 +6024,7 @@
 					<h5 class="modal-title">
 						<i class="bi bi-people me-2"></i>Student Management
 					</h5>
-					<button type="button" class="btn-close btn-close-white" onclick={() => showStudentManager = false}></button>
+					<button type="button" class="btn-close btn-close-white" onclick={() => showStudentManager = false} aria-label="Close student manager"></button>
 				</div>
 				<div class="modal-body">
 					<div class="d-flex justify-content-between align-items-center mb-3">
@@ -5997,6 +6055,7 @@
 											class="btn btn-outline-primary btn-sm"
 											onclick={async () => { await selectStudent(student.id); showStudentManager = false; }}
 											title="Select this student"
+											aria-label="Select this student"
 										>
 											<i class="bi bi-check-circle"></i>
 										</button>
@@ -6071,7 +6130,7 @@
 			<div class="toast-header bg-success text-white">
 				<i class="bi bi-check-circle me-2"></i>
 				<strong class="me-auto">Success</strong>
-				<button type="button" class="btn-close btn-close-white" onclick={() => showNotification = false}></button>
+				<button type="button" class="btn-close btn-close-white" onclick={() => showNotification = false} aria-label="Close notification"></button>
 			</div>
 			<div class="toast-body">
 				{notificationMessage}
@@ -6090,7 +6149,7 @@
 					<h5 class="modal-title">
 						<i class="bi bi-exclamation-triangle me-2"></i>Confirm Student Deletion
 					</h5>
-					<button type="button" class="btn-close btn-close-white" onclick={() => { showDeleteConfirmation = false; studentToDelete = null; }}></button>
+					<button type="button" class="btn-close btn-close-white" onclick={() => { showDeleteConfirmation = false; studentToDelete = null; }} aria-label="Close delete confirmation"></button>
 				</div>
 				<div class="modal-body">
 					<div class="alert alert-danger d-flex align-items-center mb-3" role="alert">

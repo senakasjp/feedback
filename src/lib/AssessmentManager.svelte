@@ -127,6 +127,13 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			});
 
 			options.push({
+				id: 'column-total-percentage',
+				label: 'Total (%)',
+				description: 'Overall weighted percentage',
+				aliases: ['total', 'total percent', 'overall total', 'percentage total']
+			});
+
+			options.push({
 				id: 'column-final-grade',
 				label: 'Final Grade',
 				description: 'Overall grade',
@@ -376,8 +383,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		return "E";
 	}
 
-	// Helper function to calculate final weighted grade for a student
-	function getFinalGrade(studentId: string): string {
+	function getFinalSummary(studentId: string) {
 		let totalWeightedMarks = 0;
 		let totalWeight = 0;
 		let hasAnyMarks = false;
@@ -390,33 +396,43 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 				hasAnyMarks = true;
 				assessmentsWithMarks++;
 			}
-			
-			// Sum up the total weight percentage
+
 			if (assessment.weight) {
 				totalWeight += assessment.weight;
 			}
 		}
 
-		// Don't provide final grade until each assessment has at least one result
-		if (!hasAnyMarks || totalWeight === 0 || assessmentsWithMarks < assessments.length) {
+		const percentage = totalWeight > 0 ? (totalWeightedMarks / totalWeight) * 100 : null;
+		const isComplete = hasAnyMarks && totalWeight > 0 && assessmentsWithMarks === assessments.length;
+
+		return {
+			totalWeightedMarks,
+			totalWeight,
+			percentage,
+			isComplete,
+			assessmentsWithMarks
+		};
+	}
+
+	// Helper function to calculate final weighted grade for a student
+	function getFinalGrade(studentId: string): string {
+		const { percentage, isComplete, totalWeightedMarks, totalWeight, assessmentsWithMarks } = getFinalSummary(studentId);
+
+		if (!isComplete || percentage === null) {
 			return "N/A";
 		}
 
-		// Calculate percentage: (actual weighted marks / total weight) * 100
-		// This gives us the percentage out of the total possible weighted marks
-		const finalPercentage = (totalWeightedMarks / totalWeight) * 100;
-		
 		// Debug logging
 		console.log(`Final grade calculation for student ${studentId}:`, {
 			totalWeightedMarks,
 			totalWeight,
 			assessmentsWithMarks,
 			totalAssessments: assessments.length,
-			finalPercentage: Math.round(finalPercentage * 100) / 100,
-			grade: getGrade(finalPercentage)
+			finalPercentage: Math.round(percentage * 100) / 100,
+			grade: getGrade(percentage)
 		});
 		
-		return getGrade(finalPercentage);
+		return getGrade(percentage);
 	}
 
 	// Print marks table to PDF
@@ -719,11 +735,26 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			}
 		});
 
+		const includeTotalColumn = !isColumnHidden(hiddenColumns, 'Total (%)', 'total', 'overall total', 'percentage total');
 		const includeFinalGrade = !isColumnHidden(hiddenColumns, 'Final Grade', 'grade');
+		const totalColumn = includeTotalColumn
+			? {
+					header: 'Total (%)',
+					ratio: 0.08,
+					allowWrap: true,
+					width: 0,
+					getValue: (student) => {
+						const summary = getFinalSummary(student.id);
+						return summary.isComplete && summary.percentage !== null
+							? summary.percentage.toFixed(1)
+							: 'N/A';
+					}
+				}
+			: null;
 		const finalGradeColumn = includeFinalGrade
 			? {
 					header: 'Final Grade',
-					ratio: 0.1,
+					ratio: 0.08,
 					allowWrap: true,
 					width: 0,
 					getValue: (student) => getFinalGrade(student.id)
@@ -733,6 +764,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		const columnConfigs = [
 			...visibleBasicColumns,
 			...visibleAssessmentColumns,
+			...(totalColumn ? [totalColumn] : []),
 			...(finalGradeColumn ? [finalGradeColumn] : [])
 		];
 
@@ -747,6 +779,11 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			column.width = availableWidth * column.ratio;
 			usedWidth += column.width;
 		});
+
+		if (totalColumn) {
+			totalColumn.width = availableWidth * totalColumn.ratio;
+			usedWidth += totalColumn.width;
+		}
 
 		if (finalGradeColumn) {
 			finalGradeColumn.width = availableWidth * finalGradeColumn.ratio;
@@ -1071,6 +1108,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 				getStudentMarks,
 				getWeightedMarks,
 				getFinalGrade,
+				getFinalSummary,
 				hiddenColumnsSet
 			);
 
@@ -1817,6 +1855,9 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 												</th>
 											{/each}
 											<th scope="col" class="text-center sticky-top">
+												<i class="bi bi-calculator me-1"></i>Total
+											</th>
+											<th scope="col" class="text-center sticky-top">
 												<i class="bi bi-award me-1"></i>Final Grade
 											</th>
 										</tr>
@@ -1883,12 +1924,16 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 												</th>
 											{/each}
 											<th scope="col" class="text-center sticky-top">
+												<small class="text-muted">Total</small>
+											</th>
+											<th scope="col" class="text-center sticky-top">
 												<small class="text-muted">Grade</small>
 											</th>
 										</tr>
 									</thead>
 									<tbody>
 										{#each studentsWithMarks as student, index}
+											{@const finalSummary = getFinalSummary(student.id)}
 											<tr class="drag-row" 
 												style="cursor: move;">
 												<td class="align-middle sticky-start bg-white" style="min-width: 200px;">
@@ -1984,6 +2029,16 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 														</div>
 													</td>
     {/each}
+												<!-- Total Column -->
+												<td class="align-middle text-center">
+													{#if finalSummary.isComplete && finalSummary.percentage !== null}
+														<span class="badge bg-success-subtle text-success fw-semibold">
+															{finalSummary.percentage.toFixed(1)}
+														</span>
+													{:else}
+														<span class="text-muted">N/A</span>
+													{/if}
+												</td>
 												<!-- Grades Column -->
 												<td class="align-middle text-center">
 													{#if getFinalGrade(student.id) !== "N/A"}
@@ -2365,13 +2420,12 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
           <label for="duplicateAssessmentName" class="form-label fw-bold">New Assessment Name:</label>
           <input
             id="duplicateAssessmentName"
-            type="text"
-            class="form-control"
-            placeholder="Enter new assessment name..."
-            bind:value={duplicateAssessmentName}
-            onkeydown={handleDuplicateKeydown}
-            autofocus
-          />
+						type="text"
+						class="form-control"
+						placeholder="Enter new assessment name..."
+						bind:value={duplicateAssessmentName}
+						onkeydown={handleDuplicateKeydown}
+					/>
         </div>
       </div>
       <div class="modal-footer">
