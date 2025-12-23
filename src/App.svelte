@@ -1359,39 +1359,61 @@
 		}
 
 	// Paragraph reordering functions
-	function moveParagraphUp(paragraphIndex) {
+	function moveParagraphUp(paragraphId, displayIndex, groupParagraphs) {
 		if (currentStudentId) return // Only in assignment mode
-		
-		if (paragraphIndex > 0) {
-			// Swap with previous paragraph
-			[paragraphs[paragraphIndex], paragraphs[paragraphIndex - 1]] = [paragraphs[paragraphIndex - 1], paragraphs[paragraphIndex]]
-			
-			// Update order values
-			paragraphs.forEach((para, index) => {
-				if (typeof para === 'object' && para.id) {
-					para.order = index
-				}
-			})
-			
-			saveAssessmentData()
+
+		// Move within the displayed group context
+		if (displayIndex > 0) {
+			// Get the IDs of the two paragraphs to swap
+			const currentId = groupParagraphs[displayIndex].id
+			const previousId = groupParagraphs[displayIndex - 1].id
+
+			// Find their positions in the main paragraphs array
+			const currentIndex = paragraphs.findIndex(p => p.id === currentId)
+			const previousIndex = paragraphs.findIndex(p => p.id === previousId)
+
+			if (currentIndex !== -1 && previousIndex !== -1) {
+				// Swap in the main array
+				[paragraphs[currentIndex], paragraphs[previousIndex]] = [paragraphs[previousIndex], paragraphs[currentIndex]]
+
+				// Update order values
+				paragraphs.forEach((para, index) => {
+					if (typeof para === 'object' && para.id) {
+						para.order = index
+					}
+				})
+
+				saveAssessmentData()
+			}
 		}
 	}
 
-	function moveParagraphDown(paragraphIndex) {
+	function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		if (currentStudentId) return // Only in assignment mode
-		
-		if (paragraphIndex < paragraphs.length - 1) {
-			// Swap with next paragraph
-			[paragraphs[paragraphIndex], paragraphs[paragraphIndex + 1]] = [paragraphs[paragraphIndex + 1], paragraphs[paragraphIndex]]
-			
-			// Update order values
-			paragraphs.forEach((para, index) => {
-				if (typeof para === 'object' && para.id) {
-					para.order = index
-				}
-			})
-			
-			saveAssessmentData()
+
+		// Move within the displayed group context
+		if (displayIndex < groupParagraphs.length - 1) {
+			// Get the IDs of the two paragraphs to swap
+			const currentId = groupParagraphs[displayIndex].id
+			const nextId = groupParagraphs[displayIndex + 1].id
+
+			// Find their positions in the main paragraphs array
+			const currentIndex = paragraphs.findIndex(p => p.id === currentId)
+			const nextIndex = paragraphs.findIndex(p => p.id === nextId)
+
+			if (currentIndex !== -1 && nextIndex !== -1) {
+				// Swap in the main array
+				[paragraphs[currentIndex], paragraphs[nextIndex]] = [paragraphs[nextIndex], paragraphs[currentIndex]]
+
+				// Update order values
+				paragraphs.forEach((para, index) => {
+					if (typeof para === 'object' && para.id) {
+						para.order = index
+					}
+				})
+
+				saveAssessmentData()
+			}
 		}
 	}
 
@@ -5411,7 +5433,7 @@
 																			<i class="bi bi-bookmark me-1"></i>{knowledgeArea}
 																		</small>
 																		{#if !currentStudentId}
-																			<button 
+																			<button
 																				type="button"
 																				class="btn btn-link btn-sm text-decoration-none"
 																				onclick={() => startNewParagraphFor(group.category, knowledgeArea)}
@@ -5422,7 +5444,7 @@
 																		{/if}
 																	</div>
 																{/if}
-																	{#each paragraphs as {text, color, id, originalIndex, fullText, source, markInfo}}
+																	{#each paragraphs as {text, color, id, originalIndex, fullText, source, markInfo}, displayIndex}
 																<div 
 																	class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
 																	class:selected-paragraph={selectedParagraphs.has(id)}
@@ -5541,21 +5563,21 @@
 																			{:else}
 																				<!-- Paragraph reordering buttons (only in assignment mode) -->
 																				{#if !currentStudentId}
-																					<button 
-																						class="btn btn-outline-secondary btn-sm" 
-																						onclick={() => moveParagraphUp(originalIndex)}
+																					<button
+																						class="btn btn-outline-secondary btn-sm"
+																						onclick={() => moveParagraphUp(id, displayIndex, paragraphs)}
 																						title="Move paragraph up"
 																						aria-label="Move paragraph up"
-																						disabled={originalIndex === 0}
+																						disabled={displayIndex === 0}
 																					>
 																						<i class="bi bi-chevron-up"></i>
 																					</button>
-																					<button 
-																						class="btn btn-outline-secondary btn-sm" 
-																						onclick={() => moveParagraphDown(originalIndex)}
+																					<button
+																						class="btn btn-outline-secondary btn-sm"
+																						onclick={() => moveParagraphDown(id, displayIndex, paragraphs)}
 																						title="Move paragraph down"
 																						aria-label="Move paragraph down"
-																						disabled={originalIndex === paragraphs.length - 1}
+																						disabled={displayIndex === paragraphs.length - 1}
 																					>
 																						<i class="bi bi-chevron-down"></i>
 																					</button>
