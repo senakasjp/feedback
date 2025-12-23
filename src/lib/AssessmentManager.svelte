@@ -342,8 +342,8 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		if (!marks || !marks.hasMarks || !assessment || !assessment.weight) {
 			return null;
 		}
-		
-		// Calculate weighted marks: marks × weight percentage
+
+		// Weighted contribution: raw mark * (weight / 100)
 		const weightedMarks = Number(marks.total) * (assessment.weight / 100);
 		return {
 			weightedMarks: weightedMarks,
@@ -402,7 +402,8 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			}
 		}
 
-		const percentage = totalWeight > 0 ? (totalWeightedMarks / totalWeight) * 100 : null;
+		// Use the straight sum of weighted contributions (already scaled by each assessment's weight)
+		const percentage = totalWeight > 0 ? totalWeightedMarks : null;
 		const isComplete = hasAnyMarks && totalWeight > 0 && assessmentsWithMarks === assessments.length;
 
 		return {
@@ -675,8 +676,8 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			const name = student.name || '';
 			return name.length > longest.length ? name : longest;
 		}, '');
-		const nameWidth = Math.max(doc.getTextWidth(longestName) + 4, 20); // Add minimal padding, minimum 20
-		const nameRatio = Math.min(nameWidth / availableWidth, 0.25); // Cap at 25% of available width
+		const nameWidth = Math.max(doc.getTextWidth(longestName) + 2, 18); // Trim padding to save space
+		const nameRatio = Math.min(nameWidth / availableWidth, 0.18); // Cap at 18% of available width
 
 		const basicColumnBlueprints = [
 			{
@@ -740,7 +741,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		const totalColumn = includeTotalColumn
 			? {
 					header: 'Total (%)',
-					ratio: 0.08,
+					ratio: 0.06,
 					allowWrap: true,
 					width: 0,
 					getValue: (student) => {
@@ -754,7 +755,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		const finalGradeColumn = includeFinalGrade
 			? {
 					header: 'Final Grade',
-					ratio: 0.08,
+					ratio: 0.06,
 					allowWrap: true,
 					width: 0,
 					getValue: (student) => getFinalGrade(student.id)
@@ -1384,31 +1385,16 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 
 		// Calculate final percentages for all students
 		const studentPerformances = studentsWithMarks.map(student => {
-			let totalWeightedMarks = 0;
-			let totalWeight = 0;
-			let hasAnyMarks = false;
-
-			for (const assessment of assessments) {
-				const weighted = getWeightedMarks(student.id, assessment.id);
-				if (weighted) {
-					totalWeightedMarks += weighted.weightedMarks;
-					hasAnyMarks = true;
-				}
-				
-				if (assessment.weight) {
-					totalWeight += assessment.weight;
-				}
-			}
-
-			const percentage = hasAnyMarks && totalWeight > 0 ? (totalWeightedMarks / totalWeight) * 100 : 0;
+			const summary = getFinalSummary(student.id);
+			const percentage = summary && summary.percentage !== null ? summary.percentage : 0;
 			const finalGrade = getFinalGrade(student.id);
 
 			return {
 				student,
 				percentage,
 				finalGrade,
-				totalWeightedMarks,
-				totalWeight
+				totalWeightedMarks: summary?.totalWeightedMarks ?? 0,
+				totalWeight: summary?.totalWeight ?? 0
 			};
 		}).filter(perf => perf.percentage > 0).sort((a, b) => b.percentage - a.percentage);
 

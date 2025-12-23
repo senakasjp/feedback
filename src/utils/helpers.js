@@ -59,7 +59,7 @@ export function deepClone(obj) {
 
 export function extractMainTextFromParagraph(paragraphText) {
   let text = paragraphText
-  
+
   // Remove category prefix (format: "Category: text")
   if (text.includes(': ')) {
     const parts = text.split(': ')
@@ -67,18 +67,16 @@ export function extractMainTextFromParagraph(paragraphText) {
       text = parts.slice(1).join(': ')
     }
   }
-  
+
   // Remove knowledge area suffix (format: "text - Knowledge Area")
-  if (text.includes(' - ')) {
-    const parts = text.split(' - ')
-    if (parts.length >= 2) {
-      const lastPart = parts[parts.length - 1]
-      if (!lastPart.includes(':')) {
-        text = parts.slice(0, -1).join(' - ')
-      }
-    }
+  // Use the improved extraction logic to avoid removing legitimate text
+  const knowledgeArea = extractKnowledgeArea(text)
+  if (knowledgeArea) {
+    // Remove the knowledge area suffix
+    const lastDashIndex = text.lastIndexOf(' - ')
+    text = text.substring(0, lastDashIndex)
   }
-  
+
   return text
 }
 
@@ -125,13 +123,23 @@ export function reconstructParagraphText(originalText, newMainText) {
 
 export function extractKnowledgeArea(text) {
   // Check if text ends with " - KnowledgeArea" format
+  // Only extract if the last part looks like an intentional knowledge area tag
   if (text.includes(' - ')) {
-    const parts = text.split(' - ')
-    if (parts.length >= 2) {
-      const lastPart = parts[parts.length - 1]
-      if (!lastPart.includes(':')) {
-        return lastPart.trim()
-      }
+    const lastDashIndex = text.lastIndexOf(' - ')
+    const lastPart = text.substring(lastDashIndex + 3).trim()
+
+    // Knowledge area should:
+    // 1. Not contain colons (those are category markers)
+    // 2. Be relatively short (< 50 chars - knowledge areas are labels, not sentences)
+    // 3. Not contain semicolons, periods, or commas (indicates it's part of main text)
+    // 4. Not start with a number followed by space-dash (like "5 - 7")
+    if (!lastPart.includes(':') &&
+        lastPart.length < 50 &&
+        !lastPart.includes(';') &&
+        !lastPart.includes('.') &&
+        !lastPart.includes(',') &&
+        !/^\d+\s/.test(lastPart)) {
+      return lastPart
     }
   }
   return ''
