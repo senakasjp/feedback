@@ -247,3 +247,9 @@ export function ensureCategoriesHaveOrder(categories) {
     return category
   })
 }
+
+export function stripHtmlTags(text) {
+  if (!text) return text
+  // Remove HTML tags using regex
+  return text.replace(/<[^>]*>/g, '')
+}

@@ -16,7 +16,7 @@
 	import AboutModal from './lib/AboutModal.svelte'
 	
 	// Import utility functions
-	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText } from './utils/helpers.js'
+	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags } from './utils/helpers.js'
 	import { getMotivationalMessage } from './utils/motivationalMessages.js'
 	
 	// Import data services
@@ -911,13 +911,14 @@
 
 	function addParagraph() {
 		if (newParagraph.trim()) {
-			let paragraphText = newParagraph.trim()
-			
+			// Strip HTML tags from the input
+			let paragraphText = stripHtmlTags(newParagraph.trim())
+
 			// For Studio 6 or Studio 4 PDR assessments, add category prefix if selected
 			if (needsCategorySelection() && selectedCategory) {
 				paragraphText = `${selectedCategory}: ${paragraphText}`
 			}
-			
+
 			// Add knowledge area prefix if selected
 			if (selectedKnowledgeArea) {
 				paragraphText = `${paragraphText} - ${selectedKnowledgeArea}`
@@ -986,7 +987,9 @@
 
 		try {
 			const improvedText = await improveEnglish(text)
-			quickAddText = { ...quickAddText, [categoryName]: improvedText }
+			// Strip any HTML tags that might have been introduced
+			const cleanedText = stripHtmlTags(improvedText)
+			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			// Mark this text as AI-improved for styling
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
 			showSuccessNotification('✨ Text improved successfully!')
@@ -1000,7 +1003,7 @@
 	}
 
 	function quickAddParagraph(categoryName) {
-		const text = (quickAddText[categoryName] || '').trim()
+		const text = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		if (!text) return
 
 		let paragraphText = text
@@ -1043,6 +1046,29 @@
 			saveStudentParagraphs()
 		}
 		refreshCategoryWarnings()
+	}
+
+	// Copy paragraph text to quick-add box for customization
+	function copyToQuickAdd(paragraphText, categoryName) {
+		// Extract the main text without category prefix and knowledge area suffix
+		const mainText = extractMainTextFromParagraph(paragraphText)
+
+		// Set the text in the quick-add box for this category
+		quickAddText = { ...quickAddText, [categoryName]: mainText }
+
+		// Clear AI-improved flag
+		aiImprovedText = { ...aiImprovedText, [categoryName]: false }
+
+		// Focus the textarea
+		setTimeout(() => {
+			const textareaId = quickAddInputId(categoryName)
+			const textarea = document.getElementById(textareaId)
+			if (textarea) {
+				textarea.focus()
+				// Move cursor to end
+				textarea.setSelectionRange(mainText.length, mainText.length)
+			}
+		}, 100)
 	}
 
 	/**
@@ -3612,7 +3638,7 @@
 		container.style.width = `${maxContentWidthPx}px`
 		container.style.maxWidth = `${maxContentWidthPx}px`
 		container.style.fontFamily = 'Arial, sans-serif'
-		container.style.fontSize = '12px'
+		container.style.fontSize = '10pt' // Match paragraph font size (10pt from firstPageBodyFontSize)
 		container.style.lineHeight = '1.35'
 		container.innerHTML = htmlContent
 
@@ -3681,7 +3707,7 @@
 		// Normalize spacing inside pasted HTML so tables don't blow up the PDF
 		const styleElement = document.createElement('style')
 		styleElement.textContent = `
-			.pdf-assessment-html { width: 100%; box-sizing: border-box; }
+			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: 10pt; }
 			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
 			.pdf-assessment-html th,
 			.pdf-assessment-html td {
@@ -3694,7 +3720,7 @@
 				hyphens: auto !important;
 				box-sizing: border-box !important;
 			}
-			.pdf-assessment-html p { margin: 0; line-height: 1.4; }
+			.pdf-assessment-html p { margin: 0; line-height: 1.4; font-size: inherit; }
 			.pdf-assessment-html p + p { margin-top: 6px; }
 			.pdf-assessment-html ul, .pdf-assessment-html ol { margin: 0 0 6px 18px; padding-left: 18px; }
 			.pdf-assessment-html li { margin: 0; line-height: 1.3; }
@@ -3705,6 +3731,8 @@
 			.pdf-assessment-html td {
 				border: 1px solid #222 !important;
 			}
+			.pdf-assessment-html p:not([style*="font-size"]) { font-size: 10pt; }
+			.pdf-assessment-html div:not([style*="font-size"]) { font-size: 10pt; }
 		`
 		container.prepend(styleElement)
 
@@ -4392,17 +4420,31 @@
 			}
 			previousBlank = false
 			
-			// Check if this line is a category header (contains ':')
-			if (line.includes(':')) {
+			// Check if this line is a category header
+			// A line ending with ':' is treated as a header for bold formatting
+			const trimmedLine = line.trim()
+			const endsWithColon = trimmedLine.endsWith(':')
+
+			// Check if it's an assessment-specific category (for skip logic)
+			const isAssessmentCategory = trimmedLine.includes('Sub Objective') ||
+				trimmedLine.includes('Sub Learning Objective') ||
+				trimmedLine.includes('Report') ||
+				trimmedLine.includes('Decision')
+
+			if (endsWithColon) {
 				// Extract category name (everything before the colon)
 				const categoryName = line.split(':')[0].trim()
 				currentCategory = normalizeCategoryName(categoryName)
-				skipCurrentCategory = isCategoryCoveredByTable(currentCategory)
-				if (skipCurrentCategory) {
+
+				// Only skip if it's an assessment-specific category covered by table
+				const shouldSkip = isAssessmentCategory && isCategoryCoveredByTable(currentCategory)
+				if (shouldSkip) {
+					skipCurrentCategory = true
 					continue
 				}
+				skipCurrentCategory = false
 
-				// Bold font for category headers only (no marks)
+				// Bold font for ALL category headers (any line ending with ':')
 				doc.setFont('helvetica', 'bold')
 				doc.setFontSize(currentBodyFontSize) // Same size as other content
 
@@ -5561,6 +5603,17 @@
 																					<i class="bi bi-x"></i>
 																				</button>
 																			{:else}
+																				<!-- Copy to Quick Add button (only in student mode) -->
+																				{#if currentStudentId}
+																					<button
+																						class="btn btn-outline-info btn-sm"
+																						onclick={() => copyToQuickAdd(text, group.category)}
+																						title="Copy to quick add box for customization"
+																						aria-label="Copy to quick add"
+																					>
+																						<i class="bi bi-files"></i>
+																					</button>
+																				{/if}
 																				<!-- Paragraph reordering buttons (only in assignment mode) -->
 																				{#if !currentStudentId}
 																					<button
@@ -5582,16 +5635,16 @@
 																						<i class="bi bi-chevron-down"></i>
 																					</button>
 																				{/if}
-																				<button 
-																					class="btn btn-outline-primary btn-sm" 
+																				<button
+																					class="btn btn-outline-primary btn-sm"
 																					onclick={() => startEditParagraph(originalIndex)}
 																					title="Edit paragraph"
 																					aria-label="Edit paragraph"
 																				>
 																					<i class="bi bi-pencil"></i>
 																				</button>
-																				<button 
-																					class="btn btn-outline-danger btn-sm" 
+																				<button
+																					class="btn btn-outline-danger btn-sm"
 																					onclick={() => deleteParagraph(originalIndex)}
 																					title="Delete paragraph"
 																					aria-label="Delete paragraph"
