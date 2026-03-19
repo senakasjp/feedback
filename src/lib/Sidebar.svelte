@@ -11,6 +11,7 @@
 	export let currentView = '';
 	export let currentStudentId = '';
 	export let studentName = '';
+	export let studentPhoto = '';
 	export let showCalculator = false;
 	export let showMobileSidebar = true;
 	/** @type {any[]} */
@@ -222,9 +223,28 @@
 						
 						<!-- Current Session Info - Only show in feedback page (3rd level) -->
 						{#if currentView === 'feedback' && currentAssessment}
-							<div class="mt-2 mb-2">
+							<div class="mt-1 mb-1">
 								<div class="card bg-light">
-									<div class="card-body p-1">
+									<div class="card-body p-2">
+										<div class="text-center mb-2">
+											{#if studentPhoto}
+												<img 
+													src={studentPhoto} 
+													alt={studentName ? `${studentName} photo` : 'Student photo'} 
+													class="rounded d-block mx-auto border border-secondary-subtle bg-white"
+													style="width: 90px; height: 90px; object-fit: contain; object-position: center;"
+												/>
+											{:else}
+												<div
+													class="d-inline-flex align-items-center justify-content-center rounded-circle border border-secondary-subtle bg-white"
+													style="width: 72px; height: 72px;"
+													aria-label="Student avatar placeholder"
+													title="No student photo"
+												>
+													<i class="bi bi-person-fill text-secondary" style="font-size: 2rem;"></i>
+												</div>
+											{/if}
+										</div>
 										<h6 class="card-title text-primary mb-1">
 											<i class="bi bi-info-circle me-2"></i>Current Session
 										</h6>
@@ -262,28 +282,28 @@
 						<!-- Action Buttons - Only show in feedback page (3rd level) -->
 						{#if currentView === 'feedback' && currentAssessment}
 							<div class="mt-3">
-								<div class="d-grid gap-3">
+								<div class="d-grid gap-2">
 									{#if currentStudentId}
-										<button class="btn btn-success btn-sm w-100 mb-2" onclick={onSaveStudentEvaluation}>
+										<button class="btn btn-success btn-sm w-100" onclick={onSaveStudentEvaluation}>
 											<i class="bi bi-save me-2"></i>Save Student Data
 										</button>
-										<button class="btn btn-primary btn-sm w-100 mb-2" onclick={onLoadStudentEvaluation}>
+										<button class="btn btn-primary btn-sm w-100" onclick={onLoadStudentEvaluation}>
 											<i class="bi bi-upload me-2"></i>Load Student Data
 										</button>
-										<button class="btn btn-warning btn-sm w-100 mb-2" onclick={onTransferStudentData}>
+										<button class="btn btn-warning btn-sm w-100" onclick={onTransferStudentData}>
 											<i class="bi bi-arrow-left-right me-2"></i>Transfer to Another Student
 										</button>
 									{/if}
-									<button class="btn btn-outline-primary btn-sm w-100 mb-2" onclick={onSaveAssignmentData}>
+									<button class="btn btn-outline-primary btn-sm w-100" onclick={onSaveAssignmentData}>
 										<i class="bi bi-save me-2"></i>Save Assignment
 									</button>
-									<button class="btn btn-outline-info btn-sm w-100 mb-2" onclick={onExportAssignmentSettings}>
+									<button class="btn btn-outline-info btn-sm w-100" onclick={onExportAssignmentSettings}>
 										<i class="bi bi-upload me-2"></i>Export Assignment Settings
 									</button>
-									<button class="btn btn-outline-success btn-sm w-100 mb-2" onclick={onCopyToClipboard}>
+									<button class="btn btn-outline-success btn-sm w-100" onclick={onCopyToClipboard}>
 										<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
 									</button>
-									<button class="btn btn-outline-danger btn-sm w-100 mb-2" onclick={onGeneratePDF}>
+									<button class="btn btn-outline-danger btn-sm w-100" onclick={onGeneratePDF}>
 										<i class="bi bi-download me-2"></i>Print to Download
 									</button>
 								</div>

@@ -20,12 +20,47 @@ async function getErrorMessage(response) {
   }
 }
 
+function normaliseWhitespace(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function buildImproveEnglishMessages(text, customInstructions = '') {
+  const instructions = normaliseWhitespace(customInstructions)
+
+  const messages = [
+    {
+      role: 'system',
+      content: 'You are a helpful assistant that improves English text for clarity, grammar, and professionalism. IMPORTANT: Use British English spelling and conventions (e.g., "organise" not "organize", "colour" not "color"). Use simple, clear English that is easy to understand - avoid complex or advanced vocabulary. Write like a non-native English speaker would - use common, everyday words instead of sophisticated or academic language. CRITICAL: Preserve all scientific terms, technical vocabulary, domain-specific terminology, and specialist language exactly as written - do not simplify or replace these terms. Only simplify general language around the technical terms. Ensure the text is contextually correct and appropriate for educational feedback. Maintain the original meaning and tone. Only return the improved text without explanations or additional commentary.'
+    },
+  ]
+
+  if (instructions) {
+    messages.push({
+      role: 'system',
+      content: `Per-answer instructions from assessor:\n${instructions}`
+    })
+  }
+
+  messages.push(
+    {
+      role: 'user',
+      content: [
+        'Please improve the following text using British English spelling and simple, easy-to-understand words. Avoid complex vocabulary - use normal, everyday English. IMPORTANT: Keep all scientific terms, technical words, and specialist terminology exactly as they are - do not change or simplify them.',
+        text
+      ].filter(Boolean).join('\n\n')
+    }
+  )
+
+  return messages
+}
+
 /**
  * Improve the English grammar and clarity of the given text
  * @param {string} text - The text to improve
+ * @param {string} customInstructions - Optional per-answer instructions
  * @returns {Promise<string>} - The improved text
  */
-export async function improveEnglish(text) {
+export async function improveEnglish(text, customInstructions = '') {
   if (!text || text.trim() === '') {
     throw new Error('Text cannot be empty')
   }
@@ -43,16 +78,7 @@ export async function improveEnglish(text) {
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini', // Using the cost-effective model
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant that improves English text for clarity, grammar, and professionalism. IMPORTANT: Use British English spelling and conventions (e.g., "organise" not "organize", "colour" not "color"). Use simple, clear English that is easy to understand - avoid complex or advanced vocabulary. Write like a non-native English speaker would - use common, everyday words instead of sophisticated or academic language. CRITICAL: Preserve all scientific terms, technical vocabulary, domain-specific terminology, and specialist language exactly as written - do not simplify or replace these terms. Only simplify general language around the technical terms. Ensure the text is contextually correct and appropriate for educational feedback. Maintain the original meaning and tone. Only return the improved text without explanations or additional commentary.'
-          },
-          {
-            role: 'user',
-            content: `Please improve the following text using British English spelling and simple, easy-to-understand words. Avoid complex vocabulary - use normal, everyday English. IMPORTANT: Keep all scientific terms, technical words, and specialist terminology exactly as they are - do not change or simplify them:\n\n${text}`
-          }
-        ],
+        messages: buildImproveEnglishMessages(text, customInstructions),
         temperature: 0.3, // Lower temperature for more consistent, focused improvements
         max_tokens: 1000
       })
@@ -83,4 +109,8 @@ export async function improveEnglish(text) {
  */
 export function isOpenAIConfigured() {
   return Boolean(OPENAI_API_KEY && OPENAI_API_KEY !== 'your-api-key-here')
+}
+
+export function buildImproveEnglishPromptPreview(text, customInstructions = '') {
+  return buildImproveEnglishMessages(text, customInstructions)
 }

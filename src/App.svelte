@@ -21,7 +21,9 @@
 	
 	// Import data services
 	import { studentsService } from './services/dataService.js'
-	import { improveEnglish, isOpenAIConfigured } from './services/openaiService.js'
+	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured } from './services/openaiService.js'
+	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
 	
 	// Import constants
 	import { PDR_CATEGORIES, STUDIO4_CATEGORIES, STUDIO5_CATEGORIES } from './utils/constants.js'
@@ -34,22 +36,49 @@
 	import './styles/assessment-manager.css'
 	import './styles/dark-mode.css'
 
+	const NAVIGATION_STATE_KEY = 'feedback-navigation-state-v1'
+	const TABLE_HTML_SPACER_SNIPPET = '<div style="margin-top: 20px;"></div>'
+
+	const ASSESSMENT_DOCUMENT_TYPES = [
+		{ value: 'assignment-brief', label: 'Assignment Brief' },
+		{ value: 'rubric-support', label: 'Rubric Support' },
+		{ value: 'model-answer', label: 'Model Answer' },
+		{ value: 'exemplar-high', label: 'Strong Exemplar' },
+		{ value: 'exemplar-mid', label: 'Medium Exemplar' },
+		{ value: 'exemplar-low', label: 'Weak Exemplar' },
+		{ value: 'sample-feedback', label: 'Sample Feedback' },
+		{ value: 'moderation', label: 'Moderation Note' },
+		{ value: 'course-note', label: 'Course Note' }
+	]
+
+	const STUDENT_DOCUMENT_TYPES = [
+		{ value: 'submission', label: 'Submission' },
+		{ value: 'report', label: 'Report' },
+		{ value: 'appendix', label: 'Appendix' },
+		{ value: 'evidence', label: 'Evidence' }
+	]
+
 	// Data structure for hierarchical subjects/assessments
 	let subjects = $state([])
 	let students = $state([]) // Student management
 	let percentageRanges = $state([]) // Percentage ranges for feedback
+	let globalAiSystemInstructions = $state('')
 	let currentSubjectId = $state(null)
 	let currentAssessmentId = $state(null)
 	let currentSubject = $state(null)
 	
 	let currentAssessment = $state(null)
 	let currentStudentId = $state(null) // Currently selected student
+	let showStudentPicker = $state(false)
+	let studentPickerSearch = $state('')
+	let studentPickerContainer = $state(null)
 
 	// Current assessment data
 	let newParagraph = $state('')
 	let paragraphs = $state([])
 	let selectedParagraphs = $state(new Set())
 	let studentName = $state('')
+	let studentPhoto = $state('')
 	// No studentImage - only header photo for assessment
 	let selectedColor = $state('')
 	let selectedColorMark = $state('') // Mark for the selected color (fixed mode)
@@ -69,6 +98,7 @@
 	let categoryWarnings = $state({}) // Store per-category warning state (missing paragraphs/marks)
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
+	let notificationVariant = $state('success') // success | danger
 	let deletingStudentId = $state(null) // Track which student is being deleted
 	let showStudentTransferModal = $state(false) // Show student transfer modal
 	let showImportModal = $state(false) // Show import paragraphs modal
@@ -77,10 +107,38 @@
 	let tableColumnMarkMap = $state({}) // Manual mapping: column index -> mark value (for rubric highlighting)
 	let quickAddKnowledgeArea = $state({}) // Store quick-add knowledge area selection per category
 	let quickAddText = $state({}) // Store quick-add paragraph text per category
+	let quickAddAiInstructions = $state({}) // Store per-answer AI instructions per category
+	let quickAddInstructionAssessmentKey = $state('')
+	let quickAddInstructionExpanded = $state({})
+	const quickAddInstructionSaveTimers = {}
+	let quickAddColorPicker = $state({})
 	let quickAddToAssessmentWhenStudentSelected = $state(false) // Override to save quick-add to assessment even when a student is selected
 	let showAboutModal = $state(false) // Show about modal
 	let improvingText = $state({}) // Track which category text is being improved by AI
+	let improvingTextWithRag = $state({}) // Track which category text is being expanded with RAG
+	let evidenceCheckingText = $state({}) // Track which category is running evidence check
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
+	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
+	let studentSubmissionDocuments = $state([])
+	let assessmentReferenceDocuments = $state([])
+	let selectedAssessmentDocumentType = $state('assignment-brief')
+	let selectedStudentDocumentType = $state('submission')
+	let uploadingAssessmentDocument = $state(false)
+	let uploadingStudentDocument = $state(false)
+	let aiDraftingFeedback = $state(false)
+	let aiDraftOverallFeedback = $state('')
+	let aiDraftRetrievedContext = $state([])
+	let assessmentVectorIndex = $state(null)
+	let buildingAssessmentVectorIndex = $state(false)
+	let aiRetrievalMode = $state('')
+	let showAiDraftReviewModal = $state(false)
+	let aiDraftReviewItems = $state([])
+	let showPromptPreviewModal = $state(false)
+	let promptPreviewTitle = $state('')
+	let promptPreviewMessages = $state([])
+	let activeFeedbackTab = $state('enter-data')
+	let lastStudentEffectAssessmentId = $state(null)
+	let lastStudentEffectStudentId = $state(null)
 	
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
@@ -226,11 +284,22 @@
 	let showMobileSidebar = $state(false)
 	let showCalculator = $state(false) // Calculator toggle state
 	let currentView = $state('subjects') // 'subjects', 'assessments', 'feedback'
+	let lastNonHelpView = $state('subjects')
 	let isDarkMode = $state(false) // Dark mode toggle state
 	
 	// Force reactivity for debugging
 	$effect(() => {
 		console.log('Current view changed to:', currentView)
+	})
+
+	$effect(() => {
+		if (currentView && currentView !== 'help') {
+			lastNonHelpView = currentView
+		}
+	})
+
+	$effect(() => {
+		persistNavigationState()
 	})
 
 	// Dark mode functionality
@@ -262,6 +331,81 @@
 		isDarkMode = !isDarkMode
 	}
 
+	function getStudentPhoto(student) {
+		if (!student || typeof student !== 'object') return ''
+		const photoFields = [
+			'photo',
+			'photoUrl',
+			'photoURL',
+			'avatar',
+			'avatarUrl',
+			'avatarURL',
+			'image',
+			'imageUrl',
+			'imageURL',
+			'studentImage',
+			'profileImage',
+			'profilePhoto'
+		]
+		for (const field of photoFields) {
+			const value = student[field]
+			if (typeof value === 'string' && value.trim()) {
+				return value
+			}
+		}
+		const nestedPhoto = student?.profile?.photo || student?.profile?.image || student?.profile?.avatar
+		if (typeof nestedPhoto === 'string' && nestedPhoto.trim()) {
+			return nestedPhoto
+		}
+		return ''
+	}
+
+	function getDisplayedStudentPhoto(student) {
+		if (!student || typeof student !== 'object') return ''
+		if (student.id === currentStudentId && typeof studentPhoto === 'string' && studentPhoto.trim()) {
+			return studentPhoto
+		}
+		return getStudentPhoto(student)
+	}
+
+	function getStudentInitials(student) {
+		const label = student?.displayName || student?.name || ''
+		const words = label.split(/\s+/).filter(Boolean)
+		if (words.length === 0) return 'S'
+		return words.slice(0, 2).map(word => word[0]?.toUpperCase() || '').join('')
+	}
+
+	function getFilteredStudents() {
+		const query = studentPickerSearch.trim().toLowerCase()
+		if (!query) return sortedStudents
+
+		return sortedStudents.filter(student => {
+			const haystack = [student.displayName, student.name, student.studentId]
+				.filter(Boolean)
+				.join(' ')
+				.toLowerCase()
+			return haystack.includes(query)
+		})
+	}
+
+	function toggleStudentPicker() {
+		showStudentPicker = !showStudentPicker
+		if (!showStudentPicker) {
+			studentPickerSearch = ''
+		}
+	}
+
+	async function chooseStudentFromPicker(studentId) {
+		await selectStudent(studentId)
+		showStudentPicker = false
+		studentPickerSearch = ''
+	}
+
+	function closeStudentPicker() {
+		showStudentPicker = false
+		studentPickerSearch = ''
+	}
+
 	// Removed debouncedAutosave function to prevent data contamination
 
 	// Removed autosave effect to prevent data contamination
@@ -270,30 +414,116 @@
 
 	// Handle student selection changes
 	$effect(() => {
-		if (currentStudentId && currentView === 'feedback' && currentAssessmentId) {
+		if (currentView !== 'feedback' || !currentAssessmentId) {
+			lastStudentEffectAssessmentId = currentAssessmentId || null
+			lastStudentEffectStudentId = currentStudentId || null
+			return
+		}
+
+		const normalizedStudentId = currentStudentId || null
+		const assessmentChanged = lastStudentEffectAssessmentId !== currentAssessmentId
+		const studentChanged = lastStudentEffectStudentId !== normalizedStudentId
+
+		if (!assessmentChanged && !studentChanged) {
+			return
+		}
+
+		const previousStudentId = lastStudentEffectStudentId
+		lastStudentEffectAssessmentId = currentAssessmentId
+		lastStudentEffectStudentId = normalizedStudentId
+
+		if (currentStudentId) {
 			const student = students.find(s => s.id === currentStudentId)
 			if (student) {
 				studentName = student.displayName
+				studentPhoto = getStudentPhoto(student)
 			}
-		} else if (!currentStudentId && currentView === 'feedback' && currentAssessmentId) {
+		} else if (previousStudentId) {
 			// STRICT DATA SEPARATION RULE 1: Student deselected - ensure we show assignment-only data
-				console.log('STRICT DATA SEPARATION: Student deselected via reactive effect - loading assignment-only data')
-				studentName = ''
-				// No studentImage - only header photo for assessment
-				selectedParagraphs = new Set()
-				categoryMarks = {}
-				manualTotalMarks = currentAssessment?.totalMarks ?? ''
-				quickAddText = {}
-				quickAddToAssessmentWhenStudentSelected = false
-				
-				// Reload assignment paragraphs only (no student data)
-				loadAssessmentData(currentSubjectId, currentAssessmentId, false)
-			}
+			console.log('STRICT DATA SEPARATION: Student deselected via reactive effect - loading assignment-only data')
+			studentName = ''
+			studentSubmissionText = ''
+			studentSubmissionDocuments = []
+			studentPhoto = ''
+			// No studentImage - only header photo for assessment
+			selectedParagraphs = new Set()
+			categoryMarks = {}
+			quickAddText = {}
+			quickAddToAssessmentWhenStudentSelected = false
+
+			// Reload assignment paragraphs only (no student data)
+			loadAssessmentData(currentSubjectId, currentAssessmentId, false)
+		}
 		})
-	
+
+	// Auto-save quickAddText per student (debounced)
+	let quickAddTextAutoSaveTimer = null
+	$effect(() => {
+		// Read quickAddText to subscribe to changes
+		const currentQuickAddText = JSON.stringify(quickAddText)
+		
+		// Only auto-save if student is selected and we're in feedback view
+		if (!currentStudentId || !currentAssessmentId || currentView !== 'feedback') {
+			return
+		}
+
+		// Debounce: save after 1 second of inactivity
+		if (quickAddTextAutoSaveTimer) {
+			clearTimeout(quickAddTextAutoSaveTimer)
+		}
+		quickAddTextAutoSaveTimer = setTimeout(() => {
+			persistCurrentStudentEvaluationData()
+			console.log('AUTO-SAVE: quickAddText saved for student', currentStudentId)
+		}, 1000)
+	})	
 	// Function to update view
 	function updateView(newView) {
 		currentView = newView
+	}
+
+	function openHelpPage() {
+		if (currentView !== 'help') {
+			lastNonHelpView = currentView
+		}
+		currentView = 'help'
+	}
+
+	function closeHelpPage() {
+		if (lastNonHelpView && lastNonHelpView !== 'help') {
+			currentView = lastNonHelpView
+			return
+		}
+
+		if (currentAssessmentId) {
+			currentView = 'feedback'
+		} else if (currentSubjectId) {
+			currentView = 'assessments'
+		} else {
+			currentView = 'subjects'
+		}
+	}
+
+	async function insertTableHtmlSpacerSnippet() {
+		const snippet = TABLE_HTML_SPACER_SNIPPET
+		const currentHtml = String(assessmentHtml || '')
+
+		if (currentHtml.includes(snippet)) {
+			showSuccessNotification('ℹ️ Spacer snippet already exists in Assessment HTML.')
+			return
+		}
+
+		const updatedHtml = currentHtml.trim() ? `${currentHtml}\n${snippet}` : snippet
+		assessmentHtml = updatedHtml
+
+		if (currentAssessment) {
+			currentAssessment = {
+				...currentAssessment,
+				rubricHtml: updatedHtml
+			}
+		}
+
+		await saveAssessmentData({ force: true, skipSelections: true })
+		showSuccessNotification('✅ Spacer snippet inserted into Assessment HTML.')
 	}
 
 	// Function to toggle calculator view
@@ -311,6 +541,61 @@
 		if (assessment) {
 			currentAssessment = assessment
 			currentAssessmentId = assessment.id
+		}
+	}
+
+	function persistNavigationState() {
+		try {
+			const data = {
+				view: currentView,
+				subjectId: currentSubjectId,
+				assessmentId: currentAssessmentId,
+				studentId: currentStudentId
+			}
+			localStorage.setItem(NAVIGATION_STATE_KEY, JSON.stringify(data))
+		} catch (error) {
+			console.warn('Failed to persist navigation state', error)
+		}
+	}
+
+	function restoreNavigationState() {
+		try {
+			const raw = localStorage.getItem(NAVIGATION_STATE_KEY)
+			if (!raw) return
+			const data = JSON.parse(raw)
+
+			if (data?.subjectId) {
+				const subject = subjects.find(item => item.id === data.subjectId)
+				if (subject) {
+					currentSubject = subject
+					currentSubjectId = subject.id
+				}
+			}
+
+			if (data?.assessmentId && currentSubject?.assessments) {
+				const assessment = currentSubject.assessments.find(item => item.id === data.assessmentId)
+				if (assessment) {
+					currentAssessment = assessment
+					currentAssessmentId = assessment.id
+				}
+			}
+
+			if (data?.view === 'feedback' && currentAssessmentId) {
+				currentView = 'feedback'
+				if (currentSubjectId && currentAssessmentId) {
+					loadAssessmentData(currentSubjectId, currentAssessmentId)
+				}
+			} else if (data?.view === 'assessments' && currentSubjectId) {
+				currentView = 'assessments'
+			} else {
+				currentView = 'subjects'
+			}
+
+			if (data?.studentId && currentView === 'feedback') {
+				currentStudentId = data.studentId
+			}
+		} catch (error) {
+			console.warn('Failed to restore navigation state', error)
 		}
 	}
 
@@ -342,6 +627,12 @@
 			.replace(/\s+/g, ' ')
 			.trim()
 			.toLowerCase()
+	}
+
+	function normalizeHtmlQuotes(value) {
+		return String(value || '')
+			.replace(/[“”]/g, '"')
+			.replace(/[‘’]/g, "'")
 	}
 
 	function extractTableRowLabels(html) {
@@ -422,6 +713,7 @@
 				// Note: knowledgeAreas are now stored as assignment properties
 				students = parsed.students || []
 				percentageRanges = parsed.percentageRanges || []
+				globalAiSystemInstructions = parsed.appSettings?.aiMarkingSystemInstructions || ''
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -434,6 +726,7 @@
 					// Note: knowledgeAreas are now stored as assignment properties
 					students = parsed.students || []
 					percentageRanges = parsed.percentageRanges || []
+					globalAiSystemInstructions = parsed.appSettings?.aiMarkingSystemInstructions || ''
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
@@ -448,10 +741,19 @@
 				}
 			})
 		})
+
+		restoreNavigationState()
 	}
 
 	async function saveSubjects() {
-		const data = { subjects, students, percentageRanges }
+		const data = {
+			subjects,
+			students,
+			percentageRanges,
+			appSettings: {
+				aiMarkingSystemInstructions: globalAiSystemInstructions.trim()
+			}
+		}
 		
 		try {
 			// Try Tauri first (desktop app)
@@ -558,8 +860,9 @@
 				}
 				
 				// STRICT DATA SEPARATION RULE 1: Assignment data should never contain student information
-				// Always clear student data when loading assignment data
+				// Always clear student identity data when loading assignment data
 				studentName = ''
+				studentSubmissionText = ''
 				// No studentImage - only header photo for assessment
 				
 					// Load assessment header photo if available
@@ -576,9 +879,35 @@
 					if (currentAssessment && parsed.tableColumnMarkMap !== undefined) {
 						currentAssessment.tableColumnMarkMap = parsed.tableColumnMarkMap || {}
 					}
+					if (currentAssessment && parsed.aiVectorIndex !== undefined) {
+						currentAssessment.aiVectorIndex = parsed.aiVectorIndex || null
+					}
+					if (currentAssessment && parsed.aiReferenceDocuments !== undefined) {
+						currentAssessment.aiReferenceDocuments = parsed.aiReferenceDocuments || []
+					}
+					if (currentAssessment && parsed.aiAnswerInstructionsByCategory !== undefined) {
+						const instructionsMap = parsed.aiAnswerInstructionsByCategory || {}
+						currentAssessment.aiAnswerInstructionsByCategory = instructionsMap
+						if (Array.isArray(currentAssessment.categories)) {
+							currentAssessment.categories = currentAssessment.categories.map(category => {
+								const mappedValue = instructionsMap[category.name] ?? instructionsMap[normalizeCategoryName(category.name)]
+								if (mappedValue === undefined) return category
+								return {
+									...category,
+									aiAnswerInstructions: String(mappedValue)
+								}
+							})
+						}
+					}
+					studentSubmissionDocuments = parsed.assessmentInputDocuments || parsed.studentSubmissionDocuments || []
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
 					tableColumnMarkMap = currentAssessment?.tableColumnMarkMap || {}
+					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
+					assessmentReferenceDocuments = currentAssessment?.aiReferenceDocuments || []
+					quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+					quickAddInstructionExpanded = {}
+					quickAddInstructionAssessmentKey = `${subjectId || ''}:${assessmentId || ''}`
 					// Keep HTML card collapsed by default; user can expand manually
 					showAssessmentHtml = false
 					// Reset all marks to zero
@@ -658,8 +987,9 @@
 					}
 					
 					// STRICT DATA SEPARATION RULE 1: Assignment data should never contain student information
-					// Always clear student data when loading assignment data
+					// Always clear student identity data when loading assignment data
 					studentName = ''
+					studentSubmissionText = ''
 					// No studentImage - only header photo for assessment
 					
 					// Load assessment header photo if available
@@ -676,9 +1006,35 @@
 					if (currentAssessment && parsed.tableColumnMarkMap !== undefined) {
 						currentAssessment.tableColumnMarkMap = parsed.tableColumnMarkMap || {}
 					}
+					if (currentAssessment && parsed.aiVectorIndex !== undefined) {
+						currentAssessment.aiVectorIndex = parsed.aiVectorIndex || null
+					}
+					if (currentAssessment && parsed.aiReferenceDocuments !== undefined) {
+						currentAssessment.aiReferenceDocuments = parsed.aiReferenceDocuments || []
+					}
+					if (currentAssessment && parsed.aiAnswerInstructionsByCategory !== undefined) {
+						const instructionsMap = parsed.aiAnswerInstructionsByCategory || {}
+						currentAssessment.aiAnswerInstructionsByCategory = instructionsMap
+						if (Array.isArray(currentAssessment.categories)) {
+							currentAssessment.categories = currentAssessment.categories.map(category => {
+								const mappedValue = instructionsMap[category.name] ?? instructionsMap[normalizeCategoryName(category.name)]
+								if (mappedValue === undefined) return category
+								return {
+									...category,
+									aiAnswerInstructions: String(mappedValue)
+								}
+							})
+						}
+					}
+					studentSubmissionDocuments = parsed.assessmentInputDocuments || parsed.studentSubmissionDocuments || []
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
 					tableColumnMarkMap = currentAssessment?.tableColumnMarkMap || {}
+					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
+					assessmentReferenceDocuments = currentAssessment?.aiReferenceDocuments || []
+					quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+					quickAddInstructionExpanded = {}
+					quickAddInstructionAssessmentKey = `${subjectId || ''}:${assessmentId || ''}`
 					// Keep HTML card collapsed by default; user can expand manually
 					showAssessmentHtml = false
 					// Reset all marks to zero
@@ -702,14 +1058,39 @@
 		paragraphs = []
 		selectedParagraphs = new Set()
 		studentName = ''
+		studentSubmissionText = ''
+		studentSubmissionDocuments = []
 		// No studentImage - only header photo for assessment
 		assessmentHtml = ''
 		showAssessmentHtml = false
 		tableRowCategoryMap = {}
 		tableColumnMarkMap = {}
+		assessmentVectorIndex = null
+		assessmentReferenceDocuments = []
 		categoryMarks = {}
 		manualTotalMarks = ''
 		quickAddText = {}
+		quickAddAiInstructions = {}
+		quickAddInstructionExpanded = {}
+		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
+			clearTimeout(quickAddInstructionSaveTimers[key])
+			delete quickAddInstructionSaveTimers[key]
+		})
+		quickAddInstructionAssessmentKey = ''
+		quickAddColorPicker = {}
+		improvingText = {}
+		improvingTextWithRag = {}
+		evidenceCheckingText = {}
+		aiImprovedText = {}
+		aiDraftOverallFeedback = ''
+		aiDraftRetrievedContext = []
+		aiRetrievalMode = ''
+		aiDraftReviewItems = []
+		showAiDraftReviewModal = false
+		showPromptPreviewModal = false
+		promptPreviewTitle = ''
+		promptPreviewMessages = []
+		activeFeedbackTab = 'enter-data'
 		quickAddToAssessmentWhenStudentSelected = false
 
 		// Clear student selection to prevent cross-contamination
@@ -720,13 +1101,95 @@
 		console.log('STRICT DATA SEPARATION: All data cleared before entering assessment')
 	}
 
+	$effect(() => {
+		if (!currentAssessment?.categories || !currentAssessmentId) {
+			quickAddAiInstructions = {}
+			quickAddInstructionExpanded = {}
+			quickAddInstructionAssessmentKey = ''
+			return
+		}
+
+		const assessmentKey = `${currentSubjectId || ''}:${currentAssessmentId || ''}`
+		if (quickAddInstructionAssessmentKey !== assessmentKey) {
+			quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+			quickAddInstructionExpanded = {}
+			quickAddInstructionAssessmentKey = assessmentKey
+		}
+	})
+
+	function syncCurrentAssessmentAiInstructionsFromQuickAdd() {
+		if (!currentAssessment) return
+
+		const nextMap = {
+			...(currentAssessment.aiAnswerInstructionsByCategory || {})
+		}
+
+		Object.entries(quickAddAiInstructions || {}).forEach(([key, value]) => {
+			const safeValue = String(value || '')
+			nextMap[key] = safeValue
+			nextMap[normalizeCategoryName(key)] = safeValue
+		})
+
+		let categoriesChanged = false
+		const syncedCategories = (currentAssessment.categories || []).map(category => {
+			const categoryName = category?.name || ''
+			if (!categoryName) return category
+
+			const normalizedCategoryName = normalizeCategoryName(categoryName)
+			const explicitValue = quickAddAiInstructions[categoryName]
+			const resolvedValue = explicitValue !== undefined
+				? String(explicitValue)
+				: String(nextMap[categoryName] ?? nextMap[normalizedCategoryName] ?? (category.aiAnswerInstructions || ''))
+
+			nextMap[categoryName] = resolvedValue
+			nextMap[normalizedCategoryName] = resolvedValue
+
+			if (String(category.aiAnswerInstructions || '') !== resolvedValue) {
+				categoriesChanged = true
+				return {
+					...category,
+					aiAnswerInstructions: resolvedValue
+				}
+			}
+
+			return category
+		})
+
+		const currentMapSerialized = JSON.stringify(currentAssessment.aiAnswerInstructionsByCategory || {})
+		const nextMapSerialized = JSON.stringify(nextMap)
+
+		if (categoriesChanged || currentMapSerialized !== nextMapSerialized) {
+			currentAssessment = {
+				...currentAssessment,
+				categories: syncedCategories,
+				aiAnswerInstructionsByCategory: nextMap
+			}
+		}
+	}
+
 	async function saveAssessmentData(options = {}) {
 		const { force = false, skipSelections = false } = options
 		if (!currentSubjectId || !currentAssessmentId) return
+
+		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
+			clearTimeout(quickAddInstructionSaveTimers[key])
+			delete quickAddInstructionSaveTimers[key]
+		})
+		syncCurrentAssessmentAiInstructionsFromQuickAdd()
+
+		const subjectIndexForSettings = subjects.findIndex(subject => subject.id === currentSubjectId)
+		if (subjectIndexForSettings !== -1) {
+			const assessmentIndexForSettings = subjects[subjectIndexForSettings].assessments.findIndex(assessment => assessment.id === currentAssessmentId)
+			if (assessmentIndexForSettings !== -1 && currentAssessment) {
+				subjects[subjectIndexForSettings].assessments[assessmentIndexForSettings] = currentAssessment
+				await saveSubjects()
+			}
+		}
 		
 		// STRICT SAVING CRITERIA 1: Only save to Assessment if student is NOT selected
 		if (currentStudentId && !force) {
-			console.log('STRICT SAVING CRITERIA: Cannot save assessment data when student is selected - use saveStudentEvaluation instead')
+			console.log('STRICT SAVING CRITERIA: Student selected - skipping assessment save to avoid mixing student feedback into assessment data')
+			showSuccessNotification('ℹ️ Assessment settings saved. Paragraph data is not overwritten while a student is selected.')
 			return
 		}
 		
@@ -747,6 +1210,10 @@
 			rubricHtml: assessmentHtml,
 			tableRowCategoryMap,
 			tableColumnMarkMap,
+			aiReferenceDocuments: assessmentReferenceDocuments,
+			assessmentInputDocuments: studentSubmissionDocuments,
+			aiAnswerInstructionsByCategory: currentAssessment?.aiAnswerInstructionsByCategory || {},
+			aiVectorIndex: assessmentVectorIndex,
 			categoryMarks,
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks
 		}
@@ -798,6 +1265,8 @@
 				topics: [],
 				categories: [],
 				knowledgeAreas: [],
+				aiAnswerInstructionsByCategory: {},
+				aiReferenceDocuments: [],
 				totalMarks: 0, // Assessment property for total marks
 				percentageRanges: [], // Assessment-specific percentage ranges
 				markingMode: 'none' // 'none', 'percentage', or 'fixed' - determines how colors get marks
@@ -819,6 +1288,9 @@
 		paragraphs = []
 		selectedParagraphs = new Set()
 		studentName = ''
+		studentSubmissionText = ''
+		studentSubmissionDocuments = []
+		assessmentReferenceDocuments = []
 		// No studentImage - only header photo for assessment
 	}
 
@@ -849,6 +1321,9 @@
 				paragraphs = []
 				selectedParagraphs = new Set()
 				studentName = ''
+				studentSubmissionText = ''
+				studentSubmissionDocuments = []
+				assessmentReferenceDocuments = []
 				// No studentImage - only header photo for assessment
 			}
 			
@@ -950,6 +1425,34 @@
 	}
 
 	const quickAddInputId = (categoryName = '') => `quick-add-${categoryName.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+	const quickAddInstructionInputId = (categoryName = '') => `quick-add-instructions-${categoryName.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+	const quickAddInstructionSectionId = (categoryName = '') => `quick-add-instructions-panel-${categoryName.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+
+	function isQuickAddInstructionExpanded(categoryName) {
+		return Boolean(quickAddInstructionExpanded[categoryName])
+	}
+
+	function toggleQuickAddInstructionPanel(categoryName) {
+		const isExpanded = isQuickAddInstructionExpanded(categoryName)
+		if (isExpanded) {
+			persistCategoryAiInstruction(categoryName)
+		}
+		quickAddInstructionExpanded = {
+			...quickAddInstructionExpanded,
+			[categoryName]: !isExpanded
+		}
+	}
+
+	function schedulePersistCategoryAiInstruction(categoryName, delayMs = 500) {
+		if (!categoryName) return
+		if (quickAddInstructionSaveTimers[categoryName]) {
+			clearTimeout(quickAddInstructionSaveTimers[categoryName])
+		}
+		quickAddInstructionSaveTimers[categoryName] = setTimeout(() => {
+			persistCategoryAiInstruction(categoryName)
+			delete quickAddInstructionSaveTimers[categoryName]
+		}, delayMs)
+	}
 
 	// Prefill category/knowledge area and focus the inline quick-add input
 	function startNewParagraphFor(categoryName, knowledgeAreaName) {
@@ -971,7 +1474,8 @@
 	}
 
 	async function improveTextWithAI(categoryName) {
-		const text = (quickAddText[categoryName] || '').trim()
+		const text = stripHtmlTags((quickAddText[categoryName] || '').trim())
+		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
 		if (!text) {
 			showSuccessNotification('⚠️ Please enter some text first')
 			return
@@ -986,7 +1490,7 @@
 		improvingText = { ...improvingText, [categoryName]: true }
 
 		try {
-			const improvedText = await improveEnglish(text)
+			const improvedText = await improveEnglish(text, answerInstructions)
 			// Strip any HTML tags that might have been introduced
 			const cleanedText = stripHtmlTags(improvedText)
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
@@ -1002,9 +1506,642 @@
 		}
 	}
 
+	async function persistAssessmentAiSettings() {
+		if (!currentAssessment || !currentSubject) return
+
+		const subjectIndex = subjects.findIndex(subject => subject.id === currentSubject.id)
+		if (subjectIndex === -1) return
+
+		const assessmentIndex = subjects[subjectIndex].assessments.findIndex(assessment => assessment.id === currentAssessment.id)
+		if (assessmentIndex === -1) return
+
+		subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+		await saveSubjects()
+	}
+
+	async function persistGlobalAiSettings() {
+		await saveSubjects()
+		showSuccessNotification('Global AI system instructions saved.')
+	}
+
+	function getDocumentTypeLabel(value, scope = 'assessment') {
+		const options = scope === 'student' ? STUDENT_DOCUMENT_TYPES : ASSESSMENT_DOCUMENT_TYPES
+		return options.find(option => option.value === value)?.label || value
+	}
+
+	function buildQuickAddAiInstructionDefaults() {
+		const defaults = {}
+		const perAnswerMap = currentAssessment?.aiAnswerInstructionsByCategory || {}
+		Object.entries(perAnswerMap).forEach(([key, value]) => {
+			defaults[key] = String(value || '')
+		})
+		for (const category of currentAssessment?.categories || []) {
+			const mappedValue = perAnswerMap[category.name] ?? perAnswerMap[normalizeCategoryName(category.name)]
+			defaults[category.name] = mappedValue ?? (category.aiAnswerInstructions || '')
+		}
+		return defaults
+	}
+
+	function setCategoryAiInstruction(categoryName, instructionValue) {
+		const nextValue = String(instructionValue || '')
+		quickAddAiInstructions = {
+			...quickAddAiInstructions,
+			[categoryName]: nextValue
+		}
+	}
+
+	async function persistCategoryAiInstruction(categoryName, instructionValue = null) {
+		if (!currentAssessment || !currentAssessmentId || !currentSubjectId) return
+		const nextValue = instructionValue ?? quickAddAiInstructions[categoryName] ?? ''
+		if (quickAddInstructionSaveTimers[categoryName]) {
+			clearTimeout(quickAddInstructionSaveTimers[categoryName])
+			delete quickAddInstructionSaveTimers[categoryName]
+		}
+		setCategoryAiInstruction(categoryName, nextValue)
+
+		const nextPerAnswerMap = {
+			...(currentAssessment.aiAnswerInstructionsByCategory || {}),
+			[categoryName]: String(nextValue),
+			[normalizeCategoryName(categoryName)]: String(nextValue)
+		}
+
+		let updatedCategories = currentAssessment.categories || []
+
+		const categoryIndex = (currentAssessment.categories || []).findIndex(
+			category => normalizeCategoryName(category.name) === normalizeCategoryName(categoryName)
+		)
+		if (categoryIndex !== -1) {
+			updatedCategories = [...updatedCategories]
+			updatedCategories[categoryIndex] = {
+				...updatedCategories[categoryIndex],
+				aiAnswerInstructions: String(nextValue)
+			}
+		}
+
+		currentAssessment = {
+			...currentAssessment,
+			categories: updatedCategories,
+			aiAnswerInstructionsByCategory: nextPerAnswerMap
+		}
+
+		const subjectIndex = subjects.findIndex(subject => subject.id === currentSubjectId)
+		if (subjectIndex === -1) return
+
+		const assessmentIndex = subjects[subjectIndex].assessments.findIndex(assessment => assessment.id === currentAssessmentId)
+		if (assessmentIndex === -1) return
+
+		subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+		await saveSubjects()
+	}
+
+	function updateAssessmentReferenceDocuments(nextDocuments) {
+		assessmentReferenceDocuments = nextDocuments
+		if (currentAssessment) {
+			currentAssessment.aiReferenceDocuments = nextDocuments
+			currentAssessment.aiVectorIndex = null
+		}
+		assessmentVectorIndex = null
+	}
+
+	function updateStudentSubmissionDocuments(nextDocuments) {
+		studentSubmissionDocuments = nextDocuments
+	}
+
+	function getCombinedStudentSubmissionText() {
+		const sections = []
+
+		if (studentSubmissionText.trim()) {
+			sections.push(studentSubmissionText.trim())
+		}
+
+		studentSubmissionDocuments.forEach(document => {
+			if (!document?.extractedText) return
+			sections.push([
+				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
+				document.extractedText
+			].join('\n'))
+		})
+
+		return sections.join('\n\n')
+	}
+
+	function buildCurrentStudentEvaluationData() {
+		return {
+			studentId: currentStudentId,
+			assessmentId: currentAssessmentId,
+			paragraphs: [...paragraphs],
+			studentName: studentName,
+			studentSubmissionText: studentSubmissionText.trim(),
+			studentImage: studentPhoto || '',
+			categoryMarks: { ...categoryMarks },
+			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
+			quickAddText: { ...quickAddText },
+			savedAt: new Date().toISOString()
+		}
+	}
+
+	async function persistCurrentStudentEvaluationData() {
+		if (!currentStudentId || !currentAssessmentId) return false
+
+		const evaluationData = buildCurrentStudentEvaluationData()
+		try {
+			await invoke('write_student_evaluation', {
+				data: JSON.stringify(evaluationData),
+				studentId: currentStudentId,
+				assessmentId: currentAssessmentId
+			})
+			return true
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			try {
+				const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
+				localStorage.setItem(key, JSON.stringify(evaluationData))
+				return true
+			} catch (storageError) {
+				console.error('Failed to persist student evaluation in browser storage', storageError)
+				return false
+			}
+		}
+	}
+
+	async function handleAssessmentReferenceUpload(event) {
+		const input = event.currentTarget
+		const files = Array.from(input?.files || [])
+		if (!currentAssessment || files.length === 0) return
+
+		uploadingAssessmentDocument = true
+		try {
+			const uploadedDocuments = []
+			for (const file of files) {
+				const extractedText = await extractTextFromFile(file)
+				if (!extractedText) {
+					throw new Error(`No readable text found in ${file.name}`)
+				}
+
+				uploadedDocuments.push(createUploadedDocumentRecord({
+					file,
+					extractedText,
+					documentType: selectedAssessmentDocumentType,
+					scope: 'assessment'
+				}))
+			}
+
+			updateAssessmentReferenceDocuments([...assessmentReferenceDocuments, ...uploadedDocuments])
+			await saveAssessmentData({ force: Boolean(currentStudentId), skipSelections: true })
+			showSuccessNotification(`✅ Added ${uploadedDocuments.length} assessment reference file${uploadedDocuments.length === 1 ? '' : 's'} for AI marking.`)
+		} catch (error) {
+			console.error('Failed to upload assessment reference file:', error)
+			showSuccessNotification(`❌ Upload failed: ${error.message}`)
+		} finally {
+			uploadingAssessmentDocument = false
+			if (input) {
+				input.value = ''
+			}
+		}
+	}
+
+	async function removeAssessmentReferenceDocument(documentId) {
+		updateAssessmentReferenceDocuments(assessmentReferenceDocuments.filter(document => document.id !== documentId))
+		await saveAssessmentData({ force: Boolean(currentStudentId), skipSelections: true })
+		showSuccessNotification('Assessment reference removed.')
+	}
+
+	async function handleStudentSubmissionUpload(event) {
+		const input = event.currentTarget
+		if (!currentStudentId) {
+			showSuccessNotification('⚠️ Select a student before uploading student files.')
+			if (input) {
+				input.value = ''
+			}
+			return
+		}
+
+		const files = Array.from(input?.files || [])
+		if (files.length === 0) return
+
+		uploadingStudentDocument = true
+		try {
+			const uploadedDocuments = []
+			for (const file of files) {
+				const extractedText = await extractTextFromFile(file)
+				if (!extractedText) {
+					throw new Error(`No readable text found in ${file.name}`)
+				}
+
+				uploadedDocuments.push(createUploadedDocumentRecord({
+					file,
+					extractedText,
+					documentType: selectedStudentDocumentType,
+					scope: 'student'
+				}))
+			}
+
+			updateStudentSubmissionDocuments([...studentSubmissionDocuments, ...uploadedDocuments])
+			await saveAssessmentData({ force: true, skipSelections: true })
+			showSuccessNotification(`✅ Added ${uploadedDocuments.length} assessment input file${uploadedDocuments.length === 1 ? '' : 's'} for AI marking.`)
+		} catch (error) {
+			console.error('Failed to upload student submission file:', error)
+			showSuccessNotification(`❌ Upload failed: ${error.message}`)
+		} finally {
+			uploadingStudentDocument = false
+			if (input) {
+				input.value = ''
+			}
+		}
+	}
+
+	async function removeStudentSubmissionDocument(documentId) {
+		updateStudentSubmissionDocuments(studentSubmissionDocuments.filter(document => document.id !== documentId))
+		await saveAssessmentData({ force: true, skipSelections: true })
+		showSuccessNotification('Assessment input upload removed.')
+	}
+
+	async function buildAssessmentRetrievalIndex() {
+		if (!currentAssessment) {
+			showSuccessNotification('⚠️ Select an assessment first.')
+			return
+		}
+
+		if (!isOpenAIConfigured()) {
+			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+			return
+		}
+
+		buildingAssessmentVectorIndex = true
+		try {
+			const priorEvaluations = await loadPriorAssessmentEvaluations()
+			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
+			await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs, forceRebuild: true })
+			showSuccessNotification('✨ Assessment retrieval index built successfully.')
+		} catch (error) {
+			console.error('Failed to build assessment retrieval index:', error)
+			showSuccessNotification(`❌ Failed to build retrieval index: ${error.message}`)
+		} finally {
+			buildingAssessmentVectorIndex = false
+		}
+	}
+
+	function getSelectedEvidenceNotes(categoryName = '') {
+		const targetCategory = String(categoryName || '').trim().toLowerCase()
+		const selectedTexts = []
+		for (const selectedId of selectedParagraphs) {
+			const paragraph = paragraphs.find(item => item.id === selectedId)
+			const rawText = typeof paragraph === 'string' ? paragraph : paragraph?.text
+			if (targetCategory) {
+				const paragraphCategory = extractCategoryFromParagraphText(rawText || '').trim().toLowerCase()
+				if (paragraphCategory !== targetCategory) {
+					continue
+				}
+			}
+			const cleanText = stripHtmlTags(rawText || '').trim()
+			if (cleanText) {
+				selectedTexts.push(cleanText)
+			}
+		}
+
+		return selectedTexts.join('\n')
+	}
+
+	async function loadPriorAssessmentEvaluations() {
+		const priorEvaluations = []
+
+		for (const student of students) {
+			if (!student?.id || student.id === currentStudentId) continue
+
+			let evaluationData = null
+			try {
+				const data = await invoke('read_student_evaluation', {
+					studentId: student.id,
+					assessmentId: currentAssessmentId
+				})
+				if (data) {
+					evaluationData = JSON.parse(String(data))
+				}
+			} catch (error) {
+				const key = `student-evaluation-${student.id}-${currentAssessmentId}`
+				const data = localStorage.getItem(key)
+				if (data) {
+					evaluationData = JSON.parse(data)
+				}
+			}
+
+			if (!evaluationData) continue
+
+			const hasMarks = Object.keys(evaluationData.categoryMarks || {}).length > 0
+			const hasParagraphs = Array.isArray(evaluationData.paragraphs) && evaluationData.paragraphs.length > 0
+			if (!hasMarks && !hasParagraphs) continue
+
+			priorEvaluations.push({
+				...evaluationData,
+				studentDisplayName: student.displayName || student.name || student.id
+			})
+		}
+
+		return priorEvaluations
+	}
+
+	function getCurrentAssessmentForAi() {
+		return {
+			...currentAssessment,
+			rubricHtml: assessmentHtml || currentAssessment?.rubricHtml || ''
+		}
+	}
+
+	async function ensureAssessmentVectorIndex({ priorEvaluations = [], assessmentParagraphs = [], forceRebuild = false } = {}) {
+		const assessmentForAi = getCurrentAssessmentForAi()
+		let vectorIndex = assessmentVectorIndex
+		const indexIsCurrent = !forceRebuild && isAssessmentVectorIndexCurrent(vectorIndex, {
+			assessment: assessmentForAi,
+			assessmentParagraphs,
+			priorEvaluations
+		})
+
+		if (!indexIsCurrent) {
+			vectorIndex = await buildAssessmentVectorIndex({
+				assessment: assessmentForAi,
+				assessmentParagraphs,
+				priorEvaluations
+			})
+			assessmentVectorIndex = vectorIndex
+			currentAssessment.aiVectorIndex = vectorIndex
+			await saveAssessmentData({ force: true, skipSelections: true })
+		}
+
+		return { assessmentForAi, vectorIndex }
+	}
+
+	async function improveTextWithRag(categoryName) {
+		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
+		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		if (!shortText) {
+			showSuccessNotification('⚠️ Please enter some text first')
+			return
+		}
+
+		if (!isOpenAIConfigured()) {
+			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+			return
+		}
+
+		improvingTextWithRag = { ...improvingTextWithRag, [categoryName]: true }
+
+		try {
+			const priorEvaluations = await loadPriorAssessmentEvaluations()
+			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
+			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+			const result = await improveFeedbackWithRag({
+				assessment: assessmentForAi,
+				categoryName,
+				shortFeedback: shortText,
+				answerInstructions,
+				student: getCurrentStudent(),
+				studentSubmission: getCombinedStudentSubmissionText(),
+				evidenceNotes: getSelectedEvidenceNotes(categoryName),
+				assessmentParagraphs,
+				priorEvaluations,
+				vectorIndex,
+				globalSystemInstructions: globalAiSystemInstructions
+			})
+
+			const cleanedText = stripHtmlTags(result.improvedText || '').trim()
+			if (!cleanedText) {
+				throw new Error('No improved feedback was returned.')
+			}
+
+			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
+			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
+			showSuccessNotification(`✨ Feedback expanded with RAG (${result.retrievalMode || 'context'}). Review before adding.`)
+		} catch (error) {
+			console.error('Failed to improve text with RAG:', error)
+			showSuccessNotification(`❌ Failed to improve with RAG: ${error.message}`)
+		} finally {
+			improvingTextWithRag = { ...improvingTextWithRag, [categoryName]: false }
+		}
+	}
+
+	async function runEvidenceCheck(categoryName) {
+		if (!currentStudentId) {
+			showSuccessNotification('⚠️ Please select a student first.')
+			return
+		}
+
+		if (!isOpenAIConfigured()) {
+			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+			return
+		}
+
+		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		const studentSubmission = getCombinedStudentSubmissionText()
+		const evidenceNotes = getSelectedEvidenceNotes(categoryName)
+
+		if (!studentSubmission && !evidenceNotes) {
+			showSuccessNotification('⚠️ Add student submission text, upload student files, or select evidence notes first.')
+			return
+		}
+
+		evidenceCheckingText = { ...evidenceCheckingText, [categoryName]: true }
+
+		try {
+			const priorEvaluations = await loadPriorAssessmentEvaluations()
+			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
+			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+			const result = await generateEvidenceCheckReport({
+				assessment: assessmentForAi,
+				categoryName,
+				student: getCurrentStudent(),
+				studentSubmission,
+				evidenceNotes,
+				assessmentParagraphs,
+				priorEvaluations,
+				vectorIndex,
+				globalSystemInstructions: globalAiSystemInstructions,
+				answerInstructions
+			})
+
+			const cleanedText = stripHtmlTags(result.reportText || '').trim()
+			if (!cleanedText) {
+				throw new Error('No evidence-check report was returned.')
+			}
+
+			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
+			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
+			showSuccessNotification(`✅ Evidence check generated (${result.retrievalMode || 'context'}).`)
+		} catch (error) {
+			console.error('Failed to run evidence check:', error)
+			showSuccessNotification(`❌ Evidence check failed: ${error.message}`)
+		} finally {
+			evidenceCheckingText = { ...evidenceCheckingText, [categoryName]: false }
+		}
+	}
+
+	async function draftFeedbackWithAI() {
+		if (!currentStudentId) {
+			showSuccessNotification('⚠️ Please select a student first.')
+			return
+		}
+
+		if (!isOpenAIConfigured()) {
+			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+			return
+		}
+
+		if (!currentAssessment?.categories || currentAssessment.categories.length === 0) {
+			showSuccessNotification('⚠️ Add assessment categories before generating AI feedback.')
+			return
+		}
+
+		const studentSubmission = getCombinedStudentSubmissionText()
+		const evidenceNotes = getSelectedEvidenceNotes()
+
+		if (!studentSubmission && !evidenceNotes) {
+			showSuccessNotification('⚠️ Add student submission text, upload a student report, or select some evidence paragraphs first.')
+			return
+		}
+
+		aiDraftingFeedback = true
+		aiDraftOverallFeedback = ''
+		aiDraftRetrievedContext = []
+
+		try {
+			const priorEvaluations = await loadPriorAssessmentEvaluations()
+			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
+			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+
+			const result = await generateStructuredMarkingDraft({
+				assessment: assessmentForAi,
+				student: getCurrentStudent(),
+				globalSystemInstructions: globalAiSystemInstructions,
+				studentSubmission,
+				evidenceNotes,
+				assessmentParagraphs,
+				priorEvaluations,
+				vectorIndex
+			})
+
+			const reviewItems = result.criteria.map(criterionDraft => {
+				const matchedCategory = findCriterionByName(currentAssessment.categories, criterionDraft.criterion_name)
+				if (!matchedCategory) return null
+
+				const suggestedFeedback = stripHtmlTags(criterionDraft.suggested_feedback || '').trim()
+				const numericMark = Number(criterionDraft.awarded_mark)
+				let boundedMark = null
+				if (Number.isFinite(numericMark)) {
+					const maxMark = Number(matchedCategory.allocatedMarks)
+					boundedMark = Number.isFinite(maxMark)
+						? Math.min(Math.max(numericMark, 0), maxMark)
+						: Math.max(numericMark, 0)
+				}
+
+				return {
+					criterion_name: criterionDraft.criterion_name,
+					matchedCategoryName: matchedCategory.name,
+					awarded_mark: boundedMark,
+					judgement: stripHtmlTags(criterionDraft.judgement || '').trim(),
+					evidence: Array.isArray(criterionDraft.evidence) ? criterionDraft.evidence.map(item => stripHtmlTags(item || '').trim()).filter(Boolean) : [],
+					improvement_advice: stripHtmlTags(criterionDraft.improvement_advice || '').trim(),
+					suggested_feedback: suggestedFeedback,
+					applyMark: boundedMark !== null,
+					applyFeedback: Boolean(suggestedFeedback)
+				}
+			}).filter(Boolean)
+
+			aiDraftOverallFeedback = result.overall_feedback || ''
+			aiDraftRetrievedContext = result.retrievedContext || []
+			aiRetrievalMode = result.retrievalMode || ''
+			aiDraftReviewItems = reviewItems
+			showAiDraftReviewModal = true
+			showSuccessNotification('✨ AI draft generated. Review each criterion before applying.')
+		} catch (error) {
+			console.error('Failed to draft feedback with AI:', error)
+			showSuccessNotification(`❌ Failed to generate AI feedback: ${error.message}`)
+		} finally {
+			aiDraftingFeedback = false
+		}
+	}
+
+	function toggleAiDraftReviewItem(index, field) {
+		aiDraftReviewItems = aiDraftReviewItems.map((item, itemIndex) => itemIndex === index
+			? { ...item, [field]: !item[field] }
+			: item)
+	}
+
+	function closeAiDraftReviewModal() {
+		showAiDraftReviewModal = false
+	}
+
+	function closePromptPreviewModal() {
+		showPromptPreviewModal = false
+		promptPreviewTitle = ''
+		promptPreviewMessages = []
+	}
+
+	async function viewFinalPrompt(categoryName, mode = 'ai') {
+		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
+		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+
+		if (!shortText) {
+			showSuccessNotification('⚠️ Please enter some text first')
+			return
+		}
+
+		try {
+			if (mode === 'ai') {
+				promptPreviewMessages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
+				promptPreviewTitle = `Improve Prompt - ${categoryName}`
+				showPromptPreviewModal = true
+				return
+			}
+
+			const priorEvaluations = await loadPriorAssessmentEvaluations()
+			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
+			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+			const preview = await buildImproveFeedbackWithRagPromptPreview({
+				assessment: assessmentForAi,
+				categoryName,
+				shortFeedback: shortText,
+				answerInstructions,
+				student: getCurrentStudent(),
+				studentSubmission: getCombinedStudentSubmissionText(),
+				evidenceNotes: getSelectedEvidenceNotes(categoryName),
+				assessmentParagraphs,
+				priorEvaluations,
+				vectorIndex,
+				globalSystemInstructions: globalAiSystemInstructions
+			})
+
+			promptPreviewMessages = preview.messages
+			promptPreviewTitle = `RAG Prompt - ${categoryName}`
+			showPromptPreviewModal = true
+		} catch (error) {
+			console.error('Failed to build prompt preview:', error)
+			showSuccessNotification(`❌ Failed to build prompt preview: ${error.message}`)
+		}
+	}
+
+	function applyAiDraftReviewSelections() {
+		const nextQuickAddText = { ...quickAddText }
+		const nextCategoryMarks = { ...categoryMarks }
+
+		aiDraftReviewItems.forEach(item => {
+			if (item.applyFeedback && item.suggested_feedback) {
+				nextQuickAddText[item.matchedCategoryName] = item.suggested_feedback
+			}
+
+			if (item.applyMark && item.awarded_mark !== null && item.awarded_mark !== undefined) {
+				nextCategoryMarks[item.matchedCategoryName] = item.awarded_mark
+			}
+		})
+
+		quickAddText = nextQuickAddText
+		categoryMarks = nextCategoryMarks
+		showAiDraftReviewModal = false
+		refreshCategoryWarnings()
+		showSuccessNotification('AI draft selections applied. Review and save when ready.')
+	}
+
 	function quickAddParagraph(categoryName) {
-		const text = stripHtmlTags((quickAddText[categoryName] || '').trim())
-		if (!text) return
+		const text = (quickAddText[categoryName] || '').trim()
+		if (!stripHtmlTags(text)) return
 
 		let paragraphText = text
 		if (categoryName) {
@@ -1048,10 +2185,74 @@
 		refreshCategoryWarnings()
 	}
 
+	function applyFormattingToQuickAdd(categoryName, { openTag, closeTag }) {
+		const textarea = document.getElementById(quickAddInputId(categoryName))
+		if (!(textarea instanceof HTMLTextAreaElement)) return
+
+		const currentValue = quickAddText[categoryName] || ''
+		const start = textarea.selectionStart ?? currentValue.length
+		const end = textarea.selectionEnd ?? currentValue.length
+		const selected = currentValue.slice(start, end)
+		const wrapped = `${openTag}${selected}${closeTag}`
+		const nextValue = `${currentValue.slice(0, start)}${wrapped}${currentValue.slice(end)}`
+
+		quickAddText = { ...quickAddText, [categoryName]: nextValue }
+		aiImprovedText = { ...aiImprovedText, [categoryName]: false }
+
+		setTimeout(() => {
+			const updatedTextarea = document.getElementById(quickAddInputId(categoryName))
+			if (!(updatedTextarea instanceof HTMLTextAreaElement)) return
+			updatedTextarea.focus()
+			const nextCursor = start + wrapped.length
+			updatedTextarea.setSelectionRange(nextCursor, nextCursor)
+		}, 0)
+	}
+
+	function applyBoldToQuickAdd(categoryName) {
+		applyFormattingToQuickAdd(categoryName, {
+			openTag: '<strong>',
+			closeTag: '</strong>'
+		})
+	}
+
+	function applyColorToQuickAdd(categoryName, colorValue) {
+		const color = colorValue || '#0d6efd'
+		quickAddColorPicker = { ...quickAddColorPicker, [categoryName]: color }
+		applyFormattingToQuickAdd(categoryName, {
+			openTag: `<span style="color:${color};">`,
+			closeTag: '</span>'
+		})
+	}
+
+	function sendParagraphToAiInput(paragraphText, categoryName, knowledgeAreaName = '') {
+		copyToQuickAdd(paragraphText, categoryName)
+		if (knowledgeAreaName && knowledgeAreaName !== 'No Knowledge Area') {
+			quickAddKnowledgeArea = {
+				...quickAddKnowledgeArea,
+				[categoryName]: knowledgeAreaName
+			}
+		}
+		showSuccessNotification('Paragraph loaded into AI-supported input for editing.')
+	}
+
 	// Copy paragraph text to quick-add box for customization
 	function copyToQuickAdd(paragraphText, categoryName) {
 		// Extract the main text without category prefix and knowledge area suffix
 		const mainText = extractMainTextFromParagraph(paragraphText)
+
+		// Remove the source paragraph from the list since it will be re-added after editing
+		const paragraphIndex = paragraphs.findIndex(p => {
+			const pText = typeof p === 'string' ? p : p.text
+			return pText === paragraphText
+		})
+		if (paragraphIndex !== -1) {
+			const paragraphId = paragraphs[paragraphIndex].id
+			paragraphs = paragraphs.filter((_, i) => i !== paragraphIndex)
+			// Also remove from selections if selected
+			if (selectedParagraphs.has(paragraphId)) {
+				selectedParagraphs = new Set([...selectedParagraphs].filter(id => id !== paragraphId))
+			}
+		}
 
 		// Set the text in the quick-add box for this category
 		quickAddText = { ...quickAddText, [categoryName]: mainText }
@@ -1063,7 +2264,7 @@
 		setTimeout(() => {
 			const textareaId = quickAddInputId(categoryName)
 			const textarea = document.getElementById(textareaId)
-			if (textarea) {
+			if (textarea instanceof HTMLTextAreaElement) {
 				textarea.focus()
 				// Move cursor to end
 				textarea.setSelectionRange(mainText.length, mainText.length)
@@ -1332,11 +2533,15 @@
 				.map((cat, index) => ({ ...cat, order: index }))
 		}
 
+		function normalizeCategoryName(value) {
+			return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+		}
+
 		function moveCategoryUp(categoryId) {
 			if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
 			
 			const normalized = normalizeCategoryOrder(currentAssessment.categories)
-			const index = normalized.findIndex(cat => cat.id === categoryId)
+			const index = normalized.findIndex(cat => cat.id === categoryId || normalizeCategoryName(cat.name) === normalizeCategoryName(categoryId))
 			if (index <= 0) return
 
 			const swapped = [...normalized]
@@ -1362,7 +2567,7 @@
 			if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
 			
 			const normalized = normalizeCategoryOrder(currentAssessment.categories)
-			const index = normalized.findIndex(cat => cat.id === categoryId)
+			const index = normalized.findIndex(cat => cat.id === categoryId || normalizeCategoryName(cat.name) === normalizeCategoryName(categoryId))
 			if (index === -1 || index >= normalized.length - 1) return
 
 			const swapped = [...normalized]
@@ -1385,20 +2590,84 @@
 		}
 
 	// Paragraph reordering functions
+	function extractCategoryFromParagraphText(paragraphText) {
+		const text = typeof paragraphText === 'string' ? paragraphText : ''
+		if (!text.includes(': ')) return 'General Feedback'
+		const prefix = text.split(': ')[0]?.trim() || ''
+		if (!prefix) return 'General Feedback'
+		if (prefix.includes(' - ')) {
+			const parts = prefix.split(' - ')
+			return parts[1]?.trim() || 'General Feedback'
+		}
+		return prefix
+	}
+
+	function getCategoryParagraphIndices(categoryName) {
+		const target = normalizeCategoryName(categoryName)
+		const group = getGroupedParagraphs().find(item => normalizeCategoryName(item.category) === target)
+		if (!group) return []
+
+		const indices = []
+		Object.values(group.knowledgeAreas || {}).forEach(paragraphsInArea => {
+			paragraphsInArea.forEach(entry => {
+				const resolvedIndex = resolveParagraphMainIndex(entry)
+				if (resolvedIndex !== -1) {
+					indices.push(resolvedIndex)
+				}
+			})
+		})
+
+		return Array.from(new Set(indices)).sort((a, b) => a - b)
+	}
+
+	function getParagraphPositionInCategory(categoryName, originalIndex) {
+		const categoryIndices = getCategoryParagraphIndices(categoryName)
+		return categoryIndices.findIndex(index => index === originalIndex)
+	}
+
+	function moveParagraphUpInCategory(originalIndex, categoryName) {
+		if (currentStudentId) return
+		const categoryIndices = getCategoryParagraphIndices(categoryName)
+		const position = categoryIndices.findIndex(index => index === originalIndex)
+		if (position <= 0) return
+		const currentIndex = categoryIndices[position]
+		const previousIndex = categoryIndices[position - 1]
+		if (currentIndex < 0 || previousIndex < 0) return
+		;[paragraphs[currentIndex], paragraphs[previousIndex]] = [paragraphs[previousIndex], paragraphs[currentIndex]]
+		paragraphs.forEach((para, index) => {
+			if (typeof para === 'object' && para.id) para.order = index
+		})
+		saveAssessmentData()
+	}
+
+	function moveParagraphDownInCategory(originalIndex, categoryName) {
+		if (currentStudentId) return
+		const categoryIndices = getCategoryParagraphIndices(categoryName)
+		const position = categoryIndices.findIndex(index => index === originalIndex)
+		if (position === -1 || position >= categoryIndices.length - 1) return
+		const currentIndex = categoryIndices[position]
+		const nextIndex = categoryIndices[position + 1]
+		if (currentIndex < 0 || nextIndex < 0) return
+		;[paragraphs[currentIndex], paragraphs[nextIndex]] = [paragraphs[nextIndex], paragraphs[currentIndex]]
+		paragraphs.forEach((para, index) => {
+			if (typeof para === 'object' && para.id) para.order = index
+		})
+		saveAssessmentData()
+	}
+
 	function moveParagraphUp(paragraphId, displayIndex, groupParagraphs) {
 		if (currentStudentId) return // Only in assignment mode
 
 		// Move within the displayed group context
 		if (displayIndex > 0) {
-			// Get the IDs of the two paragraphs to swap
-			const currentId = groupParagraphs[displayIndex].id
-			const previousId = groupParagraphs[displayIndex - 1].id
+			const currentEntry = groupParagraphs[displayIndex]
+			const previousEntry = groupParagraphs[displayIndex - 1]
 
 			// Find their positions in the main paragraphs array
-			const currentIndex = paragraphs.findIndex(p => p.id === currentId)
-			const previousIndex = paragraphs.findIndex(p => p.id === previousId)
+			const currentIndex = resolveParagraphMainIndex(currentEntry)
+			const previousIndex = resolveParagraphMainIndex(previousEntry)
 
-			if (currentIndex !== -1 && previousIndex !== -1) {
+			if (currentIndex !== -1 && previousIndex !== -1 && currentIndex !== previousIndex) {
 				// Swap in the main array
 				[paragraphs[currentIndex], paragraphs[previousIndex]] = [paragraphs[previousIndex], paragraphs[currentIndex]]
 
@@ -1414,20 +2683,19 @@
 		}
 	}
 
-	function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
+function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		if (currentStudentId) return // Only in assignment mode
 
 		// Move within the displayed group context
 		if (displayIndex < groupParagraphs.length - 1) {
-			// Get the IDs of the two paragraphs to swap
-			const currentId = groupParagraphs[displayIndex].id
-			const nextId = groupParagraphs[displayIndex + 1].id
+			const currentEntry = groupParagraphs[displayIndex]
+			const nextEntry = groupParagraphs[displayIndex + 1]
 
 			// Find their positions in the main paragraphs array
-			const currentIndex = paragraphs.findIndex(p => p.id === currentId)
-			const nextIndex = paragraphs.findIndex(p => p.id === nextId)
+			const currentIndex = resolveParagraphMainIndex(currentEntry)
+			const nextIndex = resolveParagraphMainIndex(nextEntry)
 
-			if (currentIndex !== -1 && nextIndex !== -1) {
+			if (currentIndex !== -1 && nextIndex !== -1 && currentIndex !== nextIndex) {
 				// Swap in the main array
 				[paragraphs[currentIndex], paragraphs[nextIndex]] = [paragraphs[nextIndex], paragraphs[currentIndex]]
 
@@ -1948,7 +3216,9 @@
 	// Notification Functions
 	function showSuccessNotification(message) {
 		console.log('NOTIFICATION DEBUG: Showing notification:', message)
-		notificationMessage = message
+		const nextMessage = String(message || '')
+		notificationMessage = nextMessage
+		notificationVariant = /❌|failed|error|unable|cannot/i.test(nextMessage) ? 'danger' : 'success'
 		showNotification = true
 		setTimeout(() => {
 			console.log('NOTIFICATION DEBUG: Auto-hiding notification')
@@ -1956,11 +3226,97 @@
 		}, 3000) // Auto-hide after 3 seconds
 	}
 
+	async function savePhotoForCurrentStudent(imageDataUrl) {
+		if (!currentStudentId || !imageDataUrl) return false
+
+		const studentExists = students.some(s => s.id === currentStudentId)
+		if (!studentExists) return false
+
+		// Persist in common fields for backward compatibility with existing data reads.
+		students = students.map(student =>
+			student.id === currentStudentId
+				? { ...student, studentImage: imageDataUrl, photo: imageDataUrl, updatedAt: new Date().toISOString() }
+				: student
+		)
+		studentPhoto = imageDataUrl
+		await saveStudents()
+		return true
+	}
+
+	async function handleStudentPhotoPaste(event) {
+		// Only intercept image paste in feedback mode with a selected student.
+		if (currentView !== 'feedback' || !currentStudentId) return
+
+		const clipboardItems = Array.from(event.clipboardData?.items || [])
+		const imageItem = clipboardItems.find(item => item.type && item.type.startsWith('image/'))
+		if (!imageItem) return
+
+		const file = imageItem.getAsFile()
+		if (!file) return
+
+		event.preventDefault()
+
+		const reader = new FileReader()
+		reader.onload = async (e) => {
+			const result = e.target?.result
+			if (typeof result !== 'string') {
+				showSuccessNotification('❌ Pasted image could not be read. Please try again.')
+				return
+			}
+
+			const saved = await savePhotoForCurrentStudent(result)
+			if (saved) {
+				showSuccessNotification('✅ Student photo pasted and saved.')
+			} else {
+				showSuccessNotification('❌ Could not save photo. Please select a student and try again.')
+			}
+		}
+		reader.onerror = () => {
+			showSuccessNotification('❌ Failed to process pasted image.')
+		}
+		reader.readAsDataURL(file)
+	}
+
+	function handleStudentPhotoPasteBox(event) {
+		const clipboardItems = Array.from(event.clipboardData?.items || [])
+		const imageItem = clipboardItems.find(item => item.type && item.type.startsWith('image/'))
+		if (!imageItem) return
+
+		if (!currentStudentId) {
+			event.preventDefault()
+			showSuccessNotification('⚠️ Select a student first, then paste the student image.')
+			return
+		}
+
+		handleStudentPhotoPaste(event)
+	}
+
+	function handleGlobalPointerDown(event) {
+		const container = studentPickerContainer
+		if (!showStudentPicker || !container) return
+		if (event.target instanceof Node && !container.contains(event.target)) {
+			closeStudentPicker()
+		}
+	}
+
+	function handleGlobalKeyDown(event) {
+		if (event.key === 'Escape' && showStudentPicker) {
+			closeStudentPicker()
+		}
+	}
+
 	// Student Management Functions
 
 	async function saveStudents() {
 		// Save students to main data file
-		const mainData = { subjects, students }
+		const mainData = {
+			subjects,
+			students,
+			percentageRanges,
+			appSettings: {
+				aiMarkingSystemInstructions: globalAiSystemInstructions.trim()
+			}
+		}
 		try {
 			await invoke('write_portable', { data: JSON.stringify(mainData) })
 		} catch (error) {
@@ -2019,6 +3375,8 @@
 		if (currentStudentId === studentId) {
 				currentStudentId = null
 				studentName = ''
+				studentSubmissionText = ''
+				studentPhoto = ''
 				// No studentImage - only header photo for assessment
 				selectedParagraphs.clear()
 				categoryMarks = {}
@@ -2056,6 +3414,8 @@
 			console.log('STRICT FILTER: Student deselected - loading assignment-only data')
 			// Clear student-specific data
 				studentName = ''
+				studentSubmissionText = ''
+				studentPhoto = ''
 				// No studentImage - only header photo for assessment
 				selectedParagraphs = new Set()
 				categoryMarks = {}
@@ -2070,12 +3430,15 @@
 		const student = students.find(s => s.id === studentId)
 		if (student) {
 			studentName = student.displayName
+			studentPhoto = getStudentPhoto(student)
 			// STRICT FILTER: Only load student evaluation data for the current assessment
 			console.log(`STRICT FILTER: Selecting student ${studentId} for assessment ${currentAssessmentId}`)
 			await loadStudentEvaluation()
 		} else {
 			// Clear only student-specific data, keep paragraphs and header photo visible
 			studentName = ''
+			studentSubmissionText = ''
+			studentPhoto = ''
 			// No studentImage - only header photo for assessment
 			// Don't clear paragraphs, selectedParagraphs, or marks - keep them visible
 		}
@@ -2202,38 +3565,7 @@
 		await studentsService.saveStudents(students)
 		console.log('✅ SAVED: Student data updated with new selections')
 
-		// Still save other evaluation data (marks, etc.) in separate file for compatibility
-			const evaluationData = {
-				studentId: currentStudentId,
-				assessmentId: currentAssessmentId,
-				paragraphs: [...paragraphs],
-				// selectedParagraphs: removed - now stored in student properties only
-				studentName: studentName,
-				// No studentImage - only header photo for assessment
-				categoryMarks: { ...categoryMarks },
-				manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
-				savedAt: new Date().toISOString()
-			}
-
-		let saveSucceeded = false
-
-		try {
-			await invoke('write_student_evaluation', { 
-				data: JSON.stringify(evaluationData),
-				studentId: currentStudentId,
-				assessmentId: currentAssessmentId
-			})
-			saveSucceeded = true
-		} catch (error) {
-			console.log('Tauri not available, using browser storage')
-			try {
-				const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
-				localStorage.setItem(key, JSON.stringify(evaluationData))
-				saveSucceeded = true
-			} catch (storageError) {
-				console.error('Failed to persist student evaluation in browser storage', storageError)
-			}
-		}
+		const saveSucceeded = await persistCurrentStudentEvaluationData()
 
 		if (saveSucceeded) {
 			showSuccessNotification(getMotivationalMessage('student'))
@@ -2254,6 +3586,7 @@
 			} else {
 				currentStudentId = null
 				studentName = ''
+				studentSubmissionText = ''
 				selectedParagraphs = new Set()
 				categoryMarks = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -2263,6 +3596,7 @@
 			console.error('Failed to deselect student after save', error)
 			currentStudentId = null
 			studentName = ''
+			studentSubmissionText = ''
 			selectedParagraphs = new Set()
 			categoryMarks = {}
 			manualTotalMarks = currentAssessment?.totalMarks ?? ''
@@ -2373,6 +3707,7 @@
 					assessmentId: currentAssessmentId,
 					paragraphs: [...paragraphs],
 					studentName: students.find(s => s.id === targetStudentId)?.name || '',
+					studentSubmissionText: studentSubmissionText.trim(),
 					categoryMarks: { ...categoryMarks },
 					manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
 					savedAt: new Date().toISOString()
@@ -2544,9 +3879,11 @@
 		// Load evaluation data to get selections and marks
 		let savedSelectedParagraphs = new Set()
 		let savedStudentName = ''
+		let savedStudentSubmissionText = ''
 		let savedStudentImage = ''
 		let savedCategoryMarks = {}
 		let savedManualTotalMarks = ''
+		let savedQuickAddText = {}
 
 		// First, try to load selected paragraphs from student properties
 		const currentStudent = students.find(s => s.id === currentStudentId)
@@ -2591,9 +3928,11 @@
 				}
 				
 				savedStudentName = evaluationData.studentName || ''
-				// No studentImage - only header photo for assessment
+				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
+				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
 				savedCategoryMarks = evaluationData.categoryMarks || {}
 				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
+				savedQuickAddText = evaluationData.quickAddText || {}
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -2616,9 +3955,11 @@
 				}
 				
 				savedStudentName = evaluationData.studentName || ''
-				// No studentImage - only header photo for assessment
+				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
+				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
 				savedCategoryMarks = evaluationData.categoryMarks || {}
 				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
+				savedQuickAddText = evaluationData.quickAddText || {}
 			}
 		}
 
@@ -2659,8 +4000,17 @@
 		}
 		// Preserve the student's display name if no saved name exists
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
-		// No studentImage - only header photo for assessment
+		studentSubmissionText = savedStudentSubmissionText
+		studentPhoto = savedStudentImage || getStudentPhoto(getCurrentStudent()) || ''
+		if (savedStudentImage && currentStudentId) {
+			students = students.map(student => (
+				student.id === currentStudentId && !getStudentPhoto(student)
+					? { ...student, studentImage: savedStudentImage, photo: savedStudentImage }
+					: student
+			))
+		}
 		categoryMarks = savedCategoryMarks
+		quickAddText = savedQuickAddText
 		const assessmentTotalMarks = currentAssessment?.totalMarks
 		if (assessmentTotalMarks !== null && assessmentTotalMarks !== undefined && assessmentTotalMarks !== '') {
 			manualTotalMarks = assessmentTotalMarks
@@ -3524,6 +4874,30 @@
 		return index
 	}
 
+	function getCategoryParagraphSequence(group) {
+		if (!group?.knowledgeAreas) return []
+		return Object.values(group.knowledgeAreas).flat()
+	}
+
+	function resolveParagraphMainIndex(entry) {
+		if (!entry) return -1
+		if (entry.id !== undefined && entry.id !== null && entry.id !== '') {
+			return paragraphs.findIndex(paragraph => paragraph?.id === entry.id)
+		}
+		return Number.isInteger(entry.originalIndex) ? entry.originalIndex : -1
+	}
+
+	function findParagraphSequenceIndex(sequence = [], paragraphId, fallbackOriginalIndex) {
+		if (paragraphId !== undefined && paragraphId !== null && paragraphId !== '') {
+			const byId = sequence.findIndex(item => item.id === paragraphId)
+			if (byId !== -1) return byId
+		}
+		if (Number.isInteger(fallbackOriginalIndex)) {
+			return sequence.findIndex(item => item.originalIndex === fallbackOriginalIndex)
+		}
+		return -1
+	}
+
 	function getSelectedTextInVisualOrder() {
 		console.log('🔍 DEBUG getSelectedTextInVisualOrder:', {
 			selectedParagraphs: Array.from(selectedParagraphs),
@@ -3611,7 +4985,7 @@
 	}
 
 	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth, matchedCategories = new Set()) {
-		const htmlContent = (assessmentHtml || '').trim()
+		const htmlContent = normalizeHtmlQuotes(assessmentHtml || '').trim()
 		if (!htmlContent) return startY
 
 		const pageHeight = doc.internal.pageSize.getHeight()
@@ -4514,6 +5888,15 @@
 	onMount(() => {
 		loadSubjects()
 		initializeDarkMode()
+
+		window.addEventListener('paste', handleStudentPhotoPaste)
+		window.addEventListener('pointerdown', handleGlobalPointerDown)
+		window.addEventListener('keydown', handleGlobalKeyDown)
+		return () => {
+			window.removeEventListener('paste', handleStudentPhotoPaste)
+			window.removeEventListener('pointerdown', handleGlobalPointerDown)
+			window.removeEventListener('keydown', handleGlobalKeyDown)
+		}
 	})
 </script>
 
@@ -4554,6 +5937,16 @@
 				<li class="nav-item">
 					<button
 						class="btn btn-outline-light btn-sm ms-2"
+						onclick={openHelpPage}
+						title="Help"
+						aria-label="Open help page"
+					>
+						<i class="bi bi-question-circle me-1"></i>Help
+					</button>
+				</li>
+				<li class="nav-item">
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
 						onclick={() => showCheckboxDebug = !showCheckboxDebug}
 						title="Toggle Checkbox Debug"
 						aria-label="Toggle Checkbox Debug"
@@ -4580,7 +5973,7 @@
 	<div class="container-fluid mb-4">
 		<div class="row">
 			<!-- Sidebar -->
-			<div class="col-lg-3 col-md-4 col-12 mb-4">
+			<div class="col-lg-3 col-md-4 col-12 mb-4 app-sidebar-column">
 				<Sidebar
 					{subjects}
 					{currentSubject}
@@ -4603,24 +5996,27 @@
 					onSaveStudentEvaluation={saveStudentEvaluation}
 					onLoadStudentEvaluation={loadStudentEvaluation}
 					onTransferStudentData={() => showStudentTransferModal = true}
-					onSaveAssignmentData={saveAssessmentData}
+					onSaveAssignmentData={() => saveAssessmentData({ force: Boolean(currentStudentId), skipSelections: true })}
 					onExportAssignmentSettings={() => showExportModal = true}
 					onAddPercentageRange={addPercentageRange}
 					onDeletePercentageRange={deletePercentageRange}
 					currentStudentId={currentStudentId}
 					{studentName}
+					{studentPhoto}
 				/>
 			</div>
 
 			<!-- Main Content -->
-			<div class="col-lg-9 col-md-8 col-12 d-flex flex-column">
+			<div class="col-lg-9 col-md-8 col-12 d-flex flex-column app-main-column">
 				<!-- Breadcrumb Navigation -->
-				<Breadcrumb 
-					{currentView}
+				{#if currentView !== 'help'}
+					<Breadcrumb 
+						{currentView}
 						{currentSubject}
 						{currentAssessment}
-					onNavigate={handleBreadcrumbNavigation}
-				/>
+						onNavigate={handleBreadcrumbNavigation}
+					/>
+				{/if}
 
 				{#if currentView === 'subjects'}
 					<div class="row">
@@ -4708,6 +6104,77 @@
 							/>
 						</div>
 					</div>
+				{:else if currentView === 'help'}
+					<div class="row">
+						<div class="col-12">
+							<div class="d-flex justify-content-between align-items-center mb-4">
+								<div>
+									<h1 class="display-6 mb-2">Help</h1>
+									<p class="lead text-body-secondary mb-0">How to use rubric table cell highlighting in PDF</p>
+								</div>
+								<button
+									class="btn btn-outline-secondary"
+									onclick={closeHelpPage}
+								>
+									<i class="bi bi-arrow-left me-2"></i>Back
+								</button>
+							</div>
+
+							<div class="card border-info mb-3">
+								<div class="card-header bg-info text-white">
+									<strong>Quick Steps</strong>
+								</div>
+								<div class="card-body">
+									<ol class="mb-0">
+										<li class="mb-2">Open an assessment, go to <strong>Feedback</strong>, then open the <strong>Settings</strong> tab.</li>
+										<li class="mb-2">In <strong>Assessment HTML (included in PDF)</strong>, paste your rubric table HTML.</li>
+										<li class="mb-2">In <strong>Match table rows to categories</strong>, map each row label to the matching category.</li>
+										<li class="mb-2">In <strong>Map paragraph position to table columns</strong>, choose which column is highlighted for 1st, 2nd, 3rd paragraph, and so on.</li>
+										<li class="mb-2">Select at least one paragraph in a category (from Enter Data). The first selected paragraph in that category is used for position mapping.</li>
+										<li>Click <strong>Print to Download</strong> to generate the PDF. The mapped rubric cell is highlighted automatically.</li>
+									</ol>
+								</div>
+							</div>
+
+							<div class="card border-primary mb-3">
+								<div class="card-header bg-primary text-white">
+									<strong>Useful HTML Snippet</strong>
+								</div>
+								<div class="card-body">
+									<p class="mb-2">Use this snippet when you need quick horizontal spacing in your pasted table HTML:</p>
+									<code class="d-block border rounded p-2 bg-body-tertiary user-select-all">{TABLE_HTML_SPACER_SNIPPET}</code>
+									<p class="small text-body-secondary mb-0 mt-2">You can also use the <strong>Insert snippet</strong> button in Assessment HTML settings to add it automatically.</p>
+								</div>
+							</div>
+
+							<div class="card border-warning mb-3">
+								<div class="card-header bg-warning text-dark">
+									<strong>Important Notes</strong>
+								</div>
+								<div class="card-body">
+									<ul class="mb-0">
+										<li class="mb-2">Highlighting is applied in the generated PDF render, not as a live color fill in the on-page HTML editor.</li>
+										<li class="mb-2">If row labels differ from category names, row mapping is required.</li>
+										<li class="mb-2">If no paragraph is selected for a category, no highlight is applied for that row.</li>
+										<li>After changing mappings, use <strong>Save Assignment</strong> before generating PDF.</li>
+									</ul>
+								</div>
+							</div>
+
+							<div class="card border-secondary">
+								<div class="card-header bg-secondary text-white">
+									<strong>Troubleshooting</strong>
+								</div>
+								<div class="card-body">
+									<ul class="mb-0">
+										<li class="mb-2">Nothing highlighted: check row mapping + column mapping + paragraph selection.</li>
+										<li class="mb-2">Wrong cell highlighted: verify paragraph order in that category and adjust position-to-column mapping.</li>
+										<li>Marks column not updating: ensure category marks are entered and row mapping matches the category.</li>
+									</ul>
+								</div>
+							</div>
+						</div>
+					</div>
 				{:else if currentView === 'feedback'}
 					<div class="d-flex flex-column">
 						<div class="row">
@@ -4726,7 +6193,22 @@
 								</div>
 						</div>
 					</div>
-						
+
+					<div class="row mb-3">
+						<div class="col-12">
+							<div class="feedback-tab-bar d-flex flex-wrap gap-2">
+								<button type="button" class="btn btn-sm {activeFeedbackTab === 'enter-data' ? 'btn-primary' : 'btn-outline-secondary'}" onclick={() => activeFeedbackTab = 'enter-data'}>
+									<i class="bi bi-pencil-square me-1"></i>Enter Data
+								</button>
+								<button type="button" class="btn btn-sm {activeFeedbackTab === 'settings' ? 'btn-primary' : 'btn-outline-secondary'}" onclick={() => activeFeedbackTab = 'settings'}>
+									<i class="bi bi-gear me-1"></i>Settings
+								</button>
+							</div>
+						</div>
+					</div>
+
+					<div class:disabled-tab-content={activeFeedbackTab !== 'settings'}>
+
 						<!-- Assessment Header Photo Section -->
 						<div class="row mb-3">
 							<div class="col-12">
@@ -4779,11 +6261,26 @@
 									</div>
 									{#if showAssessmentHtml}
 										<div class="card-body py-2">
-											<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
-											<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
-											<textarea
-												id="assessmentHtmlInput"
-												class="form-control"
+									<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
+									<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
+									<div class="alert alert-secondary py-2">
+										<div class="d-flex flex-column flex-md-row align-items-start gap-2">
+											<div class="flex-grow-1">
+												<div class="small fw-semibold">Useful spacer snippet</div>
+												<code class="d-block small user-select-all">{TABLE_HTML_SPACER_SNIPPET}</code>
+											</div>
+											<button
+												type="button"
+												class="btn btn-outline-secondary btn-sm"
+												onclick={insertTableHtmlSpacerSnippet}
+											>
+												<i class="bi bi-plus-square me-1"></i>Insert snippet
+											</button>
+										</div>
+									</div>
+									<textarea
+										id="assessmentHtmlInput"
+										class="form-control"
 												rows="6"
 												bind:value={assessmentHtml}
 												oninput={(e) => {
@@ -4894,71 +6391,154 @@
 													</div>
 												</div>
 											{/if}
-										</div>
-									{/if}
-								</div>
-							</div>
 						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
 
-
-					<!-- Student Info Section -->
-						<div class="row mb-2">
+						<div class="row mb-3">
 							<div class="col-12">
-								<div class="card border-info">
-									<div class="card-header bg-info text-white py-2">
+								<div class="card border-secondary">
+									<div class="card-header bg-light py-2">
 										<h5 class="card-title mb-0">
-										<i class="bi bi-person-circle me-2"></i>Student Information
-									</h5>
-								</div>
-								<div class="card-body py-2">
+											<i class="bi bi-stars me-2"></i>AI Marking Context
+										</h5>
+									</div>
+									<div class="card-body py-3">
 									<div class="row g-3">
 										<div class="col-12">
-											<label for="studentSelect" class="form-label fw-bold">Student:</label>
-											<div class="d-flex gap-2">
-												<select 
-													id="studentSelect" 
-													class="form-select flex-grow-1" 
-													bind:value={currentStudentId}
-													onchange={async (e) => await selectStudent(e.currentTarget.value)}
-												>
-													<option value="">Select a student...</option>
-													{#each sortedStudents as student}
-														<option value={student.id}>{student.displayName}</option>
-													{/each}
-												</select>
-												<button 
-													class="btn btn-outline-primary" 
-													type="button"
-													onclick={() => showAddStudent = true}
-													title="Add new student"
-													aria-label="Add new student"
-												>
-													<i class="bi bi-person-plus"></i>
-												</button>
-												<button 
-													class="btn btn-outline-secondary" 
-													type="button"
-													onclick={() => showStudentManager = true}
-													title="Manage students"
-													aria-label="Manage students"
-												>
-													<i class="bi bi-gear"></i>
-												</button>
+											<div class="alert alert-light border mb-0 py-2 small">
+												<span class="badge text-bg-dark me-2">System</span>Global AI behaviour rules
+												<span class="badge text-bg-info ms-3 me-2">Prompt</span>Assessment-specific instructions
+												<span class="badge text-bg-secondary ms-3 me-2">RAG</span>Uploaded reference files and rubric context
 											</div>
-											{#if currentStudentId}
-												<div class="mt-2">
-													<div class="alert alert-info py-2 mb-0">
-														<i class="bi bi-person-check me-2"></i>
-														<strong>Selected Student:</strong> {getCurrentStudent()?.displayName || 'Loading...'}
+										</div>
+										<div class="col-12">
+											<label for="globalAiSystemInstructions" class="form-label fw-bold d-flex align-items-center gap-2">
+												<span>Global AI Marking Instructions</span>
+												<span class="badge text-bg-dark">System</span>
+											</label>
+											<textarea
+												id="globalAiSystemInstructions"
+												class="form-control form-control-sm"
+												rows="3"
+												bind:value={globalAiSystemInstructions}
+												placeholder="Example: Always be strict, concise, evidence-based, and do not reward partially implied knowledge."
+												onchange={persistGlobalAiSettings}
+											></textarea>
+											<div class="form-text">System instructions control how the model behaves across every assessment.</div>
+										</div>
+										<div class="col-md-4">
+											<label for="academicLevelInput" class="form-label fw-bold">Academic Level</label>
+												<input
+													id="academicLevelInput"
+													type="text"
+													class="form-control form-control-sm"
+													bind:value={currentAssessment.academicLevel}
+													placeholder="e.g. NZQF Level 6"
+													onchange={persistAssessmentAiSettings}
+												>
+											</div>
+											<div class="col-md-8">
+												<label for="questionTextInput" class="form-label fw-bold">Assessment Question or Brief</label>
+												<textarea
+													id="questionTextInput"
+													class="form-control form-control-sm"
+													rows="3"
+													bind:value={currentAssessment.questionText}
+													placeholder="Paste the assessment question, brief, or task prompt here..."
+													onchange={persistAssessmentAiSettings}
+												></textarea>
+											</div>
+										<div class="col-12">
+											<label for="moderationNotesInput" class="form-label fw-bold d-flex align-items-center gap-2">
+												<span>Assessment-Specific Marking Instructions</span>
+												<span class="badge text-bg-info">Prompt</span>
+											</label>
+											<textarea
+												id="moderationNotesInput"
+												class="form-control form-control-sm"
+												rows="3"
+												bind:value={currentAssessment.aiModerationNotes}
+												placeholder="Example: For this assessment, prioritise industry terminology and penalise missing references."
+												onchange={persistAssessmentAiSettings}
+											></textarea>
+											<div class="form-text">Prompt instructions apply only to this assessment. They are not RAG files and they are not global system rules.</div>
+										</div>
+										<div class="col-12">
+											<div class="border rounded p-3 bg-body-tertiary">
+												<div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-2">
+													<div>
+														<div class="fw-bold d-flex align-items-center gap-2">
+															<span>Assessment Reference Uploads</span>
+															<span class="badge text-bg-secondary">RAG</span>
+														</div>
+														<div class="small text-muted">Upload shared assessment documents for retrieval context: {getSupportedUploadLabel()}.</div>
 													</div>
 												</div>
-											{/if}
+													<div class="row g-2 align-items-end">
+														<div class="col-md-4">
+															<label for="assessmentDocumentType" class="form-label fw-bold small">Document Type</label>
+															<select id="assessmentDocumentType" class="form-select form-select-sm" bind:value={selectedAssessmentDocumentType}>
+																{#each ASSESSMENT_DOCUMENT_TYPES as option}
+																	<option value={option.value}>{option.label}</option>
+																{/each}
+															</select>
+														</div>
+														<div class="col-md-8">
+															<label for="assessmentDocumentUpload" class="form-label fw-bold small">Upload Files</label>
+															<input
+																id="assessmentDocumentUpload"
+																type="file"
+																class="form-control form-control-sm"
+																accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.json"
+																multiple
+																onchange={handleAssessmentReferenceUpload}
+																disabled={uploadingAssessmentDocument}
+															>
+														</div>
+													</div>
+													{#if assessmentReferenceDocuments.length > 0}
+														<div class="list-group list-group-flush mt-3 border rounded">
+															{#each assessmentReferenceDocuments as document}
+																<div class="list-group-item d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-start">
+																	<div>
+																		<div class="fw-semibold">{document.name}</div>
+																	<div class="small text-muted">{getDocumentTypeLabel(document.documentType)} | {document.extractedText ? document.extractedText.length.toLocaleString() : 0} characters</div>
+																	</div>
+																	<button class="btn btn-outline-danger btn-sm" type="button" aria-label={`Remove ${document.name}`} onclick={() => removeAssessmentReferenceDocument(document.id)}>
+																		<i class="bi bi-trash"></i>
+																	</button>
+																</div>
+															{/each}
+														</div>
+													{/if}
+												</div>
+											</div>
+											<div class="col-12 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
+												<div class="small text-muted">
+													Vector retrieval index: {assessmentVectorIndex?.createdAt ? `built ${new Date(assessmentVectorIndex.createdAt).toLocaleString()}` : 'not built yet'}
+												</div>
+												<button
+													class="btn btn-outline-secondary btn-sm"
+													type="button"
+													onclick={buildAssessmentRetrievalIndex}
+													disabled={buildingAssessmentVectorIndex}
+												>
+													{#if buildingAssessmentVectorIndex}
+														<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+														Building index...
+													{:else}
+														<i class="bi bi-diagram-3 me-1"></i>Build Retrieval Index
+													{/if}
+												</button>
+											</div>
 										</div>
 									</div>
 								</div>
 							</div>
 						</div>
-					</div>
 
 					<!-- Add Paragraph Form -->
 					<div class="row mb-3">
@@ -5339,8 +6919,249 @@
 							</div>
 						</div>
 					{/if}
+					</div>
 
-					<!-- Display Paragraphs -->
+					<div class:disabled-tab-content={activeFeedbackTab !== 'enter-data'}>
+					<!-- Student Info Section -->
+					<div class="row mb-3">
+						<div class="col-12">
+							<div class="card border-info">
+								<div class="card-header bg-info text-white py-2">
+									<h5 class="card-title mb-0">
+										<i class="bi bi-person-circle me-2"></i>Student Information
+									</h5>
+								</div>
+								<div class="card-body py-2">
+									<div class="row g-3 ai-marking-context-grid">
+										<div class="col-12">
+											<div class="d-flex flex-column flex-md-row gap-3 align-items-start mb-3">
+												<div>
+													<div
+														class="student-photo-paste-box {studentPhoto ? 'has-photo' : ''}"
+														tabindex="0"
+														role="button"
+														aria-label="Paste student image"
+														title="Click here and press Cmd+V to paste a student image"
+														onclick={(e) => e.currentTarget.focus()}
+														onkeydown={(e) => {
+															if (e.key === 'Enter' || e.key === ' ') {
+																e.preventDefault()
+																e.currentTarget.focus()
+															}
+														}}
+														onpaste={handleStudentPhotoPasteBox}
+													>
+														{#if studentPhoto}
+															<img src={studentPhoto} alt="Student" class="student-photo-preview">
+														{:else}
+															<div class="student-photo-paste-content">
+																<i class="bi bi-image fs-5"></i>
+																<div class="student-photo-paste-hint mt-1">Cmd+V</div>
+															</div>
+														{/if}
+													</div>
+												</div>
+												<div class="flex-grow-1 w-100">
+											<label for="studentSelect" class="form-label fw-bold">Student:</label>
+											<div class="d-flex gap-2">
+												<div class="student-picker flex-grow-1" bind:this={studentPickerContainer}>
+													<button
+														id="studentSelect"
+														type="button"
+														class="student-picker-toggle"
+														onclick={toggleStudentPicker}
+														aria-expanded={showStudentPicker}
+														aria-haspopup="listbox"
+													>
+														<div class="student-picker-trigger">
+															{#if currentStudentId && studentPhoto}
+																<img src={studentPhoto} alt="Selected student" class="student-picker-avatar-image">
+															{:else}
+																<span class="student-picker-avatar-placeholder">
+																	{#if currentStudentId}
+																		{getStudentInitials(getCurrentStudent())}
+																	{:else}
+																		<i class="bi bi-person"></i>
+																	{/if}
+																</span>
+															{/if}
+															<span class="student-picker-label">{currentStudentId ? (getCurrentStudent()?.displayName || 'Selected student') : 'Select a student...'}</span>
+														</div>
+														<i class="bi bi-chevron-down small"></i>
+													</button>
+
+													{#if showStudentPicker}
+														<div class="student-picker-menu shadow-sm">
+															<div class="student-picker-search border-bottom p-2">
+																<input
+																	type="text"
+																	class="form-control form-control-sm"
+																	placeholder="Search students..."
+																	bind:value={studentPickerSearch}
+																	onclick={(e) => e.stopPropagation()}
+																>
+															</div>
+															<div class="student-picker-options" role="listbox">
+																<button type="button" class="student-picker-option {currentStudentId ? '' : 'is-active'}" onclick={() => chooseStudentFromPicker('')}>
+																	<span class="student-picker-avatar-placeholder"><i class="bi bi-person"></i></span>
+																	<span class="student-picker-option-label">Select a student...</span>
+																	{#if !currentStudentId}
+																		<i class="bi bi-check2 student-picker-check"></i>
+																	{/if}
+																</button>
+																{#if getFilteredStudents().length === 0}
+																	<div class="student-picker-empty">No matching students</div>
+																{:else}
+																	{#each getFilteredStudents() as student}
+																		<button
+																			type="button"
+																			class="student-picker-option {student.id === currentStudentId ? 'is-active' : ''}"
+																			onclick={() => chooseStudentFromPicker(student.id)}
+																		>
+																			{#if getDisplayedStudentPhoto(student)}
+																				<img src={getDisplayedStudentPhoto(student)} alt={student.displayName} class="student-picker-avatar-image">
+																			{:else}
+																				<span class="student-picker-avatar-placeholder">{getStudentInitials(student)}</span>
+																			{/if}
+																			<span class="student-picker-option-label">{student.displayName}</span>
+																			{#if student.id === currentStudentId}
+																				<i class="bi bi-check2 student-picker-check"></i>
+																			{/if}
+																		</button>
+																	{/each}
+																{/if}
+															</div>
+														</div>
+													{/if}
+												</div>
+												<button
+													class="btn btn-outline-primary"
+													type="button"
+													onclick={() => showAddStudent = true}
+													title="Add new student"
+													aria-label="Add new student"
+												>
+													<i class="bi bi-person-plus"></i>
+												</button>
+												<button
+													class="btn btn-outline-secondary"
+													type="button"
+													onclick={() => showStudentManager = true}
+													title="Manage students"
+													aria-label="Manage students"
+												>
+													<i class="bi bi-gear"></i>
+												</button>
+											</div>
+											{#if currentStudentId}
+												<div class="mt-2">
+													<div class="alert alert-info py-2 mb-0">
+														<i class="bi bi-person-check me-2"></i>
+														<strong>Selected Student:</strong> {getCurrentStudent()?.displayName || 'Loading...'}
+													</div>
+												</div>
+											{/if}
+												</div>
+											</div>
+											<div class="mt-3">
+												<label for="studentSubmissionInput" class="form-label fw-bold d-flex align-items-center gap-2">
+													<span>Student Submission or Evidence Notes</span>
+													<span class="badge text-bg-primary">Input</span>
+												</label>
+											<textarea
+												id="studentSubmissionInput"
+												class="form-control form-control-sm student-submission-input"
+												rows="5"
+												bind:value={studentSubmissionText}
+												placeholder="Paste the student's submission, viva notes, or assessor evidence here for AI-assisted marking..."
+												disabled={!currentStudentId}
+											></textarea>
+												<div class="border rounded p-3 bg-body-tertiary mt-3">
+													<div class="fw-bold d-flex align-items-center gap-2">
+														<span>Student Uploads</span>
+														<span class="badge text-bg-primary">Input</span>
+													</div>
+													<div class="small text-muted mb-2">Upload answer/report or extra evidence files. These are saved with this assessment.</div>
+													<div class="row g-2 align-items-end">
+														<div class="col-md-4">
+															<label for="studentDocumentType" class="form-label fw-bold small">File Type</label>
+													<select id="studentDocumentType" class="form-select form-select-sm" bind:value={selectedStudentDocumentType} disabled={!currentStudentId || uploadingStudentDocument}>
+																{#each STUDENT_DOCUMENT_TYPES as option}
+																	<option value={option.value}>{option.label}</option>
+																{/each}
+															</select>
+														</div>
+														<div class="col-md-8">
+															<label for="studentDocumentUpload" class="form-label fw-bold small">Upload Files</label>
+															<input
+																id="studentDocumentUpload"
+																type="file"
+																class="form-control form-control-sm"
+																accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.json"
+														multiple
+														onchange={handleStudentSubmissionUpload}
+														disabled={!currentStudentId || uploadingStudentDocument}
+													>
+												</div>
+											</div>
+											{#if !currentStudentId}
+												<div class="small text-body-secondary mt-2">Select a student to enable student document uploads.</div>
+											{/if}
+													{#if studentSubmissionDocuments.length > 0}
+														<div class="list-group list-group-flush mt-3 border rounded">
+															{#each studentSubmissionDocuments as document}
+																<div class="list-group-item d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-start">
+																	<div>
+																		<div class="fw-semibold">{document.name}</div>
+																		<div class="small text-muted">{getDocumentTypeLabel(document.documentType, 'student')} | {document.extractedText ? document.extractedText.length.toLocaleString() : 0} characters</div>
+																	</div>
+																	<button class="btn btn-outline-danger btn-sm" type="button" aria-label={`Remove ${document.name}`} onclick={() => removeStudentSubmissionDocument(document.id)}>
+																		<i class="bi bi-trash"></i>
+																	</button>
+																</div>
+															{/each}
+														</div>
+													{/if}
+												</div>
+												<div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2 mt-2">
+													<div class="text-muted small">AI uses this text, uploaded student files, the rubric, shared assessment files, and prior saved feedback for the same assessment.</div>
+													<button
+														class="btn btn-outline-primary btn-sm"
+														type="button"
+														onclick={draftFeedbackWithAI}
+														disabled={!currentStudentId || aiDraftingFeedback}
+													>
+														{#if aiDraftingFeedback}
+															<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+															Drafting feedback...
+														{:else}
+															<i class="bi bi-magic me-1"></i>Draft Feedback with AI
+														{/if}
+													</button>
+												</div>
+											</div>
+											{#if aiDraftOverallFeedback}
+												<div class="alert alert-secondary mt-3 mb-0 py-2">
+													<div class="fw-bold mb-1">AI Overall Feedback</div>
+													{#if aiRetrievalMode}
+														<div class="small text-muted mb-1">Retrieval mode: {aiRetrievalMode}</div>
+													{/if}
+													<div>{aiDraftOverallFeedback}</div>
+													{#if aiDraftRetrievedContext.length > 0}
+														<div class="mt-2 small text-muted">
+															Retrieved sources: {aiDraftRetrievedContext.map(item => item.source).join(' | ')}
+														</div>
+													{/if}
+												</div>
+											{/if}
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+
+			<!-- Display Paragraphs -->
 					<div class="row">
 						<div class="col-12">
 							<div class="card border-secondary">
@@ -5413,29 +7234,28 @@
 										{/if}
 									</div>
 																	<!-- Category reordering buttons (only in assignment mode) -->
-																	{#if !currentStudentId}
-																		{@const sortedCategories = normalizeCategoryOrder(currentAssessment.categories)}
-																		{@const categoryObj = sortedCategories.find(cat => cat.name === group.category)}
-																		{@const categoryIndex = categoryObj ? sortedCategories.findIndex(cat => cat.id === categoryObj.id) : -1}
-																		<div class="d-flex flex-column">
-																			<button 
-																				class="btn btn-sm btn-outline-light" 
-																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
-																				onclick={() => moveCategoryUp(categoryObj.id)}
-																				title="Move category up"
-																				aria-label="Move category up"
-																				disabled={categoryIndex <= 0}
-																			>
-																				<i class="bi bi-chevron-up"></i>
-																			</button>
-																			<button 
-																				class="btn btn-sm btn-outline-light" 
-																				style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
-																				onclick={() => moveCategoryDown(categoryObj.id)}
-																				title="Move category down"
-																				aria-label="Move category down"
-																				disabled={categoryIndex === -1 || categoryIndex >= sortedCategories.length - 1}
-																			>
+											{#if !currentStudentId}
+												{@const sortedCategories = normalizeCategoryOrder(currentAssessment.categories)}
+												{@const categoryIndex = sortedCategories.findIndex(cat => normalizeCategoryName(cat.name) === normalizeCategoryName(group.category))}
+												<div class="d-flex flex-column">
+													<button 
+														class="btn btn-sm btn-outline-light" 
+														style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
+														onclick={() => moveCategoryUp(group.category)}
+														title="Move category up"
+														aria-label="Move category up"
+														disabled={categoryIndex <= 0}
+													>
+														<i class="bi bi-chevron-up"></i>
+													</button>
+													<button 
+														class="btn btn-sm btn-outline-light" 
+														style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
+														onclick={() => moveCategoryDown(group.category)}
+														title="Move category down"
+														aria-label="Move category down"
+														disabled={categoryIndex === -1 || categoryIndex >= sortedCategories.length - 1}
+													>
 																				<i class="bi bi-chevron-down"></i>
 																			</button>
 																		</div>
@@ -5468,8 +7288,9 @@
 																<small class="text-muted">Add paragraphs using the form above</small>
 															</div>
 														{:else}
-															{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs]}
-																{#if knowledgeArea !== 'No Knowledge Area'}
+											{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs]}
+												{@const categoryParagraphSequence = getCategoryParagraphSequence(group)}
+												{#if knowledgeArea !== 'No Knowledge Area'}
 																	<div class="bg-light border-bottom px-3 py-2 d-flex align-items-center justify-content-between">
 																		<small class="text-muted fw-bold mb-0">
 																			<i class="bi bi-bookmark me-1"></i>{knowledgeArea}
@@ -5485,12 +7306,13 @@
 																			</button>
 																		{/if}
 																	</div>
-																{/if}
-																	{#each paragraphs as {text, color, id, originalIndex, fullText, source, markInfo}, displayIndex}
-																<div 
-																	class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
-																	class:selected-paragraph={selectedParagraphs.has(id)}
-																>
+											{/if}
+											{#each paragraphs as {text, color, id, originalIndex, fullText, source, markInfo}, displayIndex}
+												{@const categorySequenceIndex = findParagraphSequenceIndex(categoryParagraphSequence, id, originalIndex)}
+										<div 
+											class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
+											class:selected-paragraph={selectedParagraphs.has(id)}
+										>
 																	<div class="d-flex align-items-start">
 																		{#if currentStudentId}
 																			<div class="form-check me-3 d-flex align-items-center">
@@ -5564,19 +7386,15 @@
 																					<div class="flex-grow-1">
 																						<div class="mb-0 fs-6 lh-base" style="white-space: pre-wrap;">{@html text}</div>
 																					</div>
-																					{#if source && source !== undefined}
+																					{#if source && source !== undefined && source !== 'merged'}
 																						<div class="ms-2">
 																							{#if source === 'assignment'}
-																								<span class="badge bg-primary" title="Assignment version">
+																								<span class="badge bg-primary" title="Assignment paragraph">
 																									<i class="bi bi-file-text me-1"></i>Assignment
 																								</span>
 																							{:else if source === 'student'}
-																								<span class="badge bg-success" title="Student version">
-																									<i class="bi bi-person me-1"></i>Student
-																								</span>
-																							{:else if source === 'merged'}
-																								<span class="badge bg-info" title="Merged content (identical assignment and student versions)">
-																									<i class="bi bi-arrow-down-up me-1"></i>Merged
+																								<span class="badge bg-success" title="Student paragraph">
+																									<i class="bi bi-person me-1"></i>{(studentName || 'Student').split(' ')[0]}
 																								</span>
 																							{/if}
 																						</div>
@@ -5615,32 +7433,32 @@
 																					</button>
 																				{/if}
 																				<!-- Paragraph reordering buttons (only in assignment mode) -->
-																				{#if !currentStudentId}
-																					<button
-																						class="btn btn-outline-secondary btn-sm"
-																						onclick={() => moveParagraphUp(id, displayIndex, paragraphs)}
-																						title="Move paragraph up"
-																						aria-label="Move paragraph up"
-																						disabled={displayIndex === 0}
-																					>
-																						<i class="bi bi-chevron-up"></i>
-																					</button>
-																					<button
-																						class="btn btn-outline-secondary btn-sm"
-																						onclick={() => moveParagraphDown(id, displayIndex, paragraphs)}
-																						title="Move paragraph down"
-																						aria-label="Move paragraph down"
-																						disabled={displayIndex === paragraphs.length - 1}
-																					>
-																						<i class="bi bi-chevron-down"></i>
-																					</button>
-																				{/if}
-																				<button
-																					class="btn btn-outline-primary btn-sm"
-																					onclick={() => startEditParagraph(originalIndex)}
-																					title="Edit paragraph"
-																					aria-label="Edit paragraph"
-																				>
+													{#if !currentStudentId}
+														<button
+															class="btn btn-outline-secondary btn-sm"
+															onclick={() => moveParagraphUp(id, categorySequenceIndex, categoryParagraphSequence)}
+															title="Move paragraph up"
+															aria-label="Move paragraph up"
+															disabled={categorySequenceIndex <= 0}
+														>
+																<i class="bi bi-chevron-up"></i>
+															</button>
+														<button
+															class="btn btn-outline-secondary btn-sm"
+															onclick={() => moveParagraphDown(id, categorySequenceIndex, categoryParagraphSequence)}
+															title="Move paragraph down"
+															aria-label="Move paragraph down"
+															disabled={categorySequenceIndex === -1 || categorySequenceIndex >= categoryParagraphSequence.length - 1}
+														>
+																<i class="bi bi-chevron-down"></i>
+															</button>
+													{/if}
+															<button
+																class="btn btn-outline-primary btn-sm"
+																onclick={() => sendParagraphToAiInput(text, group.category, knowledgeArea)}
+																title="Edit paragraph"
+																aria-label="Edit paragraph"
+															>
 																					<i class="bi bi-pencil"></i>
 																				</button>
 																				<button
@@ -5662,8 +7480,8 @@
 													<div class="card-footer bg-light border-top">
 														<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
 															{#if (currentAssessment?.knowledgeAreas || []).length > 0}
-																<select
-																	class="form-select form-select-sm bg-white text-dark"
+															<select
+																class="form-select form-select-sm"
 																	style="min-width: 180px;"
 																	value={quickAddKnowledgeArea[group.category] || ''}
 																	onchange={(e) => {
@@ -5680,11 +7498,131 @@
 																</select>
 															{/if}
 														</div>
-															<div class="d-flex flex-column flex-sm-row gap-2">
-															<textarea
-																id={quickAddInputId(group.category)}
-																class="form-control form-control-sm {aiImprovedText[group.category] ? 'ai-improved-text' : ''}"
-																rows="2"
+													<div class="d-flex flex-column gap-2 w-100">
+													<div class="d-flex flex-wrap gap-2 align-items-start">
+														<button
+															class="btn btn-outline-secondary btn-sm"
+															type="button"
+															onclick={() => applyBoldToQuickAdd(group.category)}
+															title="Apply bold to selected text"
+														>
+															<i class="bi bi-type-bold me-1"></i>Bold
+														</button>
+														<div class="d-flex align-items-center gap-1">
+															<input
+																type="color"
+																class="form-control form-control-color form-control-sm"
+																value={quickAddColorPicker[group.category] || '#0d6efd'}
+																onchange={(e) => {
+																	quickAddColorPicker = {
+																		...quickAddColorPicker,
+																		[group.category]: e.currentTarget.value
+																	}
+																}}
+																title="Pick text colour"
+																style="width: 2.6rem; height: 2rem; padding: 0.15rem;"
+															>
+															<button
+																class="btn btn-outline-secondary btn-sm"
+																type="button"
+																onclick={() => applyColorToQuickAdd(group.category, quickAddColorPicker[group.category])}
+																title="Apply selected colour to selected text"
+															>
+																<i class="bi bi-palette me-1"></i>Colour
+															</button>
+														</div>
+															<button
+																class="btn btn-outline-primary btn-sm"
+																type="button"
+																onclick={() => improveTextWithAI(group.category)}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																title="Improve English with AI"
+															>
+																{#if improvingText[group.category]}
+																	<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+																	Improving...
+																{:else}
+																	<i class="bi bi-stars me-1"></i>Improve with AI
+																{/if}
+															</button>
+															<button
+																class="btn btn-outline-info btn-sm"
+																type="button"
+																onclick={() => improveTextWithRag(group.category)}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																title="Expand draft using rubric and RAG context"
+															>
+																{#if improvingTextWithRag[group.category]}
+																	<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+																	Improving with RAG...
+																{:else}
+																	<i class="bi bi-diagram-3 me-1"></i>Improve with RAG
+																{/if}
+															</button>
+															<button
+																class="btn btn-outline-warning btn-sm"
+																type="button"
+																onclick={() => runEvidenceCheck(group.category)}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !currentStudentId}
+																title="Generate evidence-based report from student notes and uploads"
+															>
+																{#if evidenceCheckingText[group.category]}
+																	<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+																	Checking evidence...
+																{:else}
+																	<i class="bi bi-clipboard2-check me-1"></i>Evidence Check
+																{/if}
+															</button>
+													<button
+														class={`btn btn-sm ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
+										type="button"
+										onclick={() => viewFinalPrompt(group.category, 'ai')}
+										disabled={!quickAddText[group.category]?.trim()}
+										title="View final prompt for Improve with AI"
+									>
+										<i class="bi bi-eye me-1"></i>View Improve Prompt
+									</button>
+															<button
+																class={`btn btn-sm ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
+																type="button"
+																onclick={() => viewFinalPrompt(group.category, 'rag')}
+																disabled={!quickAddText[group.category]?.trim()}
+																title="View final prompt for Improve with RAG"
+															>
+																<i class="bi bi-eye-fill me-1"></i>View RAG Prompt
+															</button>
+															<button
+																class="btn btn-outline-secondary btn-sm"
+																type="button"
+																onclick={() => quickAddParagraph(group.category)}
+																title="Add a paragraph to this category"
+															>
+																<i class="bi bi-plus-circle me-1"></i>Add paragraph
+															</button>
+															<button
+																class="btn btn-link btn-sm text-decoration-none p-0 align-self-center"
+																type="button"
+																onclick={() => startNewParagraphFor(group.category, quickAddKnowledgeArea[group.category])}
+															>
+																Use main editor
+															</button>
+															{#if currentStudentId}
+																<label class="form-check small mb-0 align-self-center">
+																	<input
+																		type="checkbox"
+																		class="form-check-input me-1"
+																		bind:checked={quickAddToAssessmentWhenStudentSelected}
+																	/>
+																<span class="form-check-label text-body-secondary">
+																	Save to assessment
+																</span>
+																</label>
+															{/if}
+														</div>
+														<textarea
+														id={quickAddInputId(group.category)}
+														class="form-control form-control-sm {aiImprovedText[group.category] ? 'ai-improved-text' : ''}"
+														rows="2"
 																placeholder={`Add paragraph to ${group.category}...`}
 																value={quickAddText[group.category] || ''}
 																oninput={(e) => {
@@ -5693,55 +7631,48 @@
 																		[group.category]: e.currentTarget.value
 																	}
 																	// Clear AI-improved flag when user manually edits
-																	if (aiImprovedText[group.category]) {
-																		aiImprovedText = { ...aiImprovedText, [group.category]: false }
-																	}
-																}}
-															></textarea>
-															<div class="d-flex flex-column gap-2">
+															if (aiImprovedText[group.category]) {
+																aiImprovedText = { ...aiImprovedText, [group.category]: false }
+															}
+														}}
+													></textarea>
+														<div class="border rounded p-2">
+															<div class="d-flex align-items-center justify-content-between gap-2">
+																<label for={quickAddInstructionInputId(group.category)} class="form-label small fw-semibold d-flex align-items-center gap-2 mb-0">
+																	<span>Instructions for this answer</span>
+																	<span class="badge text-bg-info">Per-answer</span>
+																</label>
 																<button
-																	class="btn btn-outline-primary btn-sm"
 																	type="button"
-																	onclick={() => improveTextWithAI(group.category)}
-																	disabled={improvingText[group.category] || !quickAddText[group.category]?.trim()}
-																	title="Improve English with AI"
-																>
-																	{#if improvingText[group.category]}
-																		<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-																		Improving...
-																	{:else}
-																		<i class="bi bi-stars me-1"></i>Improve with AI
-																	{/if}
-																</button>
-																<button
 																	class="btn btn-outline-secondary btn-sm"
-																	type="button"
-																	onclick={() => quickAddParagraph(group.category)}
-																	title="Add a paragraph to this category"
+																	onclick={() => toggleQuickAddInstructionPanel(group.category)}
+																	aria-expanded={isQuickAddInstructionExpanded(group.category)}
+																	aria-controls={quickAddInstructionSectionId(group.category)}
+																	title={isQuickAddInstructionExpanded(group.category) ? 'Collapse instructions' : 'Expand instructions'}
 																>
-																	<i class="bi bi-plus-circle me-1"></i>Add paragraph
+																	<i class={`bi ${isQuickAddInstructionExpanded(group.category) ? 'bi-chevron-up' : 'bi-chevron-down'} me-1`}></i>
+																	{isQuickAddInstructionExpanded(group.category) ? 'Collapse' : 'Expand'}
 																</button>
-																<button
-																	class="btn btn-link btn-sm text-decoration-none p-0"
-																	type="button"
-																	onclick={() => startNewParagraphFor(group.category, quickAddKnowledgeArea[group.category])}
-																>
-																	Use main editor
-																</button>
-																{#if currentStudentId}
-																	<label class="form-check small mb-0">
-																		<input
-																			type="checkbox"
-																			class="form-check-input me-1"
-																			bind:checked={quickAddToAssessmentWhenStudentSelected}
-																		/>
-																		<span class="form-check-label text-muted">
-																			Save to assessment
-																		</span>
-																	</label>
-																{/if}
 															</div>
+															{#if isQuickAddInstructionExpanded(group.category)}
+																<div id={quickAddInstructionSectionId(group.category)} class="mt-2">
+																	<textarea
+																		id={quickAddInstructionInputId(group.category)}
+																		class="form-control form-control-sm"
+																		rows="2"
+																placeholder="e.g. be concise and direct, focus on missing evidence"
+																value={quickAddAiInstructions[group.category] || ''}
+																oninput={(e) => {
+																	setCategoryAiInstruction(group.category, e.currentTarget.value)
+																	schedulePersistCategoryAiInstruction(group.category)
+																}}
+																onblur={() => persistCategoryAiInstruction(group.category)}
+															></textarea>
+																	<div class="form-text">Only for this answer. Not global system behaviour.</div>
+																</div>
+															{/if}
 														</div>
+													</div>
 													</div>
 												</div>
 											{/each}
@@ -5770,7 +7701,8 @@
 								</div>
 							</div>
 						</div>
-					</div>
+						</div>
+						</div>
 					</div>
 
 				{/if}
@@ -5874,13 +7806,14 @@
 		box-sizing: border-box;
 	}
 	
-	:global(.col-lg-3, .col-lg-9, .col-md-4, .col-md-8) {
+	:global(.app-sidebar-column),
+	:global(.app-main-column) {
 		display: flex;
 		flex-direction: column;
 		min-height: calc(100vh - 200px);
 	}
 	
-	:global(.col-lg-9 .row) {
+	:global(.app-main-column > .row) {
 		display: flex;
 		flex-direction: column;
 	}
@@ -5905,7 +7838,7 @@
 		color: #a5d6a7 !important; /* Light green text */
 	}
 	
-	:global(.col-lg-9 .col-12) {
+	:global(.app-main-column > .row > .col-12) {
 		display: flex;
 		flex-direction: column;
 	}
@@ -5917,7 +7850,7 @@
 	}
 	
 	/* Content area adjustments */
-	:global(.col-lg-3 .p-3.border.bg-light) {
+	:global(.app-sidebar-column .p-3.border.bg-light) {
 		min-height: calc(100vh - 160px);
 		flex: 1;
 		display: flex;
@@ -5927,8 +7860,7 @@
 	}
 	
 	/* Ensure full width for content areas */
-	:global(.col-lg-9 .content-area),
-	:global(.col-md-8 .content-area) {
+	:global(.app-main-column .content-area) {
 		width: 100%;
 		max-width: none;
 	}
@@ -5939,6 +7871,189 @@
 		align-items: flex-start;
 		display: flex;
 		flex-wrap: wrap;
+	}
+
+	:global(.ai-marking-context-grid) {
+		flex-direction: row !important;
+		align-items: flex-start;
+	}
+
+	:global(.ai-marking-context-grid > .col-md-4),
+	:global(.ai-marking-context-grid > .col-md-8),
+	:global(.ai-marking-context-grid > .col-12) {
+		display: block;
+		min-height: auto;
+		height: auto;
+	}
+
+	.student-photo-paste-box {
+		width: 92px;
+		height: 92px;
+		border: 2px dashed #86b7fe;
+		border-radius: 0.65rem;
+		background: #f8fbff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.35rem;
+		cursor: pointer;
+		overflow: hidden;
+	}
+
+	.student-photo-paste-box:focus {
+		outline: none;
+		border-color: #0d6efd;
+		box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+	}
+
+	.student-photo-paste-box.has-photo {
+		background: #ffffff;
+		border-style: solid;
+	}
+
+	.student-photo-paste-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		color: #0d6efd;
+	}
+
+	.student-photo-paste-hint {
+		font-size: 0.72rem;
+		font-weight: 600;
+		line-height: 1.1;
+	}
+
+	.student-photo-preview {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		border-radius: 0.5rem;
+	}
+
+	.student-picker {
+		position: relative;
+	}
+
+	.student-picker-toggle {
+		width: 100%;
+		min-height: 38px;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid var(--bs-border-color, #ced4da);
+		border-radius: 0.375rem;
+		background: var(--bs-body-bg, #fff);
+		color: inherit;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		text-align: left;
+	}
+
+	.student-picker-trigger {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.student-picker-label {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.student-picker-menu {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		right: 0;
+		z-index: 30;
+		background: var(--bs-body-bg, #fff);
+		border: 1px solid var(--bs-border-color, #ced4da);
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+
+	.student-picker-options {
+		max-height: 320px;
+		overflow-y: auto;
+		padding: 0.35rem;
+	}
+
+	.student-picker-option {
+		width: 100%;
+		border: 0;
+		background: transparent;
+		border-radius: 0.45rem;
+		padding: 0.5rem 0.625rem;
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+		text-align: left;
+	}
+
+	.student-picker-option:hover,
+	.student-picker-option.is-active {
+		background: rgba(13, 110, 253, 0.1);
+	}
+
+	.student-picker-option-label {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.student-picker-check {
+		color: #0d6efd;
+		font-size: 1rem;
+	}
+
+	.student-picker-empty {
+		padding: 0.75rem;
+		text-align: center;
+		color: #6c757d;
+		font-size: 0.9rem;
+	}
+
+	.student-picker-avatar-image,
+	.student-picker-avatar-placeholder {
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 999px;
+		flex-shrink: 0;
+	}
+
+	.student-picker-avatar-image {
+		object-fit: cover;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+	}
+
+	.student-picker-avatar-placeholder {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: #e9f2ff;
+		color: #0d6efd;
+		font-size: 0.72rem;
+		font-weight: 700;
+	}
+
+	.disabled-tab-content {
+		display: none;
+	}
+
+	.prompt-preview-pre {
+		white-space: pre-wrap;
+		word-break: break-word;
+		font-size: 0.85rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+	}
+
+	.student-submission-input {
+		resize: none;
 	}
 	
 	/* Override any app.css constraints */
@@ -6038,6 +8153,120 @@
 					<button type="button" class="btn btn-primary" onclick={saveCategoryEdit}>
 						<i class="bi bi-check-circle me-2"></i>Save Changes
 					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- AI Draft Review Modal -->
+{#if showAiDraftReviewModal}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-xl modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header bg-dark text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-stars me-2"></i>Review AI Draft
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={closeAiDraftReviewModal} aria-label="Close AI draft review"></button>
+				</div>
+				<div class="modal-body">
+					<div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
+						<div>
+							<div class="fw-bold">Overall Feedback</div>
+							<div class="text-muted small">Retrieval mode: {aiRetrievalMode || 'unknown'}</div>
+						</div>
+						{#if aiDraftRetrievedContext.length > 0}
+							<div class="small text-muted">Sources: {aiDraftRetrievedContext.map(item => item.source).join(' | ')}</div>
+						{/if}
+					</div>
+					{#if aiDraftOverallFeedback}
+						<div class="alert alert-secondary py-2">{aiDraftOverallFeedback}</div>
+					{/if}
+					{#if aiDraftReviewItems.length === 0}
+						<div class="alert alert-warning mb-0">No reviewable AI criterion suggestions were produced.</div>
+					{:else}
+						<div class="d-flex flex-column gap-3">
+							{#each aiDraftReviewItems as item, index}
+								<div class="card border-0 shadow-sm bg-light">
+									<div class="card-body">
+										<div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-2">
+											<div>
+												<h6 class="mb-1">{item.matchedCategoryName}</h6>
+												<div class="small text-muted">AI criterion: {item.criterion_name}</div>
+											</div>
+											<div class="text-lg-end">
+												<div class="fw-bold">Suggested Mark: {item.awarded_mark ?? 'None'}</div>
+											</div>
+										</div>
+										{#if item.judgement}
+											<p class="mb-2"><strong>Judgement:</strong> {item.judgement}</p>
+										{/if}
+										{#if item.evidence.length > 0}
+											<p class="mb-2"><strong>Evidence:</strong> {item.evidence.join(' | ')}</p>
+										{/if}
+										{#if item.improvement_advice}
+											<p class="mb-2"><strong>Improvement advice:</strong> {item.improvement_advice}</p>
+										{/if}
+										{#if item.suggested_feedback}
+											<div class="mb-3">
+												<div class="fw-bold mb-1">Suggested Feedback</div>
+																<div class="border rounded bg-body-tertiary p-2" style="white-space: pre-wrap;">{item.suggested_feedback}</div>
+											</div>
+										{/if}
+										<div class="d-flex flex-wrap gap-3">
+											<label class="form-check mb-0">
+												<input type="checkbox" class="form-check-input" checked={item.applyMark} onchange={() => toggleAiDraftReviewItem(index, 'applyMark')}>
+												<span class="form-check-label">Apply mark</span>
+											</label>
+											<label class="form-check mb-0">
+												<input type="checkbox" class="form-check-input" checked={item.applyFeedback} onchange={() => toggleAiDraftReviewItem(index, 'applyFeedback')}>
+												<span class="form-check-label">Apply feedback text</span>
+											</label>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={closeAiDraftReviewModal}>
+						<i class="bi bi-x-circle me-2"></i>Cancel
+					</button>
+					<button type="button" class="btn btn-primary" onclick={applyAiDraftReviewSelections} disabled={aiDraftReviewItems.length === 0}>
+						<i class="bi bi-check-circle me-2"></i>Apply Selected Suggestions
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Prompt Preview Modal -->
+{#if showPromptPreviewModal}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-xl modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header bg-dark text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-eye me-2"></i>{promptPreviewTitle || 'Final Prompt Preview'}
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={closePromptPreviewModal} aria-label="Close prompt preview"></button>
+				</div>
+				<div class="modal-body">
+					<div class="small text-muted mb-3">This is the final prompt payload prepared to send to the OpenAI API.</div>
+					<div class="d-flex flex-column gap-3">
+						{#each promptPreviewMessages as message, index}
+							<div class="border rounded p-3 bg-light">
+								<div class="fw-bold text-uppercase small mb-2">Message {index + 1} - {message.role}</div>
+								<pre class="mb-0 prompt-preview-pre">{message.content}</pre>
+							</div>
+						{/each}
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={closePromptPreviewModal}>Close</button>
 				</div>
 			</div>
 		</div>
@@ -6202,9 +8431,9 @@
 {#if showNotification}
 	<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
 		<div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
-			<div class="toast-header bg-success text-white">
-				<i class="bi bi-check-circle me-2"></i>
-				<strong class="me-auto">Success</strong>
+			<div class={`toast-header ${notificationVariant === 'danger' ? 'bg-danger' : 'bg-success'} text-white`}>
+				<i class={`bi ${notificationVariant === 'danger' ? 'bi-exclamation-circle' : 'bi-check-circle'} me-2`}></i>
+				<strong class="me-auto">{notificationVariant === 'danger' ? 'Error' : 'Success'}</strong>
 				<button type="button" class="btn-close btn-close-white" onclick={() => showNotification = false} aria-label="Close notification"></button>
 			</div>
 			<div class="toast-body">
