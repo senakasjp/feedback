@@ -340,6 +340,27 @@ function formatRetrievedContext(chunks = []) {
   }))
 }
 
+function isChunkCategoryMatch(chunk, categoryName = '') {
+  const target = normaliseKey(categoryName)
+  if (!target) return true
+
+  const label = normaliseKey(chunk?.label || '')
+  const text = normaliseKey(chunk?.text || '')
+
+  if (label.includes(target)) return true
+  if (text.startsWith(`${target}:`) || text.startsWith(`${target} `)) return true
+
+  return false
+}
+
+function applyCategoryPriority(rankedChunks = [], categoryName = '') {
+  const matches = rankedChunks.filter(chunk => isChunkCategoryMatch(chunk, categoryName))
+  return {
+    chunks: matches.length > 0 ? matches : rankedChunks,
+    hasCategoryMatch: matches.length > 0
+  }
+}
+
 function buildSystemMessages(globalSystemInstructions = '', baseSystemPrompt = '') {
   const messages = []
 
@@ -411,7 +432,8 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
     priorEvaluations,
     studentSubmission: retrievalQuery,
     evidenceNotes,
-    vectorIndex
+    vectorIndex,
+    categoryName
   })
 
   return {
@@ -454,7 +476,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
   }
 }
 
-export async function buildAssessmentRagContext({ assessment, assessmentParagraphs = [], priorEvaluations = [], studentSubmission = '', evidenceNotes = '', vectorIndex = null }) {
+export async function buildAssessmentRagContext({ assessment, assessmentParagraphs = [], priorEvaluations = [], studentSubmission = '', evidenceNotes = '', vectorIndex = null, categoryName = '' }) {
   const criteria = buildCriteriaList(assessment)
   const queryText = buildQueryText({ assessment, studentSubmission, evidenceNotes, criteria })
   const queryTokens = tokenize(queryText)
@@ -468,12 +490,13 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
       .map(chunk => ({ ...chunk, score: scoreTextMatch(queryTokens, chunk.text, chunk.type) }))
       .filter(chunk => chunk.score > 0 || chunk.type === 'rubric')
       .sort((a, b) => b.score - a.score)
-      .slice(0, MAX_RETRIEVED_CHUNKS)
+
+    const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
 
     return {
       criteria,
-      retrievedContext: formatRetrievedContext(rankedChunks),
-      retrievalMode: 'lexical'
+      retrievedContext: formatRetrievedContext(categoryPrioritised.slice(0, MAX_RETRIEVED_CHUNKS)),
+      retrievalMode: hasCategoryMatch ? 'lexical-category' : 'lexical'
     }
   }
 
@@ -493,24 +516,26 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
       })
       .filter(chunk => chunk.combinedScore > 0 || chunk.type === 'rubric')
       .sort((a, b) => b.combinedScore - a.combinedScore)
-      .slice(0, MAX_RETRIEVED_CHUNKS)
+
+    const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
 
     return {
       criteria,
-      retrievedContext: formatRetrievedContext(rankedChunks),
-      retrievalMode: 'vector'
+      retrievedContext: formatRetrievedContext(categoryPrioritised.slice(0, MAX_RETRIEVED_CHUNKS)),
+      retrievalMode: hasCategoryMatch ? 'vector-category' : 'vector'
     }
   } catch {
     const rankedChunks = candidateChunks
       .map(chunk => ({ ...chunk, score: scoreTextMatch(queryTokens, chunk.text, chunk.type) }))
       .filter(chunk => chunk.score > 0 || chunk.type === 'rubric')
       .sort((a, b) => b.score - a.score)
-      .slice(0, MAX_RETRIEVED_CHUNKS)
+
+    const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
 
     return {
       criteria,
-      retrievedContext: formatRetrievedContext(rankedChunks),
-      retrievalMode: 'lexical-fallback'
+      retrievedContext: formatRetrievedContext(categoryPrioritised.slice(0, MAX_RETRIEVED_CHUNKS)),
+      retrievalMode: hasCategoryMatch ? 'lexical-fallback-category' : 'lexical-fallback'
     }
   }
 }
@@ -580,7 +605,8 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     priorEvaluations,
     studentSubmission: retrievalQuery,
     evidenceNotes,
-    vectorIndex
+    vectorIndex,
+    categoryName
   })
 
   const response = await fetch(OPENAI_CHAT_URL, {

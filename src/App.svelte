@@ -38,6 +38,8 @@
 
 	const NAVIGATION_STATE_KEY = 'feedback-navigation-state-v1'
 	const TABLE_HTML_SPACER_SNIPPET = '<div style="margin-top: 20px;"></div>'
+	const TABLE_HTML_TICK_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10003;</td>'
+	const TABLE_HTML_CROSS_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10007;</td>'
 
 	const ASSESSMENT_DOCUMENT_TYPES = [
 		{ value: 'assignment-brief', label: 'Assignment Brief' },
@@ -76,6 +78,7 @@
 	// Current assessment data
 	let newParagraph = $state('')
 	let paragraphs = $state([])
+	let assignmentParagraphSnapshot = $state([])
 	let selectedParagraphs = $state(new Set())
 	let studentName = $state('')
 	let studentPhoto = $state('')
@@ -94,6 +97,7 @@
 	let manualTotalMarks = $state('') // Store manually entered total marks
 	let assessmentHtml = $state('') // Custom HTML snippet stored on the assessment
 	let showAssessmentHtml = $state(false)
+	let lockPdfPortrait = $state(false)
 	let showTotalMarksWarning = $state(false) // Show warning modal
 	let categoryWarnings = $state({}) // Store per-category warning state (missing paragraphs/marks)
 	let showNotification = $state(false) // Show success notification
@@ -292,6 +296,30 @@
 		console.log('Current view changed to:', currentView)
 	})
 
+	function isStudentOwnedParagraph(paragraph) {
+		if (!paragraph || typeof paragraph !== 'object') return false
+		if (paragraph._source === 'student') return true
+		if (typeof paragraph.id === 'string' && paragraph.id.endsWith('_student')) return true
+		return false
+	}
+
+	function resolveParagraphOwner(source = '', paragraphId = '') {
+		if (source === 'student') return 'student'
+		if (source === 'assignment') return 'assignment'
+		if (source === 'merged') return 'assignment'
+		if (typeof paragraphId === 'string' && paragraphId.endsWith('_student')) return 'student'
+		return 'assignment'
+	}
+
+	function getParagraphOwnerLabel(source = '', paragraphId = '') {
+		const owner = resolveParagraphOwner(source, paragraphId)
+		if (owner === 'student') {
+			const selectedStudent = getCurrentStudent()
+			return getStudentFirstNameLabel(studentName || selectedStudent?.displayName || selectedStudent?.name || 'Student')
+		}
+		return 'Assignment'
+	}
+
 	$effect(() => {
 		if (currentView && currentView !== 'help') {
 			lastNonHelpView = currentView
@@ -373,6 +401,26 @@
 		const words = label.split(/\s+/).filter(Boolean)
 		if (words.length === 0) return 'S'
 		return words.slice(0, 2).map(word => word[0]?.toUpperCase() || '').join('')
+	}
+
+	function stripStudentIdFromLabel(label = '') {
+		return String(label || '').replace(/\s*\([0-9]+\)\s*$/g, '').trim()
+	}
+
+	function getStudentFirstNameLabel(studentOrLabel) {
+		const rawLabel = typeof studentOrLabel === 'string'
+			? studentOrLabel
+			: (studentOrLabel?.displayName || studentOrLabel?.name || '')
+		const cleanLabel = stripStudentIdFromLabel(rawLabel)
+		const firstToken = cleanLabel.split(/\s+/).filter(Boolean)[0]
+		return firstToken || 'Student'
+	}
+
+	function getStudentFullNameLabel(studentOrLabel) {
+		const rawLabel = typeof studentOrLabel === 'string'
+			? studentOrLabel
+			: (studentOrLabel?.displayName || studentOrLabel?.name || '')
+		return stripStudentIdFromLabel(rawLabel) || 'Student'
 	}
 
 	function getFilteredStudents() {
@@ -503,12 +551,11 @@
 		}
 	}
 
-	async function insertTableHtmlSpacerSnippet() {
-		const snippet = TABLE_HTML_SPACER_SNIPPET
+	async function insertTableHtmlSnippet(snippet, label = 'snippet') {
 		const currentHtml = String(assessmentHtml || '')
 
 		if (currentHtml.includes(snippet)) {
-			showSuccessNotification('ℹ️ Spacer snippet already exists in Assessment HTML.')
+			showSuccessNotification(`ℹ️ ${label} already exists in Assessment HTML.`)
 			return
 		}
 
@@ -523,7 +570,30 @@
 		}
 
 		await saveAssessmentData({ force: true, skipSelections: true })
-		showSuccessNotification('✅ Spacer snippet inserted into Assessment HTML.')
+		showSuccessNotification(`✅ ${label} inserted into Assessment HTML.`)
+	}
+
+	async function insertTableHtmlSpacerSnippet() {
+		await insertTableHtmlSnippet(TABLE_HTML_SPACER_SNIPPET, 'Spacer snippet')
+	}
+
+	async function insertTableHtmlTickSnippet() {
+		await insertTableHtmlSnippet(TABLE_HTML_TICK_SNIPPET, 'Tick snippet')
+	}
+
+	async function insertTableHtmlCrossSnippet() {
+		await insertTableHtmlSnippet(TABLE_HTML_CROSS_SNIPPET, 'Cross snippet')
+	}
+
+	async function setLockPdfPortrait(checked) {
+		lockPdfPortrait = Boolean(checked)
+		if (currentAssessment) {
+			currentAssessment = {
+				...currentAssessment,
+				lockPdfPortrait
+			}
+		}
+		await saveAssessmentData({ force: Boolean(currentStudentId), skipSelections: true })
 	}
 
 	// Function to toggle calculator view
@@ -845,6 +915,7 @@
 				
 				// Ensure paragraphs have IDs (migration for existing data)
 				paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
+				assignmentParagraphSnapshot = [...paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))]
 				
 				// Check for duplicate IDs after loading and fixing
 				const hasDuplicates = checkForDuplicateIds()
@@ -872,6 +943,9 @@
 					// Load assessment HTML snippet if available
 					if (currentAssessment && parsed.rubricHtml !== undefined) {
 						currentAssessment.rubricHtml = parsed.rubricHtml
+					}
+					if (currentAssessment && parsed.lockPdfPortrait !== undefined) {
+						currentAssessment.lockPdfPortrait = Boolean(parsed.lockPdfPortrait)
 					}
 					if (currentAssessment && parsed.tableRowCategoryMap !== undefined) {
 						currentAssessment.tableRowCategoryMap = parsed.tableRowCategoryMap || {}
@@ -901,6 +975,7 @@
 					}
 					studentSubmissionDocuments = parsed.assessmentInputDocuments || parsed.studentSubmissionDocuments || []
 					assessmentHtml = currentAssessment?.rubricHtml || ''
+					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
 					tableColumnMarkMap = currentAssessment?.tableColumnMarkMap || {}
 					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
@@ -972,6 +1047,7 @@
 					
 					// Ensure paragraphs have IDs (migration for existing data)
 					paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
+					assignmentParagraphSnapshot = [...paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))]
 					
 					// Check for duplicate IDs after loading and fixing
 					const hasDuplicates = checkForDuplicateIds()
@@ -999,6 +1075,9 @@
 					// Load assessment HTML snippet if available
 					if (currentAssessment && parsed.rubricHtml !== undefined) {
 						currentAssessment.rubricHtml = parsed.rubricHtml
+					}
+					if (currentAssessment && parsed.lockPdfPortrait !== undefined) {
+						currentAssessment.lockPdfPortrait = Boolean(parsed.lockPdfPortrait)
 					}
 					if (currentAssessment && parsed.tableRowCategoryMap !== undefined) {
 						currentAssessment.tableRowCategoryMap = parsed.tableRowCategoryMap || {}
@@ -1028,6 +1107,7 @@
 					}
 					studentSubmissionDocuments = parsed.assessmentInputDocuments || parsed.studentSubmissionDocuments || []
 					assessmentHtml = currentAssessment?.rubricHtml || ''
+					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
 					tableColumnMarkMap = currentAssessment?.tableColumnMarkMap || {}
 					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
@@ -1056,12 +1136,14 @@
 	function initializeEmptyData() {
 		// Clear all assessment-related data
 		paragraphs = []
+		assignmentParagraphSnapshot = []
 		selectedParagraphs = new Set()
 		studentName = ''
 		studentSubmissionText = ''
 		studentSubmissionDocuments = []
 		// No studentImage - only header photo for assessment
 		assessmentHtml = ''
+		lockPdfPortrait = false
 		showAssessmentHtml = false
 		tableRowCategoryMap = {}
 		tableColumnMarkMap = {}
@@ -1200,14 +1282,23 @@
 			console.log('STRICT SAVING CRITERIA: Saving to assessment file - no student selected')
 		}
 
+		const paragraphsForAssessmentSave = currentStudentId
+			? assignmentParagraphSnapshot.filter(paragraph => !isStudentOwnedParagraph(paragraph))
+			: paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))
+
+		if (!currentStudentId) {
+			assignmentParagraphSnapshot = [...paragraphsForAssessmentSave]
+		}
+
 		const data = {
-			paragraphs,
+			paragraphs: paragraphsForAssessmentSave,
 			selectedParagraphs: Array.from(currentStudentId && (force || skipSelections) ? new Set() : selectedParagraphs),
 			// Assignment data should never contain student-specific information
 			studentName: '',
 			// No studentImage - only header photo for assessment
 			headerPhoto: currentAssessment?.headerPhoto || '',
 			rubricHtml: assessmentHtml,
+			lockPdfPortrait,
 			tableRowCategoryMap,
 			tableColumnMarkMap,
 			aiReferenceDocuments: assessmentReferenceDocuments,
@@ -1267,6 +1358,7 @@
 				knowledgeAreas: [],
 				aiAnswerInstructionsByCategory: {},
 				aiReferenceDocuments: [],
+				lockPdfPortrait: false,
 				totalMarks: 0, // Assessment property for total marks
 				percentageRanges: [], // Assessment-specific percentage ranges
 				markingMode: 'none' // 'none', 'percentage', or 'fixed' - determines how colors get marks
@@ -1340,6 +1432,7 @@
 			currentAssessment = assessment
 			manualTotalMarks = assessment.totalMarks ?? ''
 			assessmentHtml = assessment.rubricHtml || ''
+			lockPdfPortrait = Boolean(assessment.lockPdfPortrait)
 			tableRowCategoryMap = assessment.tableRowCategoryMap || {}
 
 		// Backward compatibility: Initialize markingMode if not present
@@ -1403,6 +1496,7 @@
 			id: generateId(), // Add unique ID for reliable tracking
 			text: paragraphText,
 			color: selectedColor || undefined,
+			_source: currentStudentId ? 'student' : 'assignment',
 			subjectId: currentSubjectId, // STRICT DATA ISOLATION: Add subject context
 			assessmentId: currentAssessmentId // STRICT DATA ISOLATION: Add assessment context
 		}
@@ -2143,6 +2237,8 @@
 		const text = (quickAddText[categoryName] || '').trim()
 		if (!stripHtmlTags(text)) return
 
+		const addToAssessment = currentStudentId && quickAddToAssessmentWhenStudentSelected
+
 		let paragraphText = text
 		if (categoryName) {
 			paragraphText = `${categoryName}: ${paragraphText}`
@@ -2157,6 +2253,7 @@
 			id: generateId(),
 			text: paragraphText,
 			color: undefined,
+			_source: currentStudentId && !addToAssessment ? 'student' : 'assignment',
 			subjectId: currentSubjectId,
 			assessmentId: currentAssessmentId
 		}
@@ -2170,8 +2267,6 @@
 		quickAddText = { ...quickAddText, [categoryName]: '' }
 		// Clear AI-improved flag when paragraph is added
 		aiImprovedText = { ...aiImprovedText, [categoryName]: false }
-
-		const addToAssessment = currentStudentId && quickAddToAssessmentWhenStudentSelected
 
 		if (addToAssessment) {
 			saveAssessmentData({ force: true, skipSelections: true })
@@ -4636,6 +4731,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// Edit paragraph functions
 	function startEditParagraph(index) {
+		const paragraphToEdit = paragraphs[index]
+		const paragraphId = paragraphToEdit?.id
+		if (paragraphId && selectedParagraphs.has(paragraphId)) {
+			selectedParagraphs.delete(paragraphId)
+			selectedParagraphs = new Set(selectedParagraphs)
+		}
+
 		editingParagraphIndex = index
 		// Extract only the main text content (without category and knowledge area prefixes)
 		const extractedText = extractMainTextFromParagraph(paragraphs[index].text)
@@ -5014,6 +5116,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		container.style.fontFamily = 'Arial, sans-serif'
 		container.style.fontSize = '10pt' // Match paragraph font size (10pt from firstPageBodyFontSize)
 		container.style.lineHeight = '1.35'
+		container.style.color = '#000000'
+		container.style.backgroundColor = '#ffffff'
 		container.innerHTML = htmlContent
 
 		// Clean up Microsoft Word HTML markup that can break rendering
@@ -5081,7 +5185,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// Normalize spacing inside pasted HTML so tables don't blow up the PDF
 		const styleElement = document.createElement('style')
 		styleElement.textContent = `
-			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: 10pt; }
+			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: 10pt; color: #000 !important; background: #fff !important; }
 			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
 			.pdf-assessment-html th,
 			.pdf-assessment-html td {
@@ -5094,8 +5198,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				hyphens: auto !important;
 				box-sizing: border-box !important;
 			}
-			.pdf-assessment-html p { margin: 0; line-height: 1.4; font-size: inherit; }
+			.pdf-assessment-html p { margin: 0; line-height: 1.4; font-size: inherit; color: #000 !important; }
 			.pdf-assessment-html p + p { margin-top: 6px; }
+			.pdf-assessment-html div,
+			.pdf-assessment-html span,
+			.pdf-assessment-html li,
+			.pdf-assessment-html strong,
+			.pdf-assessment-html b {
+				color: #000 !important;
+			}
 			.pdf-assessment-html ul, .pdf-assessment-html ol { margin: 0 0 6px 18px; padding-left: 18px; }
 			.pdf-assessment-html li { margin: 0; line-height: 1.3; }
 			.pdf-assessment-html img { max-width: 100%; height: auto; }
@@ -5533,7 +5644,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 
 		const defaultMargin = 25 // Slightly larger margin for better breathing room
-		const needsLandscape = shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
+		const needsLandscape = !lockPdfPortrait && shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
 		const doc = new jsPDF({ orientation: 'portrait' }) // keep first page portrait; switch later if needed
 		const headingText = 'Feedback Report'
 		const headingFontSize = 16
@@ -6143,6 +6254,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								<div class="card-body">
 									<p class="mb-2">Use this snippet when you need quick horizontal spacing in your pasted table HTML:</p>
 									<code class="d-block border rounded p-2 bg-body-tertiary user-select-all">{TABLE_HTML_SPACER_SNIPPET}</code>
+									<p class="mb-2 mt-3">Use these inside table cells for pass/fail markers:</p>
+									<code class="d-block border rounded p-2 bg-body-tertiary user-select-all mb-2">{TABLE_HTML_TICK_SNIPPET}</code>
+									<code class="d-block border rounded p-2 bg-body-tertiary user-select-all">{TABLE_HTML_CROSS_SNIPPET}</code>
 									<p class="small text-body-secondary mb-0 mt-2">You can also use the <strong>Insert snippet</strong> button in Assessment HTML settings to add it automatically.</p>
 								</div>
 							</div>
@@ -6157,6 +6271,20 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										<li class="mb-2">If row labels differ from category names, row mapping is required.</li>
 										<li class="mb-2">If no paragraph is selected for a category, no highlight is applied for that row.</li>
 										<li>After changing mappings, use <strong>Save Assignment</strong> before generating PDF.</li>
+									</ul>
+								</div>
+							</div>
+
+							<div class="card border-success mb-3">
+								<div class="card-header bg-success text-white">
+									<strong>RAG Prompt and Category Filtering</strong>
+								</div>
+								<div class="card-body">
+									<ul class="mb-0">
+										<li class="mb-2"><strong>How the prompt is built:</strong> global instructions go to System message 1, per-answer instructions go to System message 2, then the User message includes short draft, student submission, evidence notes, and retrieved context.</li>
+										<li class="mb-2"><strong>Category-first retrieval:</strong> RAG now prioritises chunks that match the selected category (for example, <code>Sub Objective 1.2</code>) and only falls back to broader context if no category match is found.</li>
+										<li class="mb-2"><strong>Best practice:</strong> use the exact rubric category name in categories, paragraph headers, and per-answer instructions to improve match quality.</li>
+										<li><strong>Prior student evaluations:</strong> previous saved feedback/marks from other students in the same assessment can be used as reference context, not as direct evidence for the current student.</li>
 									</ul>
 								</div>
 							</div>
@@ -6246,10 +6374,20 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 							<div class="col-12">
 								<div class="card border-warning">
 									<div class="card-header bg-warning text-dark py-2">
-										<div class="d-flex align-items-center justify-content-between">
-											<h5 class="card-title mb-0">
-												<i class="bi bi-table me-2"></i>Assessment HTML (included in PDF)
-											</h5>
+									<div class="d-flex align-items-center justify-content-between">
+										<h5 class="card-title mb-0">
+											<i class="bi bi-table me-2"></i>Assessment HTML (included in PDF)
+										</h5>
+										<div class="d-flex align-items-center gap-3">
+											<label class="form-check mb-0 d-flex align-items-center gap-2">
+												<input
+													type="checkbox"
+													class="form-check-input"
+													checked={lockPdfPortrait}
+													onchange={(e) => setLockPdfPortrait(e.currentTarget.checked)}
+												>
+												<span class="small fw-semibold">Lock Portrait</span>
+											</label>
 											<button
 												class="btn btn-sm btn-light"
 												onclick={() => showAssessmentHtml = !showAssessmentHtml}
@@ -6259,23 +6397,40 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											</button>
 										</div>
 									</div>
+									</div>
 									{#if showAssessmentHtml}
 										<div class="card-body py-2">
 									<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
 									<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
 									<div class="alert alert-secondary py-2">
-										<div class="d-flex flex-column flex-md-row align-items-start gap-2">
-											<div class="flex-grow-1">
-												<div class="small fw-semibold">Useful spacer snippet</div>
-												<code class="d-block small user-select-all">{TABLE_HTML_SPACER_SNIPPET}</code>
+										<div class="d-flex flex-column gap-2">
+											<div class="d-flex flex-column flex-md-row align-items-start gap-2">
+												<div class="flex-grow-1">
+													<div class="small fw-semibold">Useful spacer snippet</div>
+													<code class="d-block small user-select-all">{TABLE_HTML_SPACER_SNIPPET}</code>
+												</div>
+												<button type="button" class="btn btn-outline-secondary btn-sm" onclick={insertTableHtmlSpacerSnippet}>
+													<i class="bi bi-plus-square me-1"></i>Insert spacer
+												</button>
 											</div>
-											<button
-												type="button"
-												class="btn btn-outline-secondary btn-sm"
-												onclick={insertTableHtmlSpacerSnippet}
-											>
-												<i class="bi bi-plus-square me-1"></i>Insert snippet
-											</button>
+											<div class="d-flex flex-column flex-md-row align-items-start gap-2">
+												<div class="flex-grow-1">
+													<div class="small fw-semibold">Tick cell snippet</div>
+													<code class="d-block small user-select-all">{TABLE_HTML_TICK_SNIPPET}</code>
+												</div>
+												<button type="button" class="btn btn-outline-secondary btn-sm" onclick={insertTableHtmlTickSnippet}>
+													<i class="bi bi-plus-square me-1"></i>Insert tick
+												</button>
+											</div>
+											<div class="d-flex flex-column flex-md-row align-items-start gap-2">
+												<div class="flex-grow-1">
+													<div class="small fw-semibold">Cross cell snippet</div>
+													<code class="d-block small user-select-all">{TABLE_HTML_CROSS_SNIPPET}</code>
+												</div>
+												<button type="button" class="btn btn-outline-secondary btn-sm" onclick={insertTableHtmlCrossSnippet}>
+													<i class="bi bi-plus-square me-1"></i>Insert cross
+												</button>
+											</div>
 										</div>
 									</div>
 									<textarea
@@ -6985,7 +7140,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																	{/if}
 																</span>
 															{/if}
-															<span class="student-picker-label">{currentStudentId ? (getCurrentStudent()?.displayName || 'Selected student') : 'Select a student...'}</span>
+															<span class="student-picker-label">{currentStudentId ? getStudentFullNameLabel(getCurrentStudent()) : 'Select a student...'}</span>
 														</div>
 														<i class="bi bi-chevron-down small"></i>
 													</button>
@@ -7023,7 +7178,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																			{:else}
 																				<span class="student-picker-avatar-placeholder">{getStudentInitials(student)}</span>
 																			{/if}
-																			<span class="student-picker-option-label">{student.displayName}</span>
+																	<span class="student-picker-option-label">{getStudentFullNameLabel(student)}</span>
 																			{#if student.id === currentStudentId}
 																				<i class="bi bi-check2 student-picker-check"></i>
 																			{/if}
@@ -7057,7 +7212,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												<div class="mt-2">
 													<div class="alert alert-info py-2 mb-0">
 														<i class="bi bi-person-check me-2"></i>
-														<strong>Selected Student:</strong> {getCurrentStudent()?.displayName || 'Loading...'}
+																	<strong>Selected Student:</strong> {currentStudentId ? getStudentFirstNameLabel(getCurrentStudent()) : 'Loading...'}
 													</div>
 												</div>
 											{/if}
@@ -7386,19 +7541,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																					<div class="flex-grow-1">
 																						<div class="mb-0 fs-6 lh-base" style="white-space: pre-wrap;">{@html text}</div>
 																					</div>
-																					{#if source && source !== undefined && source !== 'merged'}
-																						<div class="ms-2">
-																							{#if source === 'assignment'}
-																								<span class="badge bg-primary" title="Assignment paragraph">
-																									<i class="bi bi-file-text me-1"></i>Assignment
-																								</span>
-																							{:else if source === 'student'}
-																								<span class="badge bg-success" title="Student paragraph">
-																									<i class="bi bi-person me-1"></i>{(studentName || 'Student').split(' ')[0]}
-																								</span>
-																							{/if}
-																						</div>
-																					{/if}
+															<div class="ms-2">
+																{#if resolveParagraphOwner(source, id) === 'assignment'}
+																	<span class="badge bg-primary" title="Assignment paragraph">
+																		<i class="bi bi-file-text me-1"></i>{getParagraphOwnerLabel(source, id)}
+																	</span>
+																{:else}
+																	<span class="badge bg-success" title="Student paragraph">
+																		<i class="bi bi-person me-1"></i>{getParagraphOwnerLabel(source, id)}
+																	</span>
+																{/if}
+															</div>
 																				</div>
 																			{/if}
 																		</div>

@@ -85,6 +85,12 @@
 			newColor = 'green';
 		}
 	}
+
+	function getStudentFirstName(label = '') {
+		const cleanLabel = String(label || '').replace(/\s*\([0-9]+\)\s*$/g, '').trim()
+		const firstToken = cleanLabel.split(/\s+/).filter(Boolean)[0]
+		return firstToken || 'Student'
+	}
 	
 	function deletePercentageRange(id) {
 		onDeletePercentageRange(id);
@@ -259,10 +265,10 @@
 													Assessment: {currentAssessment.name}
 												</div>
 											{/if}
-											{#if currentStudentId && studentName}
-												<div class="mb-2">
-													Student: {studentName}
-												</div>
+										{#if currentStudentId && studentName}
+											<div class="mb-2">
+												Student: {getStudentFirstName(studentName)}
+											</div>
 											{:else if currentStudentId}
 												<div class="mb-2 text-muted">
 													Student: Loading...
