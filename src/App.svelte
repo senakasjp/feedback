@@ -3803,6 +3803,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.error('STRICT FILTER: Cannot select student without assessment context')
 			return
 		}
+
+		// Persist assignment-level instruction edits before switching student context
+		try {
+			Object.keys(quickAddInstructionSaveTimers).forEach(key => {
+				clearTimeout(quickAddInstructionSaveTimers[key])
+				delete quickAddInstructionSaveTimers[key]
+			})
+			syncCurrentAssessmentAiInstructionsFromQuickAdd()
+			await saveAssessmentData({ force: true, skipSelections: true })
+		} catch (error) {
+			console.error('Failed to persist assignment instructions before student switch:', error)
+		}
 		
 		currentStudentId = studentId
 		
@@ -3831,6 +3843,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			// STRICT FILTER: Only load student evaluation data for the current assessment
 			console.log(`STRICT FILTER: Selecting student ${studentId} for assessment ${currentAssessmentId}`)
 			await loadStudentEvaluation()
+			quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
 		} else {
 			// Clear only student-specific data, keep paragraphs and header photo visible
 			studentName = ''
@@ -4022,11 +4035,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		try {
 			console.log('🔄 TRANSFER: Starting data transfer from', currentStudentId, 'to', targetStudentId)
-			const paragraphsForContext = ensureParagraphsHaveIds(paragraphs).map(para => ({
-				...para,
-				subjectId: currentSubjectId,
-				assessmentId: currentAssessmentId
-			}))
+			const paragraphsForContext = ensureParagraphsHaveIds(paragraphs).map((para, index) => {
+				const paragraphObject = typeof para === 'string'
+					? { id: generateId(para, index), text: para, color: '', _source: 'student' }
+					: { ...para }
+
+				return {
+					...paragraphObject,
+					subjectId: currentSubjectId,
+					assessmentId: currentAssessmentId
+				}
+			})
 
 			// 1. Transfer selected paragraphs (stored in student properties)
 			const sourceStudent = students.find(s => s.id === currentStudentId)
@@ -4105,12 +4124,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const evaluationData = {
 				studentId: targetStudentId,
 				assessmentId: currentAssessmentId,
-				paragraphs: [...paragraphs],
+				paragraphs: [...paragraphsForContext],
 				studentName: students.find(s => s.id === targetStudentId)?.name || '',
 				studentSubmissionText: studentSubmissionText.trim(),
-				studentSubmissionDocuments: [...studentSubmissionDocuments],
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				categoryMarks: { ...categoryMarks },
 				manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
+				quickAddText: { ...quickAddText },
+				selectedParagraphs: selectedParagraphsToTransfer,
 				savedAt: new Date().toISOString()
 			}
 
