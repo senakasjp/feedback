@@ -21,7 +21,7 @@
 	
 	// Import data services
 	import { studentsService } from './services/dataService.js'
-	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured } from './services/openaiService.js'
+	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
 	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
 	
@@ -116,6 +116,13 @@
 	let quickAddInstructionExpanded = $state({})
 	const quickAddInstructionSaveTimers = {}
 	let quickAddColorPicker = $state({})
+	let speechRecordingCategory = $state('')
+	let speechTranscribingByCategory = $state({})
+	let activeSpeechRecorder = null
+	let activeSpeechStream = null
+	let activeSpeechStopFn = null
+	let speechUploadTargetCategory = $state('')
+	let speechUploadInput = null
 	let quickAddToAssessmentWhenStudentSelected = $state(false) // Override to save quick-add to assessment even when a student is selected
 	let showAboutModal = $state(false) // Show about modal
 	let improvingText = $state({}) // Track which category text is being improved by AI
@@ -973,7 +980,7 @@
 							})
 						}
 					}
-					studentSubmissionDocuments = parsed.assessmentInputDocuments || parsed.studentSubmissionDocuments || []
+					studentSubmissionDocuments = []
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
@@ -1105,7 +1112,7 @@
 							})
 						}
 					}
-					studentSubmissionDocuments = parsed.assessmentInputDocuments || parsed.studentSubmissionDocuments || []
+					studentSubmissionDocuments = []
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
@@ -1152,6 +1159,8 @@
 		categoryMarks = {}
 		manualTotalMarks = ''
 		quickAddText = {}
+		stopSpeechRecorder()
+		speechTranscribingByCategory = {}
 		quickAddAiInstructions = {}
 		quickAddInstructionExpanded = {}
 		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
@@ -1302,7 +1311,6 @@
 			tableRowCategoryMap,
 			tableColumnMarkMap,
 			aiReferenceDocuments: assessmentReferenceDocuments,
-			assessmentInputDocuments: studentSubmissionDocuments,
 			aiAnswerInstructionsByCategory: currentAssessment?.aiAnswerInstructionsByCategory || {},
 			aiVectorIndex: assessmentVectorIndex,
 			categoryMarks,
@@ -1698,7 +1706,11 @@
 	}
 
 	function updateStudentSubmissionDocuments(nextDocuments) {
-		studentSubmissionDocuments = nextDocuments
+		studentSubmissionDocuments = Array.isArray(nextDocuments) ? nextDocuments : []
+	}
+
+	function getSafeStudentSubmissionDocuments() {
+		return Array.isArray(studentSubmissionDocuments) ? studentSubmissionDocuments : []
 	}
 
 	function getCombinedStudentSubmissionText() {
@@ -1708,7 +1720,7 @@
 			sections.push(studentSubmissionText.trim())
 		}
 
-		studentSubmissionDocuments.forEach(document => {
+		getSafeStudentSubmissionDocuments().forEach(document => {
 			if (!document?.extractedText) return
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
@@ -1726,6 +1738,7 @@
 			paragraphs: [...paragraphs],
 			studentName: studentName,
 			studentSubmissionText: studentSubmissionText.trim(),
+			studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 			studentImage: studentPhoto || '',
 			categoryMarks: { ...categoryMarks },
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
@@ -1766,23 +1779,38 @@
 		uploadingAssessmentDocument = true
 		try {
 			const uploadedDocuments = []
+			let extractionFailures = 0
 			for (const file of files) {
-				const extractedText = await extractTextFromFile(file)
-				if (!extractedText) {
-					throw new Error(`No readable text found in ${file.name}`)
+				let extractedText = ''
+				let extractionError = ''
+				try {
+					extractedText = await extractTextFromFile(file)
+				} catch (error) {
+					extractionFailures += 1
+					extractionError = String(error?.message || error || 'Unknown extraction error')
+					console.error(`Assessment reference extraction failed for ${file.name}:`, error)
 				}
 
-				uploadedDocuments.push(createUploadedDocumentRecord({
+				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
 					documentType: selectedAssessmentDocumentType,
 					scope: 'assessment'
-				}))
+				})
+				if (extractionError) {
+					record.extractionError = extractionError
+				}
+
+				uploadedDocuments.push(record)
 			}
 
 			updateAssessmentReferenceDocuments([...assessmentReferenceDocuments, ...uploadedDocuments])
 			await saveAssessmentData({ force: Boolean(currentStudentId), skipSelections: true })
-			showSuccessNotification(`✅ Added ${uploadedDocuments.length} assessment reference file${uploadedDocuments.length === 1 ? '' : 's'} for AI marking.`)
+			if (extractionFailures > 0) {
+				showSuccessNotification(`⚠️ Added ${uploadedDocuments.length} file${uploadedDocuments.length === 1 ? '' : 's'}, but ${extractionFailures} file${extractionFailures === 1 ? '' : 's'} could not be text-extracted.`)
+			} else {
+				showSuccessNotification(`✅ Added ${uploadedDocuments.length} assessment reference file${uploadedDocuments.length === 1 ? '' : 's'} for AI marking.`)
+			}
 		} catch (error) {
 			console.error('Failed to upload assessment reference file:', error)
 			showSuccessNotification(`❌ Upload failed: ${error.message}`)
@@ -1816,23 +1844,38 @@
 		uploadingStudentDocument = true
 		try {
 			const uploadedDocuments = []
+			let extractionFailures = 0
 			for (const file of files) {
-				const extractedText = await extractTextFromFile(file)
-				if (!extractedText) {
-					throw new Error(`No readable text found in ${file.name}`)
+				let extractedText = ''
+				let extractionError = ''
+				try {
+					extractedText = await extractTextFromFile(file)
+				} catch (error) {
+					extractionFailures += 1
+					extractionError = String(error?.message || error || 'Unknown extraction error')
+					console.error(`Student upload extraction failed for ${file.name}:`, error)
 				}
 
-				uploadedDocuments.push(createUploadedDocumentRecord({
+				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
 					documentType: selectedStudentDocumentType,
 					scope: 'student'
-				}))
+				})
+				if (extractionError) {
+					record.extractionError = extractionError
+				}
+
+				uploadedDocuments.push(record)
 			}
 
-			updateStudentSubmissionDocuments([...studentSubmissionDocuments, ...uploadedDocuments])
-			await saveAssessmentData({ force: true, skipSelections: true })
-			showSuccessNotification(`✅ Added ${uploadedDocuments.length} assessment input file${uploadedDocuments.length === 1 ? '' : 's'} for AI marking.`)
+			updateStudentSubmissionDocuments([...getSafeStudentSubmissionDocuments(), ...uploadedDocuments])
+			await persistCurrentStudentEvaluationData()
+			if (extractionFailures > 0) {
+				showSuccessNotification(`⚠️ Added ${uploadedDocuments.length} file${uploadedDocuments.length === 1 ? '' : 's'}, but ${extractionFailures} file${extractionFailures === 1 ? '' : 's'} could not be text-extracted.`)
+			} else {
+				showSuccessNotification(`✅ Added ${uploadedDocuments.length} student file${uploadedDocuments.length === 1 ? '' : 's'} for AI marking.`)
+			}
 		} catch (error) {
 			console.error('Failed to upload student submission file:', error)
 			showSuccessNotification(`❌ Upload failed: ${error.message}`)
@@ -1845,9 +1888,9 @@
 	}
 
 	async function removeStudentSubmissionDocument(documentId) {
-		updateStudentSubmissionDocuments(studentSubmissionDocuments.filter(document => document.id !== documentId))
-		await saveAssessmentData({ force: true, skipSelections: true })
-		showSuccessNotification('Assessment input upload removed.')
+		updateStudentSubmissionDocuments(getSafeStudentSubmissionDocuments().filter(document => document.id !== documentId))
+		await persistCurrentStudentEvaluationData()
+		showSuccessNotification('Student upload removed.')
 	}
 
 	async function buildAssessmentRetrievalIndex() {
@@ -2059,10 +2102,10 @@
 
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
-			showSuccessNotification(`✅ Evidence check generated (${result.retrievalMode || 'context'}).`)
+			showSuccessNotification(`✅ Reports check generated (${result.retrievalMode || 'context'}).`)
 		} catch (error) {
-			console.error('Failed to run evidence check:', error)
-			showSuccessNotification(`❌ Evidence check failed: ${error.message}`)
+			console.error('Failed to run reports check:', error)
+			showSuccessNotification(`❌ Reports check failed: ${error.message}`)
 		} finally {
 			evidenceCheckingText = { ...evidenceCheckingText, [categoryName]: false }
 		}
@@ -2317,6 +2360,260 @@
 			openTag: `<span style="color:${color};">`,
 			closeTag: '</span>'
 		})
+	}
+
+	function stopSpeechRecorder() {
+		if (typeof activeSpeechStopFn === 'function') {
+			const stopFn = activeSpeechStopFn
+			activeSpeechStopFn = null
+			stopFn()
+			return
+		}
+
+		if (activeSpeechRecorder && activeSpeechRecorder.state !== 'inactive') {
+			activeSpeechRecorder.stop()
+			return
+		}
+
+		speechRecordingCategory = ''
+		if (activeSpeechStream) {
+			activeSpeechStream.getTracks().forEach(track => track.stop())
+			activeSpeechStream = null
+		}
+		activeSpeechRecorder = null
+	}
+
+	async function transcribeAndAppendToQuickAdd(categoryName, audioBlob) {
+		speechTranscribingByCategory = { ...speechTranscribingByCategory, [categoryName]: true }
+		try {
+			const transcript = await transcribeAudioBlob(audioBlob)
+			const existingText = quickAddText[categoryName] || ''
+			const separator = existingText.trim().length > 0 ? '\n' : ''
+			quickAddText = {
+				...quickAddText,
+				[categoryName]: `${existingText}${separator}${transcript}`
+			}
+			showSuccessNotification('✨ Speech converted to text.')
+		} catch (error) {
+			console.error('Speech-to-text failed:', error)
+			showSuccessNotification(`❌ Speech-to-text failed: ${error.message}`)
+		} finally {
+			speechTranscribingByCategory = { ...speechTranscribingByCategory, [categoryName]: false }
+		}
+	}
+
+	function createWavBlobFromFloat32(audioChunks, sampleRate) {
+		const totalSamples = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0)
+		const pcmData = new Int16Array(totalSamples)
+
+		let offset = 0
+		for (const chunk of audioChunks) {
+			for (let i = 0; i < chunk.length; i++) {
+				const sample = Math.max(-1, Math.min(1, chunk[i]))
+				pcmData[offset + i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+			}
+			offset += chunk.length
+		}
+
+		const buffer = new ArrayBuffer(44 + pcmData.byteLength)
+		const view = new DataView(buffer)
+
+		const writeString = (position, value) => {
+			for (let i = 0; i < value.length; i++) {
+				view.setUint8(position + i, value.charCodeAt(i))
+			}
+		}
+
+		writeString(0, 'RIFF')
+		view.setUint32(4, 36 + pcmData.byteLength, true)
+		writeString(8, 'WAVE')
+		writeString(12, 'fmt ')
+		view.setUint32(16, 16, true)
+		view.setUint16(20, 1, true)
+		view.setUint16(22, 1, true)
+		view.setUint32(24, sampleRate, true)
+		view.setUint32(28, sampleRate * 2, true)
+		view.setUint16(32, 2, true)
+		view.setUint16(34, 16, true)
+		writeString(36, 'data')
+		view.setUint32(40, pcmData.byteLength, true)
+
+		new Int16Array(buffer, 44).set(pcmData)
+		return new Blob([buffer], { type: 'audio/wav' })
+	}
+
+	async function startWebAudioFallbackRecording(categoryName) {
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+		const AudioContextClass = window.AudioContext || window.webkitAudioContext
+		if (!AudioContextClass) {
+			stream.getTracks().forEach(track => track.stop())
+			throw new Error('Web Audio API is not available.')
+		}
+
+		const audioContext = new AudioContextClass()
+		const source = audioContext.createMediaStreamSource(stream)
+		const processor = audioContext.createScriptProcessor(4096, 1, 1)
+		const silence = audioContext.createGain()
+		silence.gain.value = 0
+		const audioChunks = []
+
+		processor.onaudioprocess = (event) => {
+			const channelData = event.inputBuffer.getChannelData(0)
+			audioChunks.push(new Float32Array(channelData))
+		}
+
+		source.connect(processor)
+		processor.connect(silence)
+		silence.connect(audioContext.destination)
+
+		activeSpeechStream = stream
+		activeSpeechRecorder = { state: 'recording' }
+		speechRecordingCategory = categoryName
+
+		activeSpeechStopFn = async () => {
+			activeSpeechStopFn = null
+			speechRecordingCategory = ''
+			try {
+				processor.disconnect()
+				source.disconnect()
+				silence.disconnect()
+			} catch {
+				// ignore disconnect cleanup errors
+			}
+			stream.getTracks().forEach(track => track.stop())
+			activeSpeechStream = null
+			activeSpeechRecorder = null
+			await audioContext.close()
+
+			if (audioChunks.length === 0) {
+				showSuccessNotification('⚠️ No audio captured.')
+				return
+			}
+
+			const wavBlob = createWavBlobFromFloat32(audioChunks, audioContext.sampleRate)
+			await transcribeAndAppendToQuickAdd(categoryName, wavBlob)
+		}
+
+		showSuccessNotification('🎙️ Recording started. Click mic again to stop.')
+	}
+
+	function openSpeechUploadPicker(categoryName) {
+		speechUploadTargetCategory = categoryName
+		if (speechUploadInput) {
+			speechUploadInput.value = ''
+			speechUploadInput.click()
+		}
+	}
+
+	async function handleSpeechAudioUpload(event) {
+		const input = event.currentTarget
+		const file = input?.files?.[0]
+		const categoryName = speechUploadTargetCategory
+		if (!file || !categoryName) return
+
+		speechTranscribingByCategory = { ...speechTranscribingByCategory, [categoryName]: true }
+		try {
+			const transcript = await transcribeAudioBlob(file)
+			const existingText = quickAddText[categoryName] || ''
+			const separator = existingText.trim().length > 0 ? '\n' : ''
+			quickAddText = {
+				...quickAddText,
+				[categoryName]: `${existingText}${separator}${transcript}`
+			}
+			showSuccessNotification('✨ Audio file converted to text.')
+		} catch (error) {
+			console.error('Audio transcription failed:', error)
+			showSuccessNotification(`❌ Speech-to-text failed: ${error.message}`)
+		} finally {
+			speechUploadTargetCategory = ''
+			speechTranscribingByCategory = { ...speechTranscribingByCategory, [categoryName]: false }
+			if (input) {
+				input.value = ''
+			}
+		}
+	}
+
+	async function toggleQuickAddSpeechToText(categoryName) {
+		if (!isOpenAIConfigured()) {
+			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+			return
+		}
+
+		if (speechRecordingCategory === categoryName) {
+			stopSpeechRecorder()
+			return
+		}
+
+		if (speechRecordingCategory && speechRecordingCategory !== categoryName) {
+			showSuccessNotification('⚠️ Another recording is in progress. Stop it first.')
+			return
+		}
+
+		if (!navigator?.mediaDevices?.getUserMedia) {
+			showSuccessNotification('❌ Live mic recording is not supported in this environment.')
+			return
+		}
+
+		if (typeof MediaRecorder === 'undefined') {
+			try {
+				await startWebAudioFallbackRecording(categoryName)
+			} catch (error) {
+				console.error('Failed to start fallback recording:', error)
+				showSuccessNotification(`❌ Unable to start microphone recording: ${error.message}`)
+			}
+			return
+		}
+
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+			const recorder = new MediaRecorder(stream)
+			const audioChunks = []
+
+			activeSpeechStream = stream
+			activeSpeechRecorder = recorder
+			speechRecordingCategory = categoryName
+
+			recorder.ondataavailable = (event) => {
+				if (event?.data && event.data.size > 0) {
+					audioChunks.push(event.data)
+				}
+			}
+
+			recorder.onerror = () => {
+				speechRecordingCategory = ''
+				if (activeSpeechStream) {
+					activeSpeechStream.getTracks().forEach(track => track.stop())
+				}
+				activeSpeechStream = null
+				activeSpeechRecorder = null
+				showSuccessNotification('❌ Recording failed. Please try again.')
+			}
+
+			recorder.onstop = async () => {
+				speechRecordingCategory = ''
+				activeSpeechStopFn = null
+				if (activeSpeechStream) {
+					activeSpeechStream.getTracks().forEach(track => track.stop())
+				}
+				activeSpeechStream = null
+				activeSpeechRecorder = null
+
+				if (audioChunks.length === 0) {
+					showSuccessNotification('⚠️ No audio captured.')
+					return
+				}
+
+				const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+				await transcribeAndAppendToQuickAdd(categoryName, audioBlob)
+			}
+
+			activeSpeechStopFn = () => recorder.stop()
+			recorder.start()
+			showSuccessNotification('🎙️ Recording started. Click mic again to stop.')
+		} catch (error) {
+			console.error('Failed to start recording:', error)
+			showSuccessNotification(`❌ Unable to access microphone: ${error.message}`)
+		}
 	}
 
 	function sendParagraphToAiInput(paragraphText, categoryName, knowledgeAreaName = '') {
@@ -3455,7 +3752,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const keysToRemove = []
 			for (let i = 0; i < localStorage.length; i++) {
 				const key = localStorage.key(i)
-				if (key && (key.startsWith(`student-evaluation-${studentId}-`) || key === `student-paragraphs-${studentId}`)) {
+				if (key && (
+					key.startsWith(`student-evaluation-${studentId}-`) ||
+					key === `student-paragraphs-${studentId}` ||
+					key.startsWith(`student-uploads-${studentId}-`)
+				)) {
 					keysToRemove.push(key)
 				}
 			}
@@ -3471,6 +3772,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				currentStudentId = null
 				studentName = ''
 				studentSubmissionText = ''
+				studentSubmissionDocuments = []
 				studentPhoto = ''
 				// No studentImage - only header photo for assessment
 				selectedParagraphs.clear()
@@ -3642,6 +3944,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			return
 		}
 
+		// Ensure per-answer instructions are persisted to assignment when saving student data
+		await saveAssessmentData({ force: true, skipSelections: true })
+
 		// Save selected paragraphs under student properties (replace old selection data)
 		console.log('💾 SAVING: Selected paragraphs to student properties:', {
 			studentId: currentStudentId,
@@ -3797,16 +4102,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 
 			// 3. Transfer evaluation data (marks, etc.)
-				const evaluationData = {
-					studentId: targetStudentId,
-					assessmentId: currentAssessmentId,
-					paragraphs: [...paragraphs],
-					studentName: students.find(s => s.id === targetStudentId)?.name || '',
-					studentSubmissionText: studentSubmissionText.trim(),
-					categoryMarks: { ...categoryMarks },
-					manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
-					savedAt: new Date().toISOString()
-				}
+			const evaluationData = {
+				studentId: targetStudentId,
+				assessmentId: currentAssessmentId,
+				paragraphs: [...paragraphs],
+				studentName: students.find(s => s.id === targetStudentId)?.name || '',
+				studentSubmissionText: studentSubmissionText.trim(),
+				studentSubmissionDocuments: [...studentSubmissionDocuments],
+				categoryMarks: { ...categoryMarks },
+				manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
+				savedAt: new Date().toISOString()
+			}
 
 			// Save evaluation data for target student
 			try {
@@ -3976,6 +4282,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		let savedStudentName = ''
 		let savedStudentSubmissionText = ''
 		let savedStudentImage = ''
+		let savedStudentSubmissionDocuments = []
 		let savedCategoryMarks = {}
 		let savedManualTotalMarks = ''
 		let savedQuickAddText = {}
@@ -4024,6 +4331,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				
 				savedStudentName = evaluationData.studentName || ''
 				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
+				savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
 				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
 				savedCategoryMarks = evaluationData.categoryMarks || {}
 				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
@@ -4051,6 +4359,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				
 				savedStudentName = evaluationData.studentName || ''
 				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
+				savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
 				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
 				savedCategoryMarks = evaluationData.categoryMarks || {}
 				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
@@ -4096,6 +4405,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// Preserve the student's display name if no saved name exists
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		studentSubmissionText = savedStudentSubmissionText
+		studentSubmissionDocuments = Array.isArray(savedStudentSubmissionDocuments) ? savedStudentSubmissionDocuments : []
 		studentPhoto = savedStudentImage || getStudentPhoto(getCurrentStudent()) || ''
 		if (savedStudentImage && currentStudentId) {
 			students = students.map(student => (
@@ -4118,7 +4428,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// Selection mapping is now handled by mapSelectionsToMergedParagraphs above
 
 		// Only show notification if we actually loaded some data
-		const hasLoadedData = savedSelectedParagraphs.size > 0 || Object.keys(savedCategoryMarks).length > 0 || savedStudentName || savedManualTotalMarks
+		const hasLoadedData = savedSelectedParagraphs.size > 0 || Object.keys(savedCategoryMarks).length > 0 || savedStudentName || savedManualTotalMarks || savedStudentSubmissionDocuments.length > 0
 		
 		if (hasLoadedData) {
 			showSuccessNotification('Student evaluation data loaded successfully!')
@@ -5433,6 +5743,87 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return nextY
 	}
 
+	async function renderSelectedFeedbackHtmlToPdf(doc, startY, margin, pageWidth, selectedHtmlText = '') {
+		const htmlContent = normalizeHtmlQuotes(String(selectedHtmlText || '')).trim()
+		if (!htmlContent) return startY
+
+		const pageHeight = doc.internal.pageSize.getHeight()
+		const pxPerMm = 96 / 25.4
+		const maxContentWidthMm = pageWidth - (margin * 2)
+		const maxContentWidthPx = maxContentWidthMm * pxPerMm
+
+		const container = document.createElement('div')
+		container.className = 'pdf-feedback-html'
+		container.style.position = 'absolute'
+		container.style.left = '-99999px'
+		container.style.top = '0'
+		container.style.display = 'block'
+		container.style.boxSizing = 'border-box'
+		container.style.width = `${maxContentWidthPx}px`
+		container.style.maxWidth = `${maxContentWidthPx}px`
+		container.style.fontFamily = 'Arial, sans-serif'
+		container.style.fontSize = '10pt'
+		container.style.lineHeight = '1.35'
+		container.style.color = '#000000'
+		container.style.backgroundColor = '#ffffff'
+		container.style.padding = '0'
+		container.innerHTML = htmlContent.replace(/\n/g, '<br/>')
+
+		const styleElement = document.createElement('style')
+		styleElement.textContent = `
+			.pdf-feedback-html { width: 100%; box-sizing: border-box; font-size: 10pt; color: #000; background: #fff; }
+			.pdf-feedback-html p { margin: 0; line-height: 1.35; }
+			.pdf-feedback-html br { line-height: 1.35; }
+		`
+		container.prepend(styleElement)
+		document.body.appendChild(container)
+
+		let nextY = startY
+		try {
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
+			const naturalWidthMm = canvas.width / pxPerMm
+			const naturalHeightMm = canvas.height / pxPerMm
+			const scale = maxContentWidthMm / naturalWidthMm
+			const targetHeightMm = naturalHeightMm * scale
+			let consumedMm = 0
+
+			while (consumedMm < targetHeightMm - 0.01) {
+				if (nextY > pageHeight - margin - 5) {
+					doc.addPage()
+					nextY = margin
+				}
+
+				const availableMm = pageHeight - margin - nextY
+				if (availableMm <= 0) {
+					doc.addPage()
+					nextY = margin
+				}
+
+				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
+				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
+				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
+
+				const sliceCanvas = document.createElement('canvas')
+				sliceCanvas.width = canvas.width
+				sliceCanvas.height = slicePxHeight
+				const ctx = sliceCanvas.getContext('2d')
+				ctx.drawImage(canvas, 0, -slicePxTop)
+
+				const sliceData = sliceCanvas.toDataURL('image/png')
+				doc.addImage(sliceData, 'PNG', margin, nextY, maxContentWidthMm, drawMm)
+
+				nextY += drawMm + 1.5
+				consumedMm += drawMm
+			}
+		} catch (error) {
+			console.error('Failed to render selected feedback HTML into PDF:', error)
+		} finally {
+			document.body.removeChild(container)
+		}
+
+		return nextY
+	}
+
 
 	function getSelectedText() {
 		const orderedParagraphs = getOrderedParagraphs()
@@ -5617,13 +6008,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 			let selectedText = getSelectedTextInVisualOrder()
 			
-		// Convert HTML to plain text for PDF
-		if (selectedText.includes('<')) {
-			const tempDiv = document.createElement('div')
-			tempDiv.innerHTML = selectedText
-			selectedText = tempDiv.textContent || tempDiv.innerText || ''
-		}
-		
 			console.log('📄 generatePDF result:', {
 				length: selectedText.length,
 				text: selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''),
@@ -5782,6 +6166,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		yPosition = Math.max(margin, afterTableY - gapAfterTable)
 
 		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
+		const hasRichFormatting = /<[^>]+>/.test(selectedText)
 		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
 
 		const categoriesWithMarks = new Set()
@@ -5842,6 +6227,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			return false
 		}
 
+		if (hasRichFormatting) {
+			yPosition = await renderSelectedFeedbackHtmlToPdf(doc, yPosition, margin, contentPageWidth, selectedText)
+		} else {
 		// Content with comfortable spacing and bold category names
 		const firstPageBodyFontSize = 10
 		const nextPagesBodyFontSize = 10
@@ -5959,6 +6347,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				yPosition += paragraphGap() // slight gap between paragraphs
 			}
 		}
+		}
 		
 		// Generate filename with subject, assessment, and student name
 	let filename = 'Feedback-report'
@@ -5996,19 +6385,20 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 }
 
 
-	onMount(() => {
-		loadSubjects()
-		initializeDarkMode()
+		onMount(() => {
+			loadSubjects()
+			initializeDarkMode()
 
 		window.addEventListener('paste', handleStudentPhotoPaste)
 		window.addEventListener('pointerdown', handleGlobalPointerDown)
 		window.addEventListener('keydown', handleGlobalKeyDown)
-		return () => {
-			window.removeEventListener('paste', handleStudentPhotoPaste)
-			window.removeEventListener('pointerdown', handleGlobalPointerDown)
-			window.removeEventListener('keydown', handleGlobalKeyDown)
-		}
-	})
+			return () => {
+				stopSpeechRecorder()
+				window.removeEventListener('paste', handleStudentPhotoPaste)
+				window.removeEventListener('pointerdown', handleGlobalPointerDown)
+				window.removeEventListener('keydown', handleGlobalKeyDown)
+			}
+		})
 </script>
 
 <!-- Header -->
@@ -6221,7 +6611,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 							<div class="d-flex justify-content-between align-items-center mb-4">
 								<div>
 									<h1 class="display-6 mb-2">Help</h1>
-									<p class="lead text-body-secondary mb-0">How to use rubric table cell highlighting in PDF</p>
+									<p class="lead text-body-secondary mb-0">PDF setup, RAG prompts, and Reports Check workflow</p>
 								</div>
 								<button
 									class="btn btn-outline-secondary"
@@ -6233,7 +6623,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 							<div class="card border-info mb-3">
 								<div class="card-header bg-info text-white">
-									<strong>Quick Steps</strong>
+									<strong>Quick Steps (PDF + Rubric Table)</strong>
 								</div>
 								<div class="card-body">
 									<ol class="mb-0">
@@ -6249,6 +6639,22 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 							<div class="card border-primary mb-3">
 								<div class="card-header bg-primary text-white">
+									<strong>Reports Check Workflow</strong>
+								</div>
+								<div class="card-body">
+									<ol class="mb-0">
+										<li class="mb-2">Select a student first. Reports Check only runs with a selected student.</li>
+										<li class="mb-2">Add student evidence via <strong>Student Submission or Evidence Notes</strong> and <strong>Student Uploads</strong>.</li>
+										<li class="mb-2">In each category, write a short draft and optional <strong>Instructions for this answer</strong>.</li>
+										<li class="mb-2">Click <strong>Reports Check</strong> to generate an evidence-based paragraph using student notes, uploaded docs, rubric context, and retrieved references.</li>
+										<li class="mb-2">Review output in the quick-add box, edit if needed, then click <strong>Add paragraph</strong>.</li>
+										<li>Use <strong>View RAG Prompt</strong> to inspect the exact prompt (System + User + Retrieved context).</li>
+									</ol>
+								</div>
+							</div>
+
+							<div class="card border-dark mb-3">
+								<div class="card-header bg-dark text-white">
 									<strong>Useful HTML Snippet</strong>
 								</div>
 								<div class="card-body">
@@ -6297,6 +6703,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									<ul class="mb-0">
 										<li class="mb-2">Nothing highlighted: check row mapping + column mapping + paragraph selection.</li>
 										<li class="mb-2">Wrong cell highlighted: verify paragraph order in that category and adjust position-to-column mapping.</li>
+										<li class="mb-2">Reports Check unavailable: select a student and ensure student evidence text or uploaded files exist.</li>
 										<li>Marks column not updating: ensure category marks are entered and row mapping matches the category.</li>
 									</ul>
 								</div>
@@ -7236,7 +7643,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<span>Student Uploads</span>
 														<span class="badge text-bg-primary">Input</span>
 													</div>
-													<div class="small text-muted mb-2">Upload answer/report or extra evidence files. These are saved with this assessment.</div>
+													<div class="small text-muted mb-2">Upload answer/report or extra evidence files. These are saved under the selected student.</div>
 													<div class="row g-2 align-items-end">
 														<div class="col-md-4">
 															<label for="studentDocumentType" class="form-label fw-bold small">File Type</label>
@@ -7683,6 +8090,22 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															>
 																<i class="bi bi-palette me-1"></i>Colour
 															</button>
+															<button
+																class={`btn btn-sm ${speechRecordingCategory === group.category ? 'btn-outline-danger' : 'btn-outline-secondary'}`}
+																type="button"
+																onclick={() => toggleQuickAddSpeechToText(group.category)}
+																disabled={Boolean(speechRecordingCategory && speechRecordingCategory !== group.category) || Boolean(speechTranscribingByCategory[group.category])}
+																title={speechRecordingCategory === group.category ? 'Stop recording' : 'Record voice and convert to text'}
+															>
+																{#if speechTranscribingByCategory[group.category]}
+																	<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+																	Transcribing...
+																{:else if speechRecordingCategory === group.category}
+																	<i class="bi bi-stop-fill me-1 text-danger"></i>Stop Mic
+																{:else}
+																	<i class={`bi bi-mic-fill me-1 ${speechRecordingCategory === group.category ? 'text-danger' : ''}`}></i>Mic
+																{/if}
+															</button>
 														</div>
 															<button
 																class="btn btn-outline-primary btn-sm"
@@ -7717,13 +8140,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																type="button"
 																onclick={() => runEvidenceCheck(group.category)}
 																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !currentStudentId}
-																title="Generate evidence-based report from student notes and uploads"
+																title="Generate reports-check output from student notes and uploads"
 															>
 																{#if evidenceCheckingText[group.category]}
 																	<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-																	Checking evidence...
+																	Checking reports...
 																{:else}
-																	<i class="bi bi-clipboard2-check me-1"></i>Evidence Check
+																	<i class="bi bi-clipboard2-check me-1"></i>Reports Check
 																{/if}
 															</button>
 													<button
@@ -7791,10 +8214,23 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													></textarea>
 														<div class="border rounded p-2">
 															<div class="d-flex align-items-center justify-content-between gap-2">
-																<label for={quickAddInstructionInputId(group.category)} class="form-label small fw-semibold d-flex align-items-center gap-2 mb-0">
-																	<span>Instructions for this answer</span>
-																	<span class="badge text-bg-info">Per-answer</span>
-																</label>
+															<label for={quickAddInstructionInputId(group.category)} class="form-label small fw-semibold d-flex align-items-center gap-2 mb-0">
+																<span>Instructions for this answer</span>
+																<span class="badge text-bg-info">Per-answer</span>
+															</label>
+															<div class="d-flex align-items-center gap-2">
+																<button
+																	type="button"
+																	class="btn btn-outline-success btn-sm"
+																	onclick={async () => {
+																		await persistCategoryAiInstruction(group.category)
+																		await saveAssessmentData({ force: true, skipSelections: true })
+																		showSuccessNotification('✅ Instructions saved to assignment.')
+																	}}
+																	title="Save instructions to assignment"
+																>
+																	<i class="bi bi-save me-1"></i>Save
+																</button>
 																<button
 																	type="button"
 																	class="btn btn-outline-secondary btn-sm"
@@ -7807,6 +8243,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																	{isQuickAddInstructionExpanded(group.category) ? 'Collapse' : 'Expand'}
 																</button>
 															</div>
+														</div>
 															{#if isQuickAddInstructionExpanded(group.category)}
 																<div id={quickAddInstructionSectionId(group.category)} class="mt-2">
 																	<textarea
@@ -8395,6 +8832,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		</div>
 	</div>
 {/if}
+
+<input
+	type="file"
+	accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg"
+	class="d-none"
+	bind:this={speechUploadInput}
+	onchange={handleSpeechAudioUpload}
+>
 
 <!-- Prompt Preview Modal -->
 {#if showPromptPreviewModal}

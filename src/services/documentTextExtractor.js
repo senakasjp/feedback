@@ -20,11 +20,45 @@ function getFileExtension(fileName = '') {
   return parts.length > 1 ? parts.pop().toLowerCase() : ''
 }
 
+async function readFileAsArrayBuffer(file) {
+  if (file && typeof file.arrayBuffer === 'function') {
+    return file.arrayBuffer()
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file as ArrayBuffer'))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+async function readFileAsText(file) {
+  if (file && typeof file.text === 'function') {
+    return file.text()
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file as text'))
+    reader.readAsText(file)
+  })
+}
+
 async function extractTextFromPdf(file) {
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString()
-  const buffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+  const buffer = await readFileAsArrayBuffer(file)
+  let pdf
+
+  try {
+    // Preferred path with worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString()
+    pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+  } catch {
+    // Tauri/WebView fallback: disable worker when worker boot fails
+    pdf = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise
+  }
   const pages = []
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -47,13 +81,13 @@ async function extractTextFromPdf(file) {
 async function extractTextFromDocx(file) {
 	const mammothModule = await import('mammoth')
 	const mammoth = mammothModule.default || mammothModule
-	const arrayBuffer = await file.arrayBuffer()
+	const arrayBuffer = await readFileAsArrayBuffer(file)
 	const result = await mammoth.extractRawText({ arrayBuffer })
 	return normaliseWhitespace(result.value)
 }
 
 async function extractTextFromTextFile(file, extension) {
-  const rawText = await file.text()
+  const rawText = await readFileAsText(file)
   if (extension === 'html' || extension === 'htm' || file.type === 'text/html') {
     return stripHtml(rawText)
   }

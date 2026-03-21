@@ -5,6 +5,7 @@
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
+const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions'
 
 async function getErrorMessage(response) {
   try {
@@ -113,4 +114,39 @@ export function isOpenAIConfigured() {
 
 export function buildImproveEnglishPromptPreview(text, customInstructions = '') {
   return buildImproveEnglishMessages(text, customInstructions)
+}
+
+export async function transcribeAudioBlob(audioBlob) {
+  if (!audioBlob) {
+    throw new Error('Audio recording is empty')
+  }
+
+  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
+    throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
+  }
+
+  const formData = new FormData()
+  formData.append('model', 'whisper-1')
+  formData.append('response_format', 'text')
+  formData.append('file', audioBlob, 'speech.webm')
+
+  const response = await fetch(OPENAI_TRANSCRIBE_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`
+    },
+    body: formData
+  })
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response)
+    throw new Error(message || `Transcription request failed with status ${response.status}`)
+  }
+
+  const transcript = (await response.text()).trim()
+  if (!transcript) {
+    throw new Error('No transcription returned from OpenAI')
+  }
+
+  return transcript
 }
