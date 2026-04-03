@@ -112,6 +112,15 @@
 		onSelectSubject(subject);
 	}
 
+	function handleSubjectKeydown(subject: Subject, event: KeyboardEvent) {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		clickCount++;
+		lastClickedSubject = subject.name;
+		console.log('Subject activated from keyboard:', subject.name);
+		onSelectSubject(subject);
+	}
+
 	function addSubject() {
 		if (localNewSubjectName.trim()) {
 			const newSubject = {
@@ -175,15 +184,25 @@
 	{#if subjects.length > 0}
 		<div class="d-flex flex-wrap gap-3">
 			{#each subjects as subject}
-				<div class="card border-0 shadow-sm d-flex flex-column" style="min-width: 300px; max-width: 350px; aspect-ratio: 1; height: 300px;">
+				<div
+					class="card border-0 shadow-sm d-flex flex-column subject-card-clickable"
+					style="min-width: 300px; max-width: 350px; aspect-ratio: 1; height: 300px;"
+					role="button"
+					tabindex="0"
+					aria-label={`Open subject ${subject.name}`}
+					onclick={(event) => handleSubjectClick(subject, event)}
+					onkeydown={(event) => handleSubjectKeydown(subject, event)}
+				>
 					<div class="card-header bg-white border-0 d-flex justify-content-between align-items-center flex-shrink-0">
 						<div class="d-flex align-items-center">
 							<i class="bi bi-book text-primary me-2 fs-4"></i>
 							<span class="fw-bold text-dark">{subject.name}</span>
 						</div>
 						<button 
+							type="button"
 							class="btn btn-sm btn-outline-danger border-0"
-							onclick={() => {
+							onclick={(event) => {
+								event.stopPropagation();
 								console.log('DELETE CLICKED FOR:', subject.name, subject.id);
 								handleDeleteClick(subject.id);
 							}}
@@ -200,8 +219,9 @@
 								<span class="badge bg-primary">{subject.assessments.length}</span>
 							</div>
 							<button 
+								type="button"
 								class="btn btn-primary w-100"
-								onclick={() => onSelectSubject(subject)}
+								onclick={(event) => handleSubjectClick(subject, event)}
 							>
 								<i class="bi bi-gear me-2"></i>Manage Subject
 							</button>
@@ -265,3 +285,13 @@
 {/if}
 
 <!-- Styles are now in components.css -->
+<style>
+	.subject-card-clickable {
+		cursor: pointer;
+	}
+
+	.subject-card-clickable:focus-visible {
+		outline: 3px solid rgba(13, 110, 253, 0.35);
+		outline-offset: 2px;
+	}
+ </style>

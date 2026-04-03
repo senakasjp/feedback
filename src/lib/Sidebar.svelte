@@ -149,6 +149,7 @@
 						
 						{#each subjects as subject}
 							<button 
+								type="button"
 								class="btn btn-outline-primary w-100 mb-2 text-start" 
 								onclick={() => onSelectSubject(subject)}
 							>
@@ -199,6 +200,7 @@
 						
 						{#each currentSubject?.assessments || [] as assessment}
 							<button 
+								type="button"
 								class="btn btn-outline-success w-100 mb-2 text-start" 
 								onclick={() => onSelectAssessment(assessment)}
 							>

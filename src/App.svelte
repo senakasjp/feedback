@@ -1,6 +1,6 @@
 <script>
 	import { invoke } from '@tauri-apps/api/core'
-	import { onMount } from 'svelte'
+	import { onMount, untrack } from 'svelte'
 	import jsPDF from 'jspdf'
 	import html2canvas from 'html2canvas'
 	import Sidebar from './lib/Sidebar.svelte'
@@ -325,7 +325,7 @@
 		console.log('Current view changed to:', currentView)
 	})
 
-	function serializeLogValue(value, seen = new WeakSet()) {
+	function serializeLogValue(value) {
 		if (value instanceof Error) {
 			return value.stack || `${value.name}: ${value.message}`
 		}
@@ -339,11 +339,8 @@
 			return `[Function ${value.name || 'anonymous'}]`
 		}
 		if (typeof value === 'object') {
-			if (seen.has(value)) {
-				return '[Circular]'
-			}
-			seen.add(value)
 			try {
+				const seen = new WeakSet()
 				return JSON.stringify(value, (key, nestedValue) => {
 					if (nestedValue instanceof Error) {
 						return nestedValue.stack || `${nestedValue.name}: ${nestedValue.message}`
@@ -371,8 +368,18 @@
 			level: String(level || 'info').toLowerCase(),
 			message
 		}
-		appLogEntries = [...appLogEntries, entry].slice(-MAX_APP_LOG_ENTRIES)
+		untrack(() => {
+			const nextEntries = Array.isArray(appLogEntries) ? appLogEntries.slice(-(MAX_APP_LOG_ENTRIES - 1)) : []
+			nextEntries.push(entry)
+			appLogEntries = nextEntries
+		})
 	}
+
+	$effect(() => {
+		if (appLogEntries.length > MAX_APP_LOG_ENTRIES) {
+			appLogEntries = appLogEntries.slice(-MAX_APP_LOG_ENTRIES)
+		}
+	})
 
 	function clearAppLogs() {
 		appLogEntries = []
@@ -381,6 +388,7 @@
 
 	async function copyAppLogs() {
 		const logText = appLogEntries
+			.slice(-MAX_APP_LOG_ENTRIES)
 			.map(entry => `[${entry.timestamp}] ${entry.level.toUpperCase()}: ${entry.message}`)
 			.join('\n')
 
@@ -2307,6 +2315,13 @@
 		}
 
 		evidenceCheckingText = { ...evidenceCheckingText, [categoryName]: true }
+		addAppLog('info', `========== Evidence check started: ${categoryName} ==========`)
+		console.info('UI evidence check triggered', {
+			categoryName,
+			studentId: currentStudentId,
+			assessmentId: currentAssessmentId,
+			subjectId: currentSubjectId
+		})
 
 		try {
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
@@ -2338,6 +2353,7 @@
 			console.error('Failed to run reports check:', error)
 			showSuccessNotification(`❌ Reports check failed: ${error.message}`)
 		} finally {
+			console.info('UI evidence check completed', { categoryName })
 			evidenceCheckingText = { ...evidenceCheckingText, [categoryName]: false }
 		}
 	}
@@ -6736,7 +6752,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		
 		const blankLineGap = () => lineHeight * 1
 		const headerGap = () => lineHeight * 1
-		const paragraphGap = () => 0
+		const paragraphGap = () => Math.max(1.5, lineHeight * 0.3)
 		let previousBlank = false
 		for (let i = 0; i < textLines.length; i++) {
 			const line = textLines[i]
@@ -7091,11 +7107,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		</div>
 							<SubjectManager 
 								{subjects}
-								onSelectSubject={(subject) => {
-									currentSubject = subject
-									currentSubjectId = subject.id
-									currentView = 'assessments'
-								}}
+								onSelectSubject={selectSubject}
 								onUpdateSubjects={(updatedSubjects) => {
 									subjects = updatedSubjects;
 									saveSubjects();
@@ -9665,7 +9677,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						<div class="alert alert-light mb-0">No log entries yet.</div>
 					{:else}
 						<div class="list-group">
-							{#each [...appLogEntries].reverse() as entry (entry.id)}
+							{#each [...appLogEntries.slice(-MAX_APP_LOG_ENTRIES)].reverse() as entry (entry.id)}
 								<div class="list-group-item">
 									<div class="d-flex flex-column flex-lg-row justify-content-between gap-1">
 										<div>

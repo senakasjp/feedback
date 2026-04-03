@@ -40,6 +40,43 @@ function extractTextFromContentPart(part) {
   return ''
 }
 
+function collectTextCandidates(value, results = [], seen = new WeakSet()) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed) results.push(trimmed)
+    return results
+  }
+
+  if (!value || typeof value !== 'object') {
+    return results
+  }
+
+  if (seen.has(value)) {
+    return results
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    value.forEach(item => collectTextCandidates(item, results, seen))
+    return results
+  }
+
+  const preferredKeys = ['output_text', 'text', 'value', 'content', 'message', 'refusal']
+  preferredKeys.forEach(key => {
+    if (key in value) {
+      collectTextCandidates(value[key], results, seen)
+    }
+  })
+
+  Object.entries(value).forEach(([key, nestedValue]) => {
+    if (!preferredKeys.includes(key)) {
+      collectTextCandidates(nestedValue, results, seen)
+    }
+  })
+
+  return results
+}
+
 function extractMessageText(payload = {}) {
   const content = payload?.choices?.[0]?.message?.content
   if (typeof content === 'string') {
@@ -69,6 +106,10 @@ function extractMessageText(payload = {}) {
       .filter(Boolean)
       .join('\n')
       .trim()
+  }
+  const recursiveText = collectTextCandidates(payload).join('\n').trim()
+  if (recursiveText) {
+    return recursiveText
   }
   return ''
 }

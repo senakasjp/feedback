@@ -14,6 +14,16 @@ function normaliseWhitespace(value) {
     .trim()
 }
 
+function normaliseParagraphText(value) {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.replace(/[ \t\f\v]+/g, ' ').replace(/\n+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n\n')
+}
+
 function extractTextFromContentPart(part) {
   if (typeof part === 'string') return part
   if (typeof part?.text === 'string') return part.text
@@ -25,6 +35,43 @@ function extractTextFromContentPart(part) {
     return part.content.map(extractTextFromContentPart).filter(Boolean).join('\n')
   }
   return ''
+}
+
+function collectTextCandidates(value, results = [], seen = new WeakSet()) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed) results.push(trimmed)
+    return results
+  }
+
+  if (!value || typeof value !== 'object') {
+    return results
+  }
+
+  if (seen.has(value)) {
+    return results
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    value.forEach(item => collectTextCandidates(item, results, seen))
+    return results
+  }
+
+  const preferredKeys = ['output_text', 'text', 'value', 'content', 'message', 'refusal']
+  preferredKeys.forEach(key => {
+    if (key in value) {
+      collectTextCandidates(value[key], results, seen)
+    }
+  })
+
+  Object.entries(value).forEach(([key, nestedValue]) => {
+    if (!preferredKeys.includes(key)) {
+      collectTextCandidates(nestedValue, results, seen)
+    }
+  })
+
+  return results
 }
 
 function extractMessageText(payload = {}) {
@@ -57,7 +104,19 @@ function extractMessageText(payload = {}) {
       .join('\n')
       .trim()
   }
+  const recursiveText = collectTextCandidates(payload).join('\n').trim()
+  if (recursiveText) {
+    return recursiveText
+  }
   return ''
+}
+
+function buildPayloadPreview(payload = {}) {
+  try {
+    return JSON.stringify(payload, null, 2).slice(0, 4000)
+  } catch {
+    return '[unserializable payload]'
+  }
 }
 
 function resolveTemperatureForModel(model = '', requestedTemperature = 1) {
@@ -68,9 +127,12 @@ function resolveTemperatureForModel(model = '', requestedTemperature = 1) {
   return requestedTemperature
 }
 
-function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.2, max_completion_tokens = 1000 }) {
+function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.2, max_completion_tokens = 1000, reasoningEffortOverride = '' }) {
   const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
-  const reasoning_effort = sanitizeReasoningEffort(model, modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+  const reasoning_effort = sanitizeReasoningEffort(
+    model,
+    reasoningEffortOverride || modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
+  )
   const resolvedTemperature = resolveTemperatureForModel(model, temperature)
 
   return {
@@ -649,7 +711,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
 
   const data = await response.json()
   const rawText = extractMessageText(data)
-  const improvedText = normaliseWhitespace(extractFeedbackTextFromPossibleJson(rawText))
+  const improvedText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
 
   if (!improvedText) {
     throw new Error('No improved feedback was returned from OpenAI')
@@ -672,6 +734,14 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
   }
 
+  console.info('Evidence check request started', {
+    assessment: assessment?.name || 'Unnamed assessment',
+    categoryName: normaliseWhitespace(categoryName || 'General feedback'),
+    student: student?.displayName || student?.id || 'Not specified',
+    submissionLength: String(studentSubmission || '').length,
+    evidenceNotesLength: String(evidenceNotes || '').length
+  })
+
   const retrievalQuery = [categoryName, answerInstructions, studentSubmission, evidenceNotes].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
@@ -692,7 +762,8 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     body: JSON.stringify(buildChatCompletionPayload({
       modelPreference,
       temperature: 0.2,
-      max_completion_tokens: 1000,
+      max_completion_tokens: 2200,
+      reasoningEffortOverride: 'low',
       messages: [
         ...buildSystemMessages(globalSystemInstructions, ''),
         ...buildPerAnswerSystemMessages(answerInstructions),
@@ -736,9 +807,28 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
 
   const data = await response.json()
   const rawText = extractMessageText(data)
-  const reportText = normaliseWhitespace(extractFeedbackTextFromPossibleJson(rawText))
+  const reportText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
+  const finishReason = payloadChoiceFinishReason(data)
+
+  console.info('Evidence check response parsed', {
+    retrievalMode,
+    topLevelKeys: Object.keys(data || {}),
+    choiceCount: Array.isArray(data?.choices) ? data.choices.length : 0,
+    finishReason,
+    rawTextLength: rawText.length,
+    reportTextLength: reportText.length,
+    rawTextPreview: rawText.slice(0, 500)
+  })
 
   if (!reportText) {
+    console.error('Evidence check returned no usable text', {
+      rawText,
+      finishReason,
+      payloadPreview: buildPayloadPreview(data)
+    })
+    if (finishReason === 'length') {
+      throw new Error('OpenAI stopped before producing visible evidence-check text. The response hit the token limit.')
+    }
     throw new Error('No evidence-check feedback was returned from OpenAI')
   }
 
@@ -752,6 +842,11 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
       modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
     )
   }
+}
+
+function payloadChoiceFinishReason(payload = {}) {
+  const finishReason = payload?.choices?.[0]?.finish_reason
+  return typeof finishReason === 'string' ? finishReason : ''
 }
 
 function extractJson(text) {
