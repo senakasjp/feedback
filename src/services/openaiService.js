@@ -27,15 +27,70 @@ function normaliseWhitespace(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
 }
 
-function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.3, max_tokens = 1000 }) {
+function extractTextFromContentPart(part) {
+  if (typeof part === 'string') return part
+  if (typeof part?.text === 'string') return part.text
+  if (typeof part?.text?.value === 'string') return part.text.value
+  if (typeof part?.content === 'string') return part.content
+  if (typeof part?.value === 'string') return part.value
+  if (typeof part?.output_text === 'string') return part.output_text
+  if (Array.isArray(part?.content)) {
+    return part.content.map(extractTextFromContentPart).filter(Boolean).join('\n')
+  }
+  return ''
+}
+
+function extractMessageText(payload = {}) {
+  const content = payload?.choices?.[0]?.message?.content
+  if (typeof content === 'string') {
+    return content.trim()
+  }
+  if (Array.isArray(content)) {
+    return content.map(extractTextFromContentPart).filter(Boolean).join('\n').trim()
+  }
+  if (typeof content?.text === 'string') {
+    return content.text.trim()
+  }
+  if (typeof content?.text?.value === 'string') {
+    return content.text.value.trim()
+  }
+  if (typeof payload?.choices?.[0]?.message?.output_text === 'string') {
+    return payload.choices[0].message.output_text.trim()
+  }
+  if (typeof payload?.choices?.[0]?.text === 'string') {
+    return payload.choices[0].text.trim()
+  }
+  if (typeof payload?.output_text === 'string') {
+    return payload.output_text.trim()
+  }
+  if (Array.isArray(payload?.output)) {
+    return payload.output
+      .map(item => extractTextFromContentPart(item))
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+  }
+  return ''
+}
+
+function resolveTemperatureForModel(model = '', requestedTemperature = 1) {
+  const normalizedModel = String(model || '').trim().toLowerCase()
+  if (normalizedModel.startsWith('gpt-5')) {
+    return 1
+  }
+  return requestedTemperature
+}
+
+function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.3, max_completion_tokens = 1000 }) {
   const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
   const reasoning_effort = sanitizeReasoningEffort(model, modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+  const resolvedTemperature = resolveTemperatureForModel(model, temperature)
 
   return {
     model,
     messages,
-    temperature,
-    max_tokens,
+    temperature: resolvedTemperature,
+    max_completion_tokens,
     reasoning_effort
   }
 }
@@ -96,7 +151,7 @@ export async function improveEnglish(text, customInstructions = '', modelPrefere
         modelPreference,
         messages: buildImproveEnglishMessages(text, customInstructions),
         temperature: 0.3,
-        max_tokens: 1000
+        max_completion_tokens: 1000
       }))
     })
 
@@ -106,7 +161,7 @@ export async function improveEnglish(text, customInstructions = '', modelPrefere
     }
 
     const data = await response.json()
-    const improvedText = data.choices[0]?.message?.content?.trim()
+    const improvedText = extractMessageText(data)
 
     if (!improvedText) {
       throw new Error('No response received from OpenAI')

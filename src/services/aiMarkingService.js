@@ -14,14 +14,69 @@ function normaliseWhitespace(value) {
     .trim()
 }
 
-function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.2, max_tokens = 1000 }) {
+function extractTextFromContentPart(part) {
+  if (typeof part === 'string') return part
+  if (typeof part?.text === 'string') return part.text
+  if (typeof part?.text?.value === 'string') return part.text.value
+  if (typeof part?.content === 'string') return part.content
+  if (typeof part?.value === 'string') return part.value
+  if (typeof part?.output_text === 'string') return part.output_text
+  if (Array.isArray(part?.content)) {
+    return part.content.map(extractTextFromContentPart).filter(Boolean).join('\n')
+  }
+  return ''
+}
+
+function extractMessageText(payload = {}) {
+  const content = payload?.choices?.[0]?.message?.content
+  if (typeof content === 'string') {
+    return content.trim()
+  }
+  if (Array.isArray(content)) {
+    return content.map(extractTextFromContentPart).filter(Boolean).join('\n').trim()
+  }
+  if (typeof content?.text === 'string') {
+    return content.text.trim()
+  }
+  if (typeof content?.text?.value === 'string') {
+    return content.text.value.trim()
+  }
+  if (typeof payload?.choices?.[0]?.message?.output_text === 'string') {
+    return payload.choices[0].message.output_text.trim()
+  }
+  if (typeof payload?.choices?.[0]?.text === 'string') {
+    return payload.choices[0].text.trim()
+  }
+  if (typeof payload?.output_text === 'string') {
+    return payload.output_text.trim()
+  }
+  if (Array.isArray(payload?.output)) {
+    return payload.output
+      .map(item => extractTextFromContentPart(item))
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+  }
+  return ''
+}
+
+function resolveTemperatureForModel(model = '', requestedTemperature = 1) {
+  const normalizedModel = String(model || '').trim().toLowerCase()
+  if (normalizedModel.startsWith('gpt-5')) {
+    return 1
+  }
+  return requestedTemperature
+}
+
+function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.2, max_completion_tokens = 1000 }) {
   const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
   const reasoning_effort = sanitizeReasoningEffort(model, modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+  const resolvedTemperature = resolveTemperatureForModel(model, temperature)
 
   return {
     model,
-    temperature,
-    max_tokens,
+    temperature: resolvedTemperature,
+    max_completion_tokens,
     reasoning_effort,
     messages
   }
@@ -582,7 +637,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     body: JSON.stringify(buildChatCompletionPayload({
       modelPreference,
       temperature: 0.35,
-      max_tokens: 900,
+      max_completion_tokens: 900,
       messages
     }))
   })
@@ -593,7 +648,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
   }
 
   const data = await response.json()
-  const rawText = data.choices?.[0]?.message?.content || ''
+  const rawText = extractMessageText(data)
   const improvedText = normaliseWhitespace(extractFeedbackTextFromPossibleJson(rawText))
 
   if (!improvedText) {
@@ -637,7 +692,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     body: JSON.stringify(buildChatCompletionPayload({
       modelPreference,
       temperature: 0.2,
-      max_tokens: 1000,
+      max_completion_tokens: 1000,
       messages: [
         ...buildSystemMessages(globalSystemInstructions, ''),
         ...buildPerAnswerSystemMessages(answerInstructions),
@@ -680,7 +735,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
   }
 
   const data = await response.json()
-  const rawText = data.choices?.[0]?.message?.content || ''
+  const rawText = extractMessageText(data)
   const reportText = normaliseWhitespace(extractFeedbackTextFromPossibleJson(rawText))
 
   if (!reportText) {
@@ -744,7 +799,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
     body: JSON.stringify(buildChatCompletionPayload({
       modelPreference,
       temperature: 0.2,
-      max_tokens: 2200,
+      max_completion_tokens: 2200,
       messages: [
         ...buildSystemMessages(globalSystemInstructions, ''),
         {
@@ -805,7 +860,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
   }
 
   const data = await response.json()
-  const content = data.choices?.[0]?.message?.content
+  const content = extractMessageText(data)
   const parsed = extractJson(content)
 
   return {

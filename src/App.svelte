@@ -151,6 +151,8 @@
 	let promptPreviewTitle = $state('')
 	let promptPreviewMessages = $state([])
 	let promptPreviewRequestPayload = $state(null)
+	let showAppLogModal = $state(false)
+	let appLogEntries = $state([])
 	let activeFeedbackTab = $state('enter-data')
 	let lastStudentEffectAssessmentId = $state(null)
 	let lastStudentEffectStudentId = $state(null)
@@ -309,11 +311,123 @@
 	let selectedAiReasoningEffort = $state(DEFAULT_AI_REASONING_EFFORT)
 	let aiModelSettingsReady = $state(false)
 	let manualAiModelInput = $state(DEFAULT_AI_CHAT_MODEL)
-	
+	const MAX_APP_LOG_ENTRIES = 500
+	const originalConsoleMethods = {
+		log: console.log.bind(console),
+		info: console.info.bind(console),
+		warn: console.warn.bind(console),
+		error: console.error.bind(console),
+		debug: console.debug.bind(console)
+	}
+
 	// Force reactivity for debugging
 	$effect(() => {
 		console.log('Current view changed to:', currentView)
 	})
+
+	function serializeLogValue(value, seen = new WeakSet()) {
+		if (value instanceof Error) {
+			return value.stack || `${value.name}: ${value.message}`
+		}
+		if (typeof value === 'string') {
+			return value
+		}
+		if (typeof value === 'number' || typeof value === 'boolean' || value === null || value === undefined) {
+			return String(value)
+		}
+		if (typeof value === 'function') {
+			return `[Function ${value.name || 'anonymous'}]`
+		}
+		if (typeof value === 'object') {
+			if (seen.has(value)) {
+				return '[Circular]'
+			}
+			seen.add(value)
+			try {
+				return JSON.stringify(value, (key, nestedValue) => {
+					if (nestedValue instanceof Error) {
+						return nestedValue.stack || `${nestedValue.name}: ${nestedValue.message}`
+					}
+					if (typeof nestedValue === 'object' && nestedValue !== null) {
+						if (seen.has(nestedValue)) {
+							return '[Circular]'
+						}
+						seen.add(nestedValue)
+					}
+					return nestedValue
+				}, 2)
+			} catch {
+				return Object.prototype.toString.call(value)
+			}
+		}
+		return String(value)
+	}
+
+	function addAppLog(level, ...values) {
+		const message = values.map(value => serializeLogValue(value)).join(' ')
+		const entry = {
+			id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+			timestamp: new Date().toISOString(),
+			level: String(level || 'info').toLowerCase(),
+			message
+		}
+		appLogEntries = [...appLogEntries, entry].slice(-MAX_APP_LOG_ENTRIES)
+	}
+
+	function clearAppLogs() {
+		appLogEntries = []
+		addAppLog('info', 'Application logs cleared by user.')
+	}
+
+	async function copyAppLogs() {
+		const logText = appLogEntries
+			.map(entry => `[${entry.timestamp}] ${entry.level.toUpperCase()}: ${entry.message}`)
+			.join('\n')
+
+		if (!logText.trim()) {
+			showSuccessNotification('⚠️ No log entries available to copy.')
+			return
+		}
+
+		try {
+			await navigator.clipboard.writeText(logText)
+			showSuccessNotification(`✅ Copied ${appLogEntries.length} log entries.`)
+		} catch (error) {
+			addAppLog('error', 'Failed to copy application logs.', error)
+			showSuccessNotification(`❌ Failed to copy logs: ${error.message}`)
+		}
+	}
+
+	function installAppLogging() {
+		;['log', 'info', 'warn', 'error', 'debug'].forEach((method) => {
+			console[method] = (...args) => {
+				addAppLog(method, ...args)
+				originalConsoleMethods[method](...args)
+			}
+		})
+
+		const handleWindowError = (event) => {
+			addAppLog('error', 'Window error:', event.error || event.message || 'Unknown error')
+		}
+
+		const handleUnhandledRejection = (event) => {
+			addAppLog('error', 'Unhandled promise rejection:', event.reason || 'Unknown rejection reason')
+		}
+
+		window.addEventListener('error', handleWindowError)
+		window.addEventListener('unhandledrejection', handleUnhandledRejection)
+		addAppLog('info', 'Application logging initialized.')
+
+		return () => {
+			console.log = originalConsoleMethods.log
+			console.info = originalConsoleMethods.info
+			console.warn = originalConsoleMethods.warn
+			console.error = originalConsoleMethods.error
+			console.debug = originalConsoleMethods.debug
+			window.removeEventListener('error', handleWindowError)
+			window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+		}
+	}
 
 	function isStudentOwnedParagraph(paragraph) {
 		if (!paragraph || typeof paragraph !== 'object') return false
@@ -2333,12 +2447,15 @@
 
 	function buildPromptPreviewRequestPayload(messages = [], temperature = 0.3, maxTokens = 1000) {
 		const modelPreference = getCurrentAiModelPreference()
+		const normalizedTemperature = String(modelPreference.selectedModel || '').trim().toLowerCase().startsWith('gpt-5')
+			? 1
+			: temperature
 		return {
 			endpoint: 'https://api.openai.com/v1/chat/completions',
 			model: modelPreference.selectedModel,
 			reasoning_effort: modelPreference.reasoningEffort,
-			temperature,
-			max_tokens: maxTokens,
+			temperature: normalizedTemperature,
+			max_completion_tokens: maxTokens,
 			messages
 		}
 	}
@@ -3754,8 +3871,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	function showSuccessNotification(message) {
 		console.log('NOTIFICATION DEBUG: Showing notification:', message)
 		const nextMessage = String(message || '')
+		const nextVariant = /❌|failed|error|unable|cannot/i.test(nextMessage) ? 'danger' : 'success'
+		addAppLog(nextVariant === 'danger' ? 'error' : 'info', 'Notification:', nextMessage)
 		notificationMessage = nextMessage
-		notificationVariant = /❌|failed|error|unable|cannot/i.test(nextMessage) ? 'danger' : 'success'
+		notificationVariant = nextVariant
 		showNotification = true
 		setTimeout(() => {
 			console.log('NOTIFICATION DEBUG: Auto-hiding notification')
@@ -6733,12 +6852,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			loadSubjects()
 			initializeDarkMode()
 			initializeAiModelSettings()
+			const cleanupAppLogging = installAppLogging()
 
 		window.addEventListener('paste', handleStudentPhotoPaste)
 		window.addEventListener('pointerdown', handleGlobalPointerDown)
 		window.addEventListener('keydown', handleGlobalKeyDown)
 			return () => {
 				stopSpeechRecorder()
+				cleanupAppLogging()
 				window.removeEventListener('paste', handleStudentPhotoPaste)
 				window.removeEventListener('pointerdown', handleGlobalPointerDown)
 				window.removeEventListener('keydown', handleGlobalKeyDown)
@@ -6867,6 +6988,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						aria-label="Open help page"
 					>
 						<i class="bi bi-question-circle me-1"></i>Help
+					</button>
+				</li>
+				<li class="nav-item">
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
+						onclick={() => showAppLogModal = true}
+						title={`Open application log (${appLogEntries.length}/${MAX_APP_LOG_ENTRIES})`}
+						aria-label="Open application log"
+					>
+						<i class="bi bi-journal-text me-1"></i>Log
 					</button>
 				</li>
 				<li class="nav-item">
@@ -9075,9 +9206,20 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	}
 
 	:global(.quick-action-toolbar .quick-toolbar-btn) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		white-space: nowrap;
+		line-height: 1.2;
 		font-weight: 600;
 		color: #0b5ed7 !important;
 		border-color: #0b5ed7 !important;
+	}
+
+	:global(.quick-action-toolbar .quick-toolbar-btn .bi),
+	:global(.quick-action-toolbar .quick-toolbar-btn .spinner-border) {
+		flex-shrink: 0;
 	}
 
 	:global(.quick-action-toolbar .btn-outline-secondary.quick-toolbar-btn) {
@@ -9488,6 +9630,59 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn btn-secondary" onclick={closePromptPreviewModal}>Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Application Log Modal -->
+{#if showAppLogModal}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-xl modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header bg-secondary text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-journal-text me-2"></i>Application Log
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={() => showAppLogModal = false} aria-label="Close application log"></button>
+				</div>
+				<div class="modal-body">
+					<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+						<div class="small text-muted">
+							Showing the most recent {appLogEntries.length} of {MAX_APP_LOG_ENTRIES} log entries.
+						</div>
+						<div class="d-flex flex-wrap gap-2">
+							<button type="button" class="btn btn-outline-secondary btn-sm" onclick={copyAppLogs}>
+								<i class="bi bi-clipboard me-1"></i>Copy
+							</button>
+							<button type="button" class="btn btn-outline-danger btn-sm" onclick={clearAppLogs}>
+								<i class="bi bi-trash me-1"></i>Clear
+							</button>
+						</div>
+					</div>
+					{#if appLogEntries.length === 0}
+						<div class="alert alert-light mb-0">No log entries yet.</div>
+					{:else}
+						<div class="list-group">
+							{#each [...appLogEntries].reverse() as entry (entry.id)}
+								<div class="list-group-item">
+									<div class="d-flex flex-column flex-lg-row justify-content-between gap-1">
+										<div>
+											<span class={`badge text-uppercase ${entry.level === 'error' ? 'bg-danger' : entry.level === 'warn' ? 'bg-warning text-dark' : entry.level === 'debug' ? 'bg-dark' : 'bg-secondary'}`}>
+												{entry.level}
+											</span>
+										</div>
+										<div class="small text-muted">{entry.timestamp}</div>
+									</div>
+									<pre class="mb-0 mt-2 prompt-preview-pre">{entry.message}</pre>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={() => showAppLogModal = false}>Close</button>
 				</div>
 			</div>
 		</div>
