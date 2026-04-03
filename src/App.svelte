@@ -308,6 +308,7 @@
 	let selectedAiModel = $state(DEFAULT_AI_CHAT_MODEL)
 	let selectedAiReasoningEffort = $state(DEFAULT_AI_REASONING_EFFORT)
 	let aiModelSettingsReady = $state(false)
+	let manualAiModelInput = $state(DEFAULT_AI_CHAT_MODEL)
 	
 	// Force reactivity for debugging
 	$effect(() => {
@@ -396,6 +397,7 @@
 		const savedReasoningEffort = localStorage.getItem(AI_REASONING_STORAGE_KEY)
 
 		selectedAiModel = nextModel
+		manualAiModelInput = nextModel
 		selectedAiReasoningEffort = sanitizeReasoningEffort(nextModel, savedReasoningEffort || DEFAULT_AI_REASONING_EFFORT)
 		aiModelSettingsReady = true
 	}
@@ -416,6 +418,14 @@
 
 	function selectAiModel(model) {
 		selectedAiModel = sanitizeAiChatModel(model)
+		manualAiModelInput = selectedAiModel
+		selectedAiReasoningEffort = sanitizeReasoningEffort(selectedAiModel, selectedAiReasoningEffort)
+	}
+
+	function applyManualAiModel() {
+		const trimmedModel = sanitizeAiChatModel(manualAiModelInput)
+		manualAiModelInput = trimmedModel
+		selectedAiModel = trimmedModel
 		selectedAiReasoningEffort = sanitizeReasoningEffort(selectedAiModel, selectedAiReasoningEffort)
 	}
 
@@ -3061,7 +3071,34 @@
 			return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
 		}
 
-		function moveCategoryUp(categoryId) {
+		async function persistCategoryReorder(reorderedCategories) {
+			if (!currentAssessment) return
+
+			const updatedAssessment = {
+				...currentAssessment,
+				categories: reorderedCategories
+			}
+			currentAssessment = updatedAssessment
+
+			if (!currentSubject) return
+
+			const subjectIndex = subjects.findIndex(subject => subject.id === currentSubject.id)
+			if (subjectIndex === -1) return
+
+			const updatedAssessments = (subjects[subjectIndex].assessments || []).map(assessment =>
+				assessment.id === updatedAssessment.id ? updatedAssessment : assessment
+			)
+			const updatedSubject = {
+				...subjects[subjectIndex],
+				assessments: updatedAssessments
+			}
+
+			subjects = subjects.map((subject, index) => index === subjectIndex ? updatedSubject : subject)
+			currentSubject = updatedSubject
+			await saveSubjects()
+		}
+
+		async function moveCategoryUp(categoryId) {
 			if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
 			
 			const normalized = normalizeCategoryOrder(currentAssessment.categories)
@@ -3072,22 +3109,10 @@
 			;[swapped[index - 1], swapped[index]] = [swapped[index], swapped[index - 1]]
 
 			const reordered = swapped.map((cat, idx) => ({ ...cat, order: idx }))
-			currentAssessment = { ...currentAssessment, categories: reordered }
-				
-			// Update the current subject's assessments
-			if (currentSubject) {
-				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
-				if (subjectIndex !== -1) {
-					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
-					if (assessmentIndex !== -1) {
-						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
-						saveSubjects()
-					}
-				}
-			}
+			await persistCategoryReorder(reordered)
 		}
 
-		function moveCategoryDown(categoryId) {
+		async function moveCategoryDown(categoryId) {
 			if (!currentAssessment?.categories || currentStudentId) return // Only in assignment mode
 			
 			const normalized = normalizeCategoryOrder(currentAssessment.categories)
@@ -3098,19 +3123,7 @@
 			;[swapped[index], swapped[index + 1]] = [swapped[index + 1], swapped[index]]
 
 			const reordered = swapped.map((cat, idx) => ({ ...cat, order: idx }))
-			currentAssessment = { ...currentAssessment, categories: reordered }
-				
-			// Update the current subject's assessments
-			if (currentSubject) {
-				const subjectIndex = subjects.findIndex(s => s.id === currentSubject.id)
-				if (subjectIndex !== -1) {
-					const assessmentIndex = subjects[subjectIndex].assessments.findIndex(a => a.id === currentAssessment.id)
-					if (assessmentIndex !== -1) {
-						subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
-						saveSubjects()
-					}
-				}
-			}
+			await persistCategoryReorder(reordered)
 		}
 
 	// Paragraph reordering functions
@@ -5350,16 +5363,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// First, initialize all categories from the assessment (even if they have no paragraphs)
 		// Sort categories by order field if available
 		if (currentAssessment?.categories) {
-			const sortedCategories = [...currentAssessment.categories].sort((a, b) => {
-				const orderA = a.order !== undefined ? a.order : 999
-				const orderB = b.order !== undefined ? b.order : 999
-				return orderA - orderB
-			})
+			const sortedCategories = normalizeCategoryOrder(currentAssessment.categories)
 			
 			sortedCategories.forEach(category => {
 				const groupKey = category.name
 				if (!grouped[groupKey]) {
 					grouped[groupKey] = {
+						categoryId: category.id || category.name,
 						category: category.name,
 						knowledgeAreas: {}
 					}
@@ -5418,7 +5428,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const groupKey = finalCategory
 			
 			if (!grouped[groupKey]) {
+				const matchedCategory = (currentAssessment?.categories || []).find(
+					item => normalizeCategoryName(item.name) === normalizeCategoryName(finalCategory)
+				)
 				grouped[groupKey] = {
+					categoryId: matchedCategory?.id || finalCategory,
 					category: finalCategory,
 					knowledgeAreas: {}
 				}
@@ -6795,6 +6809,31 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											{/if}
 										</button>
 									{/each}
+								</div>
+								<div class="ai-settings-manual mt-2">
+									<label class="form-label small mb-1" for="manualAiModelInput">Manual model</label>
+									<div class="ai-settings-manual-row">
+										<input
+											id="manualAiModelInput"
+											type="text"
+											class="form-control form-control-sm ai-settings-input"
+											bind:value={manualAiModelInput}
+											placeholder="e.g. gpt-5.4-custom"
+											onkeydown={(event) => {
+												if (event.key === 'Enter') {
+													event.preventDefault()
+													applyManualAiModel()
+												}
+											}}
+										>
+										<button
+											type="button"
+											class="btn btn-sm btn-outline-primary ai-settings-apply"
+											onclick={applyManualAiModel}
+										>
+											Use
+										</button>
+									</div>
 								</div>
 							</div>
 							<div class="ai-settings-divider"></div>
@@ -8183,12 +8222,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																	<!-- Category reordering buttons (only in assignment mode) -->
 											{#if !currentStudentId}
 												{@const sortedCategories = normalizeCategoryOrder(currentAssessment.categories)}
-												{@const categoryIndex = sortedCategories.findIndex(cat => normalizeCategoryName(cat.name) === normalizeCategoryName(group.category))}
+												{@const categoryIndex = sortedCategories.findIndex(cat => cat.id === group.categoryId || normalizeCategoryName(cat.name) === normalizeCategoryName(group.category))}
 												<div class="d-flex flex-column">
 													<button 
 														class="btn btn-sm btn-outline-light" 
 														style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
-														onclick={() => moveCategoryUp(group.category)}
+														onclick={() => moveCategoryUp(group.categoryId || group.category)}
 														title="Move category up"
 														aria-label="Move category up"
 														disabled={categoryIndex <= 0}
@@ -8198,7 +8237,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													<button 
 														class="btn btn-sm btn-outline-light" 
 														style="font-size: 0.6rem; padding: 0.1rem 0.2rem; min-width: 20px;"
-														onclick={() => moveCategoryDown(group.category)}
+														onclick={() => moveCategoryDown(group.categoryId || group.category)}
 														title="Move category down"
 														aria-label="Move category down"
 														disabled={categoryIndex === -1 || categoryIndex >= sortedCategories.length - 1}
@@ -9129,8 +9168,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	.ai-settings-menu {
 		width: min(320px, calc(100vw - 2rem));
+		max-height: min(78vh, calc(100dvh - 5.5rem));
 		margin-top: 0.5rem;
 		padding: 0.85rem;
+		overflow-x: hidden;
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		border-radius: 1rem;
 		border: 1px solid rgba(255, 255, 255, 0.14);
 		background: rgba(22, 22, 22, 0.96);
@@ -9159,6 +9202,27 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	.ai-settings-list.compact {
 		gap: 0.35rem;
+	}
+
+	.ai-settings-manual {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.ai-settings-manual-row {
+		display: flex;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.ai-settings-input {
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+
+	.ai-settings-apply {
+		flex-shrink: 0;
 	}
 
 	.ai-settings-option {

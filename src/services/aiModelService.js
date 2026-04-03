@@ -23,11 +23,12 @@ export function isSupportedAiChatModel(model = '') {
 }
 
 export function sanitizeAiChatModel(model = '') {
-  return isSupportedAiChatModel(model) ? model : DEFAULT_AI_CHAT_MODEL
+  const trimmedModel = String(model || '').trim()
+  return trimmedModel || DEFAULT_AI_CHAT_MODEL
 }
 
 export function getSupportedReasoningEfforts(model = '') {
-  const normalizedModel = sanitizeAiChatModel(model)
+  const normalizedModel = sanitizeAiChatModel(model).toLowerCase()
 
   if (normalizedModel.startsWith('gpt-5')) {
     return AI_REASONING_EFFORT_OPTIONS.map(option => option.value)
@@ -42,7 +43,8 @@ export function sanitizeReasoningEffort(model = '', reasoningEffort = '') {
 }
 
 export function getAiModelLabel(model = '') {
-  return AI_CHAT_MODEL_OPTIONS.find(option => option.value === model)?.label || model
+  const normalizedModel = sanitizeAiChatModel(model)
+  return AI_CHAT_MODEL_OPTIONS.find(option => option.value === normalizedModel)?.label || normalizedModel
 }
 
 export function getReasoningEffortLabel(reasoningEffort = '') {
