@@ -2,6 +2,8 @@
 
 > **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
 
+> **New (Mar 2026):** PDF export now suppresses table-covered paragraph content using paragraph-ID coverage filtering, and hides `[N MARKS]` in category headers when that category is already covered by the rubric table.
+
 
 ## Version History
 

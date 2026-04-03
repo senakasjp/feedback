@@ -208,13 +208,16 @@ export function getSectionOrder(paragraph) {
   return 999 // Paragraphs without sections go to the end
 }
 
-export function ensureParagraphsHaveIds(paragraphs) {
+export function ensureParagraphsHaveIds(paragraphs, defaultSource = 'assignment') {
+  const nowIso = new Date().toISOString()
   return paragraphs.map((para, index) => {
     if (typeof para === 'string') {
       return {
         id: generateId(para, index),
         text: para,
         color: undefined,
+        _source: defaultSource,
+        createdAt: nowIso,
         originalIndex: index,
         fullText: para
       }
@@ -222,12 +225,16 @@ export function ensureParagraphsHaveIds(paragraphs) {
       return {
         ...para,
         id: generateId(para.text || para, index),
+        _source: para._source || defaultSource,
+        createdAt: para.createdAt || nowIso,
         originalIndex: index,
         fullText: para.text || para
       }
     } else {
       return {
         ...para,
+        _source: para?._source || defaultSource,
+        createdAt: para?.createdAt || nowIso,
         originalIndex: index,
         fullText: para.text || para
       }

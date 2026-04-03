@@ -23,6 +23,7 @@
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
 	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { AI_CHAT_MODEL_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeReasoningEffort } from './services/aiModelService.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
 	
 	// Import constants
@@ -37,6 +38,8 @@
 	import './styles/dark-mode.css'
 
 	const NAVIGATION_STATE_KEY = 'feedback-navigation-state-v1'
+	const AI_MODEL_STORAGE_KEY = 'feedback-ai-selected-model-v1'
+	const AI_REASONING_STORAGE_KEY = 'feedback-ai-reasoning-effort-v1'
 	const TABLE_HTML_SPACER_SNIPPET = '<div style="margin-top: 20px;"></div>'
 	const TABLE_HTML_TICK_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10003;</td>'
 	const TABLE_HTML_CROSS_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10007;</td>'
@@ -147,6 +150,7 @@
 	let showPromptPreviewModal = $state(false)
 	let promptPreviewTitle = $state('')
 	let promptPreviewMessages = $state([])
+	let promptPreviewRequestPayload = $state(null)
 	let activeFeedbackTab = $state('enter-data')
 	let lastStudentEffectAssessmentId = $state(null)
 	let lastStudentEffectStudentId = $state(null)
@@ -276,6 +280,8 @@
 	let studentToDelete = $state(null) // Student to be deleted
 	let editingParagraphIndex = $state(null) // Track which paragraph is being edited
 	let editingParagraphText = $state('') // Store text being edited
+	let showEditingParagraphSaveWarning = $state(false)
+	let editingParagraphSaveWarningTimer = null
 
 	// Removed autosave functionality to prevent data contamination
 
@@ -297,6 +303,11 @@
 	let currentView = $state('subjects') // 'subjects', 'assessments', 'feedback'
 	let lastNonHelpView = $state('subjects')
 	let isDarkMode = $state(false) // Dark mode toggle state
+	let showAiModelSettings = $state(false)
+	let aiModelSettingsContainer = $state(null)
+	let selectedAiModel = $state(DEFAULT_AI_CHAT_MODEL)
+	let selectedAiReasoningEffort = $state(DEFAULT_AI_REASONING_EFFORT)
+	let aiModelSettingsReady = $state(false)
 	
 	// Force reactivity for debugging
 	$effect(() => {
@@ -325,6 +336,19 @@
 			return getStudentFirstNameLabel(studentName || selectedStudent?.displayName || selectedStudent?.name || 'Student')
 		}
 		return 'Assignment'
+	}
+
+	function formatParagraphSavedDate(createdAt) {
+		if (!createdAt) return ''
+		const parsed = new Date(createdAt)
+		if (Number.isNaN(parsed.getTime())) return ''
+		return parsed.toLocaleString([], {
+			year: 'numeric',
+			month: 'short',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit'
+		})
 	}
 
 	$effect(() => {
@@ -364,6 +388,67 @@
 	// Toggle dark mode
 	function toggleDarkMode() {
 		isDarkMode = !isDarkMode
+	}
+
+	function initializeAiModelSettings() {
+		const savedModel = localStorage.getItem(AI_MODEL_STORAGE_KEY)
+		const nextModel = sanitizeAiChatModel(savedModel || DEFAULT_AI_CHAT_MODEL)
+		const savedReasoningEffort = localStorage.getItem(AI_REASONING_STORAGE_KEY)
+
+		selectedAiModel = nextModel
+		selectedAiReasoningEffort = sanitizeReasoningEffort(nextModel, savedReasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+		aiModelSettingsReady = true
+	}
+
+	$effect(() => {
+		if (!aiModelSettingsReady) return
+		localStorage.setItem(AI_MODEL_STORAGE_KEY, selectedAiModel)
+		localStorage.setItem(AI_REASONING_STORAGE_KEY, selectedAiReasoningEffort)
+	})
+
+	function toggleAiModelSettings() {
+		showAiModelSettings = !showAiModelSettings
+	}
+
+	function closeAiModelSettings() {
+		showAiModelSettings = false
+	}
+
+	function selectAiModel(model) {
+		selectedAiModel = sanitizeAiChatModel(model)
+		selectedAiReasoningEffort = sanitizeReasoningEffort(selectedAiModel, selectedAiReasoningEffort)
+	}
+
+	function selectAiReasoningEffort(reasoningEffort) {
+		selectedAiReasoningEffort = sanitizeReasoningEffort(selectedAiModel, reasoningEffort)
+	}
+
+	function getCurrentAiModelPreference() {
+		return {
+			selectedModel: selectedAiModel,
+			reasoningEffort: selectedAiReasoningEffort
+		}
+	}
+
+	function getSupportedReasoningOptionObjects() {
+		const supportedEfforts = new Set(getSupportedReasoningEfforts(selectedAiModel))
+		return AI_REASONING_EFFORT_OPTIONS.filter(option => supportedEfforts.has(option.value))
+	}
+
+	function highlightEditingParagraphSaveWarning() {
+		if (editingParagraphSaveWarningTimer) {
+			clearTimeout(editingParagraphSaveWarningTimer)
+		}
+
+		showEditingParagraphSaveWarning = true
+		editingParagraphSaveWarningTimer = setTimeout(() => {
+			showEditingParagraphSaveWarning = false
+			editingParagraphSaveWarningTimer = null
+		}, 2200)
+	}
+
+	function hasPendingParagraphEdit() {
+		return editingParagraphIndex !== null
 	}
 
 	function getStudentPhoto(student) {
@@ -878,16 +963,12 @@
 				const parsed = JSON.parse(data)
 				let loadedParagraphs = parsed.paragraphs || []
 				
-				// STRICT DATA SEPARATION RULE 1: When no student is selected, only load assignment data
-				// Filter out any student paragraphs to maintain strict separation
-				if (!currentStudentId) {
-					loadedParagraphs = loadedParagraphs.filter(para => {
-						// Filter out paragraphs with _source: 'student' or modified IDs ending with '_student'
-						if (para._source === 'student') return false
-						if (para.id && para.id.endsWith('_student')) return false
-						return true
-					})
-				}
+				// STRICT DATA SEPARATION: Assessment storage must never include student-owned paragraphs
+				loadedParagraphs = loadedParagraphs.filter(para => {
+					if (para?._source === 'student') return false
+					if (para?.id && para.id.endsWith('_student')) return false
+					return true
+				})
 				
 				// Debug: Check for duplicates before processing
 				console.log('ASSIGNMENT DEBUG: Raw loaded paragraphs:', {
@@ -920,8 +1001,14 @@
 					duplicatesRemoved: loadedParagraphs.length - uniqueParagraphs.length
 				})
 				
-				// Ensure paragraphs have IDs (migration for existing data)
-				paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
+				// Ensure paragraphs have IDs + migrate legacy fields
+				paragraphs = ensureParagraphsHaveIds(uniqueParagraphs, 'assignment').map((paragraph, index) => ({
+					...paragraph,
+					_source: 'assignment',
+					createdAt: paragraph.createdAt || new Date().toISOString(),
+					originalIndex: index,
+					fullText: paragraph.text || paragraph.fullText || ''
+				}))
 				assignmentParagraphSnapshot = [...paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))]
 				
 				// Check for duplicate IDs after loading and fixing
@@ -1010,16 +1097,12 @@
 					const parsed = JSON.parse(data)
 					let loadedParagraphs = parsed.paragraphs || []
 					
-					// STRICT DATA SEPARATION RULE 1: When no student is selected, only load assignment data
-					// Filter out any student paragraphs to maintain strict separation
-					if (!currentStudentId) {
-						loadedParagraphs = loadedParagraphs.filter(para => {
-							// Filter out paragraphs with _source: 'student' or modified IDs ending with '_student'
-							if (para._source === 'student') return false
-							if (para.id && para.id.endsWith('_student')) return false
-							return true
-						})
-					}
+					// STRICT DATA SEPARATION: Assessment storage must never include student-owned paragraphs
+					loadedParagraphs = loadedParagraphs.filter(para => {
+						if (para?._source === 'student') return false
+						if (para?.id && para.id.endsWith('_student')) return false
+						return true
+					})
 					
 					// Debug: Check for duplicates before processing
 					console.log('ASSIGNMENT DEBUG (localStorage): Raw loaded paragraphs:', {
@@ -1052,8 +1135,14 @@
 						duplicatesRemoved: loadedParagraphs.length - uniqueParagraphs.length
 					})
 					
-					// Ensure paragraphs have IDs (migration for existing data)
-					paragraphs = ensureParagraphsHaveIds(uniqueParagraphs)
+					// Ensure paragraphs have IDs + migrate legacy fields
+					paragraphs = ensureParagraphsHaveIds(uniqueParagraphs, 'assignment').map((paragraph, index) => ({
+						...paragraph,
+						_source: 'assignment',
+						createdAt: paragraph.createdAt || new Date().toISOString(),
+						originalIndex: index,
+						fullText: paragraph.text || paragraph.fullText || ''
+					}))
 					assignmentParagraphSnapshot = [...paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))]
 					
 					// Check for duplicate IDs after loading and fixing
@@ -1181,6 +1270,7 @@
 		showPromptPreviewModal = false
 		promptPreviewTitle = ''
 		promptPreviewMessages = []
+		promptPreviewRequestPayload = null
 		activeFeedbackTab = 'enter-data'
 		quickAddToAssessmentWhenStudentSelected = false
 
@@ -1262,6 +1352,12 @@
 		const { force = false, skipSelections = false } = options
 		if (!currentSubjectId || !currentAssessmentId) return
 
+		if (hasPendingParagraphEdit()) {
+			highlightEditingParagraphSaveWarning()
+			showSuccessNotification('⚠️ Cannot save while a paragraph is being edited. Save or cancel that paragraph first.')
+			return
+		}
+
 		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
 			clearTimeout(quickAddInstructionSaveTimers[key])
 			delete quickAddInstructionSaveTimers[key]
@@ -1295,12 +1391,20 @@
 			? assignmentParagraphSnapshot.filter(paragraph => !isStudentOwnedParagraph(paragraph))
 			: paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))
 
+		const normalizedAssessmentParagraphs = ensureParagraphsHaveIds(paragraphsForAssessmentSave, 'assignment').map((paragraph, index) => ({
+			...paragraph,
+			_source: 'assignment',
+			createdAt: paragraph.createdAt || new Date().toISOString(),
+			originalIndex: index,
+			fullText: paragraph.text || paragraph.fullText || ''
+		}))
+
 		if (!currentStudentId) {
-			assignmentParagraphSnapshot = [...paragraphsForAssessmentSave]
+			assignmentParagraphSnapshot = [...normalizedAssessmentParagraphs]
 		}
 
 		const data = {
-			paragraphs: paragraphsForAssessmentSave,
+			paragraphs: normalizedAssessmentParagraphs,
 			selectedParagraphs: Array.from(currentStudentId && (force || skipSelections) ? new Set() : selectedParagraphs),
 			// Assignment data should never contain student-specific information
 			studentName: '',
@@ -1505,6 +1609,7 @@
 			text: paragraphText,
 			color: selectedColor || undefined,
 			_source: currentStudentId ? 'student' : 'assignment',
+			createdAt: new Date().toISOString(),
 			subjectId: currentSubjectId, // STRICT DATA ISOLATION: Add subject context
 			assessmentId: currentAssessmentId // STRICT DATA ISOLATION: Add assessment context
 		}
@@ -1592,13 +1697,13 @@
 		improvingText = { ...improvingText, [categoryName]: true }
 
 		try {
-			const improvedText = await improveEnglish(text, answerInstructions)
+			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference())
 			// Strip any HTML tags that might have been introduced
-			const cleanedText = stripHtmlTags(improvedText)
+			const cleanedText = stripHtmlTags(result.improvedText || '')
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			// Mark this text as AI-improved for styling
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
-			showSuccessNotification('✨ Text improved successfully!')
+			showSuccessNotification(`✨ Text improved with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)}).`)
 		} catch (error) {
 			console.error('Failed to improve text:', error)
 			showSuccessNotification(`❌ Failed to improve text: ${error.message}`)
@@ -2037,7 +2142,8 @@
 				assessmentParagraphs,
 				priorEvaluations,
 				vectorIndex,
-				globalSystemInstructions: globalAiSystemInstructions
+				globalSystemInstructions: globalAiSystemInstructions,
+				modelPreference: getCurrentAiModelPreference()
 			})
 
 			const cleanedText = stripHtmlTags(result.improvedText || '').trim()
@@ -2047,7 +2153,7 @@
 
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
-			showSuccessNotification(`✨ Feedback expanded with RAG (${result.retrievalMode || 'context'}). Review before adding.`)
+			showSuccessNotification(`✨ Feedback expanded with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)} / ${result.retrievalMode || 'context'}).`)
 		} catch (error) {
 			console.error('Failed to improve text with RAG:', error)
 			showSuccessNotification(`❌ Failed to improve with RAG: ${error.message}`)
@@ -2092,7 +2198,8 @@
 				priorEvaluations,
 				vectorIndex,
 				globalSystemInstructions: globalAiSystemInstructions,
-				answerInstructions
+				answerInstructions,
+				modelPreference: getCurrentAiModelPreference()
 			})
 
 			const cleanedText = stripHtmlTags(result.reportText || '').trim()
@@ -2102,7 +2209,7 @@
 
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
-			showSuccessNotification(`✅ Reports check generated (${result.retrievalMode || 'context'}).`)
+			showSuccessNotification(`✅ Reports check generated with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)} / ${result.retrievalMode || 'context'}).`)
 		} catch (error) {
 			console.error('Failed to run reports check:', error)
 			showSuccessNotification(`❌ Reports check failed: ${error.message}`)
@@ -2152,7 +2259,8 @@
 				evidenceNotes,
 				assessmentParagraphs,
 				priorEvaluations,
-				vectorIndex
+				vectorIndex,
+				modelPreference: getCurrentAiModelPreference()
 			})
 
 			const reviewItems = result.criteria.map(criterionDraft => {
@@ -2210,6 +2318,19 @@
 		showPromptPreviewModal = false
 		promptPreviewTitle = ''
 		promptPreviewMessages = []
+		promptPreviewRequestPayload = null
+	}
+
+	function buildPromptPreviewRequestPayload(messages = [], temperature = 0.3, maxTokens = 1000) {
+		const modelPreference = getCurrentAiModelPreference()
+		return {
+			endpoint: 'https://api.openai.com/v1/chat/completions',
+			model: modelPreference.selectedModel,
+			reasoning_effort: modelPreference.reasoningEffort,
+			temperature,
+			max_tokens: maxTokens,
+			messages
+		}
 	}
 
 	async function viewFinalPrompt(categoryName, mode = 'ai') {
@@ -2223,7 +2344,9 @@
 
 		try {
 			if (mode === 'ai') {
-				promptPreviewMessages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
+				const messages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
+				promptPreviewMessages = messages
+				promptPreviewRequestPayload = buildPromptPreviewRequestPayload(messages, 0.3, 1000)
 				promptPreviewTitle = `Improve Prompt - ${categoryName}`
 				showPromptPreviewModal = true
 				return
@@ -2247,6 +2370,7 @@
 			})
 
 			promptPreviewMessages = preview.messages
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			showPromptPreviewModal = true
 		} catch (error) {
@@ -2297,6 +2421,7 @@
 			text: paragraphText,
 			color: undefined,
 			_source: currentStudentId && !addToAssessment ? 'student' : 'assignment',
+			createdAt: new Date().toISOString(),
 			subjectId: currentSubjectId,
 			assessmentId: currentAssessmentId
 		}
@@ -2616,8 +2741,12 @@
 		}
 	}
 
-	function sendParagraphToAiInput(paragraphText, categoryName, knowledgeAreaName = '') {
-		copyToQuickAdd(paragraphText, categoryName)
+	function sendParagraphToAiInput(paragraphText, categoryName, knowledgeAreaName = '', paragraphId = '') {
+		if (paragraphId && selectedParagraphs.has(paragraphId)) {
+			selectedParagraphs = new Set([...selectedParagraphs].filter(id => id !== paragraphId))
+		}
+
+		copyToQuickAdd(paragraphText, categoryName, paragraphId)
 		if (knowledgeAreaName && knowledgeAreaName !== 'No Knowledge Area') {
 			quickAddKnowledgeArea = {
 				...quickAddKnowledgeArea,
@@ -2628,12 +2757,15 @@
 	}
 
 	// Copy paragraph text to quick-add box for customization
-	function copyToQuickAdd(paragraphText, categoryName) {
+	function copyToQuickAdd(paragraphText, categoryName, paragraphId = '') {
 		// Extract the main text without category prefix and knowledge area suffix
 		const mainText = extractMainTextFromParagraph(paragraphText)
 
 		// Remove the source paragraph from the list since it will be re-added after editing
 		const paragraphIndex = paragraphs.findIndex(p => {
+			if (paragraphId && p?.id === paragraphId) {
+				return true
+			}
 			const pText = typeof p === 'string' ? p : p.text
 			return pText === paragraphText
 		})
@@ -3685,15 +3817,24 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	function handleGlobalPointerDown(event) {
 		const container = studentPickerContainer
-		if (!showStudentPicker || !container) return
-		if (event.target instanceof Node && !container.contains(event.target)) {
+		if (showStudentPicker && container && event.target instanceof Node && !container.contains(event.target)) {
 			closeStudentPicker()
+		}
+
+		if (showAiModelSettings && aiModelSettingsContainer && event.target instanceof Node && !aiModelSettingsContainer.contains(event.target)) {
+			closeAiModelSettings()
 		}
 	}
 
 	function handleGlobalKeyDown(event) {
-		if (event.key === 'Escape' && showStudentPicker) {
+		if (event.key !== 'Escape') return
+
+		if (showStudentPicker) {
 			closeStudentPicker()
+		}
+
+		if (showAiModelSettings) {
+			closeAiModelSettings()
 		}
 	}
 
@@ -3934,12 +4075,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// Sort students alphabetically by display name
 	let sortedStudents = $derived(
-		[...students].sort((a, b) => a.displayName.localeCompare(b.displayName))
+		[...(Array.isArray(students) ? students : [])].sort((a, b) => (a?.displayName || '').localeCompare(b?.displayName || ''))
 	)
 
 	// Save student evaluation data
 	async function saveStudentEvaluation() {
 		if (!currentStudentId || !currentAssessmentId) return
+
+		if (hasPendingParagraphEdit()) {
+			highlightEditingParagraphSaveWarning()
+			showSuccessNotification('⚠️ Cannot save while a paragraph is being edited. Save or cancel that paragraph first.')
+			return
+		}
 
 		// STRICT SAVING CRITERIA 2: Only save to Student if student IS selected
 		console.log('STRICT SAVING CRITERIA: Saving to student file - student selected')
@@ -3957,32 +4104,43 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			return
 		}
 
-		// Ensure per-answer instructions are persisted to assignment when saving student data
-		await saveAssessmentData({ force: true, skipSelections: true })
+		try {
+			// Ensure per-answer instructions are persisted to assignment when saving student data
+			await saveAssessmentData({ force: true, skipSelections: true })
 
-		// Save selected paragraphs under student properties (replace old selection data)
-		console.log('💾 SAVING: Selected paragraphs to student properties:', {
-			studentId: currentStudentId,
-			assessmentId: currentAssessmentId,
-			selectedParagraphs: Array.from(selectedParagraphs)
-		})
-		
-		students = studentsService.updateStudentSelectedParagraphs(
-			students, 
-			currentStudentId, 
-			currentAssessmentId, 
-			Array.from(selectedParagraphs)
-		)
-		
-		// Save updated students data
-		await studentsService.saveStudents(students)
-		console.log('✅ SAVED: Student data updated with new selections')
+			if (!Array.isArray(students)) {
+				console.error('Students state is invalid during save:', students)
+				showSuccessNotification('❌ Failed to save student data: student list is corrupted. Please reopen the assessment.')
+				return
+			}
 
-		const saveSucceeded = await persistCurrentStudentEvaluationData()
+			// Save selected paragraphs under student properties (replace old selection data)
+			console.log('💾 SAVING: Selected paragraphs to student properties:', {
+				studentId: currentStudentId,
+				assessmentId: currentAssessmentId,
+				selectedParagraphs: Array.from(selectedParagraphs)
+			})
+			
+			students = studentsService.updateStudentSelectedParagraphs(
+				students,
+				currentStudentId,
+				currentAssessmentId,
+				Array.from(selectedParagraphs)
+			)
+			
+			// Save updated students data
+			await studentsService.saveStudents(students)
+			console.log('✅ SAVED: Student data updated with new selections')
 
-		if (saveSucceeded) {
-			showSuccessNotification(getMotivationalMessage('student'))
-			await handleStudentSaveCompletion()
+			const saveSucceeded = await persistCurrentStudentEvaluationData()
+
+			if (saveSucceeded) {
+				showSuccessNotification(getMotivationalMessage('student'))
+				await handleStudentSaveCompletion()
+			}
+		} catch (error) {
+			console.error('Failed to save student evaluation:', error)
+			showSuccessNotification(`❌ Failed to save student data: ${error.message || 'Unknown error'}`)
 		}
 	}
 
@@ -4037,7 +4195,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.log('🔄 TRANSFER: Starting data transfer from', currentStudentId, 'to', targetStudentId)
 			const paragraphsForContext = ensureParagraphsHaveIds(paragraphs).map((para, index) => {
 				const paragraphObject = typeof para === 'string'
-					? { id: generateId(para, index), text: para, color: '', _source: 'student' }
+					? { id: generateId(para, index), text: para, color: '', _source: 'student', createdAt: new Date().toISOString() }
 					: { ...para }
 
 				return {
@@ -4531,6 +4689,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				if (assignmentOriginal && typeof assignmentOriginal === 'object') {
 					merged.push({
 						...assignmentOriginal,
+						createdAt: assignmentOriginal.createdAt || new Date().toISOString(),
 						_source: 'merged' // Mark as merged content
 					})
 				} else {
@@ -4538,6 +4697,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						id: generateId(assignmentPara.text, i),
 						text: assignmentPara.text,
 						color: assignmentPara.color,
+						createdAt: new Date().toISOString(),
 						_source: 'merged' // Mark as merged content
 					})
 				}
@@ -4552,6 +4712,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				if (assignmentOriginal && typeof assignmentOriginal === 'object') {
 					merged.push({
 						...assignmentOriginal,
+						createdAt: assignmentOriginal.createdAt || new Date().toISOString(),
 						_source: 'assignment'
 					})
 				} else {
@@ -4559,6 +4720,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						id: generateId(assignmentPara.text, i),
 						text: assignmentPara.text,
 						color: assignmentPara.color,
+						createdAt: new Date().toISOString(),
 						_source: 'assignment'
 					})
 				}
@@ -4578,6 +4740,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				merged.push({
 					...studentOriginal,
 					id: studentOriginal.id + '_student', // Modify ID to avoid conflicts
+					createdAt: studentOriginal.createdAt || new Date().toISOString(),
 					_source: 'student'
 				})
 			} else {
@@ -4585,6 +4748,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					id: generateId(studentPara.text, i) + '_student',
 					text: studentPara.text,
 					color: studentPara.color,
+					createdAt: new Date().toISOString(),
 					_source: 'student'
 				})
 			}
@@ -4631,12 +4795,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					id: currentId,
 					text: para,
 					color: '',
+					createdAt: new Date().toISOString(),
 					originalIndex: index,
 					fullText: para
 				}
 			} else {
 				return {
 					...para,
+					createdAt: para.createdAt || new Date().toISOString(),
 					id: currentId
 				}
 			}
@@ -4754,24 +4920,34 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		}
 
-		// Add current paragraphs to student paragraphs (avoid duplicates)
-		const currentParagraphs = paragraphs.map(para => ({
+		// Add only student-owned paragraphs to student storage (avoid assignment leakage)
+		const currentParagraphs = ensureParagraphsHaveIds(
+			paragraphs.filter(para => isStudentOwnedParagraph(para)),
+			'student'
+		).map(para => ({
 			...para,
-			subjectId: currentSubjectId, // STRICT DATA ISOLATION: Add subject context
-			assessmentId: currentAssessmentId // STRICT DATA ISOLATION: Add assessment context
+			_source: 'student',
+			createdAt: para.createdAt || new Date().toISOString(),
+			subjectId: currentSubjectId,
+			assessmentId: currentAssessmentId
 		}))
 		
 		// Migrate legacy paragraphs by adding missing subjectId/assessmentId
-		const migratedExistingParagraphs = existingStudentParagraphs.map(para => {
+		const migratedExistingParagraphs = ensureParagraphsHaveIds(existingStudentParagraphs, 'student').map(para => {
+			const migrated = {
+				...para,
+				_source: 'student',
+				createdAt: para.createdAt || new Date().toISOString()
+			}
 			if (!para.subjectId || !para.assessmentId) {
 				console.log('MIGRATION: Adding subjectId/assessmentId to legacy paragraph:', para.text?.substring(0, 50))
 				return {
-					...para,
+					...migrated,
 					subjectId: currentSubjectId,
 					assessmentId: currentAssessmentId
 				}
 			}
-			return para
+			return migrated
 		})
 		
 		const combinedParagraphs = [...migratedExistingParagraphs]
@@ -4817,7 +4993,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				const allStudentParagraphs = studentData.paragraphs || []
 				
 				// STRICT DATA ISOLATION: Filter paragraphs by current subject and assessment
-				// CRITICAL FIX: Only include paragraphs that match current context
 				const filteredParagraphs = allStudentParagraphs.filter(para => {
 					// If paragraph has subjectId and assessmentId, use strict filtering
 					if (para.subjectId && para.assessmentId) {
@@ -4833,13 +5008,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						}
 						return matches
 					}
-					// CRITICAL FIX: Exclude legacy paragraphs without context to prevent contamination
-					console.log('FILTERED OUT: Legacy paragraph without subjectId/assessmentId:', para.text?.substring(0, 50))
-					return false
+					// Legacy migration path: include context-free paragraphs and stamp context on next save
+					console.log('LEGACY DATA: Including paragraph without subjectId/assessmentId for migration:', para.text?.substring(0, 50))
+					return true
 				})
 				
 				// Ensure paragraphs have IDs (migration for existing data)
-				paragraphs = ensureParagraphsHaveIds(filteredParagraphs)
+				paragraphs = ensureParagraphsHaveIds(filteredParagraphs, 'student')
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -4862,7 +5037,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				})
 				
 				// Ensure paragraphs have IDs (migration for existing data)
-				paragraphs = ensureParagraphsHaveIds(filteredParagraphs)
+				paragraphs = ensureParagraphsHaveIds(filteredParagraphs, 'student')
 			}
 		}
 	}
@@ -4880,7 +5055,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				const allStudentParagraphs = studentData.paragraphs || []
 				
 				// STRICT DATA ISOLATION: Filter paragraphs by current subject and assessment
-				// CRITICAL FIX: Only include paragraphs that match current context
 				const filteredParagraphs = allStudentParagraphs.filter(para => {
 					// If paragraph has subjectId and assessmentId, use strict filtering
 					if (para.subjectId && para.assessmentId) {
@@ -4896,13 +5070,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						}
 						return matches
 					}
-					// CRITICAL FIX: Exclude legacy paragraphs without context to prevent contamination
-					console.log('MERGE FILTERED OUT: Legacy paragraph without subjectId/assessmentId:', para.text?.substring(0, 50))
-					return false
+					// Legacy migration path: include context-free paragraphs and stamp context on next save
+					console.log('LEGACY DATA: Including paragraph without subjectId/assessmentId for migration:', para.text?.substring(0, 50))
+					return true
 				})
 				
 				// Ensure paragraphs have IDs (migration for existing data)
-				return ensureParagraphsHaveIds(filteredParagraphs)
+				return ensureParagraphsHaveIds(filteredParagraphs, 'student')
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -4925,7 +5099,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				})
 				
 				// Ensure paragraphs have IDs (migration for existing data)
-				return ensureParagraphsHaveIds(filteredParagraphs)
+				return ensureParagraphsHaveIds(filteredParagraphs, 'student')
 			}
 		}
 		return []
@@ -5069,6 +5243,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			selectedParagraphs = new Set(selectedParagraphs)
 		}
 
+		showEditingParagraphSaveWarning = false
+		if (editingParagraphSaveWarningTimer) {
+			clearTimeout(editingParagraphSaveWarningTimer)
+			editingParagraphSaveWarningTimer = null
+		}
+
 		editingParagraphIndex = index
 		// Extract only the main text content (without category and knowledge area prefixes)
 		const extractedText = extractMainTextFromParagraph(paragraphs[index].text)
@@ -5079,6 +5259,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	function cancelEditParagraph() {
 		editingParagraphIndex = null
 		editingParagraphText = ''
+		showEditingParagraphSaveWarning = false
+		if (editingParagraphSaveWarningTimer) {
+			clearTimeout(editingParagraphSaveWarningTimer)
+			editingParagraphSaveWarningTimer = null
+		}
 	}
 
 	function saveEditParagraph() {
@@ -5092,6 +5277,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			paragraphs[editingParagraphIndex].text = newText
 			editingParagraphIndex = null
 			editingParagraphText = ''
+			showEditingParagraphSaveWarning = false
+			if (editingParagraphSaveWarningTimer) {
+				clearTimeout(editingParagraphSaveWarningTimer)
+				editingParagraphSaveWarningTimer = null
+			}
 			
 			// Save to both assignment and student storage
 			saveAssessmentData()
@@ -5182,6 +5372,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			// Get the source information from the paragraph object
 			const paragraphObj = paragraphs.find(p => p.id === id)
 			const source = paragraphObj?._source
+			const createdAt = paragraphObj?.createdAt
 			// Extract category and knowledge area from paragraph text
 			let category = ''
 			let knowledgeArea = ''
@@ -5281,6 +5472,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				text: cleanText,
 				color,
 				id,
+				createdAt,
 				originalIndex,
 				fullText: paragraph, // Keep original for PDF
 				source: source, // Include source information
@@ -5315,7 +5507,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	function resolveParagraphMainIndex(entry) {
 		if (!entry) return -1
 		if (entry.id !== undefined && entry.id !== null && entry.id !== '') {
-			return paragraphs.findIndex(paragraph => paragraph?.id === entry.id)
+			const byId = paragraphs.findIndex(paragraph => paragraph?.id === entry.id)
+			if (byId !== -1) return byId
 		}
 		return Number.isInteger(entry.originalIndex) ? entry.originalIndex : -1
 	}
@@ -5331,7 +5524,23 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return -1
 	}
 
-	function getSelectedTextInVisualOrder() {
+	function getSelectedTextInVisualOrder(options = {}) {
+		const skipParagraphIds = options?.skipParagraphIds instanceof Set ? options.skipParagraphIds : null
+		const hideHeaderMarks = Boolean(options?.hideHeaderMarks)
+		const normalizeContentForPdf = (value) => {
+			const raw = String(value || '')
+			const tempDiv = document.createElement('div')
+			tempDiv.innerHTML = raw
+			let text = (tempDiv.textContent || tempDiv.innerText || '')
+			// If literal tag text remains (e.g., <div>...</div>), strip common HTML tags as plain text.
+			text = text
+				.replace(/<\/?(div|p|span|br|strong|b|em|i|u|ul|ol|li|h[1-6])[^>]*>/gi, ' ')
+				.replace(/\s*\n\s*/g, '\n')
+				.replace(/\n{3,}/g, '\n\n')
+				.replace(/[ \t]{2,}/g, ' ')
+				.trim()
+			return text
+		}
 		console.log('🔍 DEBUG getSelectedTextInVisualOrder:', {
 			selectedParagraphs: Array.from(selectedParagraphs),
 			selectedCount: selectedParagraphs.size,
@@ -5355,6 +5564,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				paragraphsInArea.forEach((paragraphObj, paraIndex) => {
 					// Only process selected paragraphs
 					if (selectedParagraphs.has(paragraphObj.id)) {
+						if (skipParagraphIds && skipParagraphIds.has(paragraphObj.id)) {
+							console.log(`    ⏭️ Skipping table-covered paragraph ${paraIndex}: ${paragraphObj.id}`)
+							return
+						}
 						console.log(`    ✅ Processing selected paragraph ${paraIndex}: ${paragraphObj.id}`)
 						
 						const paragraphText = paragraphObj.fullText || paragraphObj.text
@@ -5390,12 +5603,21 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								}
 							}
 						}
+
+						content = normalizeContentForPdf(content)
+						if (!content) {
+							console.log(`    ⏭️ Skipping empty normalized content for paragraph ${paragraphObj.id}`)
+							return
+						}
 						
 						// Add category header if this is the first time we see this category
 						if (!processedCategories.has(categoryName)) {
+							if (result.length > 0) {
+								result.push('')
+							}
 							const categoryMarksValue = categoryMarks[categoryName] || 0
-							const marksText = categoryMarksValue > 0 ? ` [${categoryMarksValue} MARKS]` : ''
-							result.push(`${categoryName}: ${marksText}`)
+							const marksText = (!hideHeaderMarks && categoryMarksValue > 0) ? ` [${categoryMarksValue} MARKS]` : ''
+							result.push(`${categoryName}:${marksText}`)
 							processedCategories.add(categoryName)
 							console.log(`    📝 Added category header: ${categoryName}`)
 						}
@@ -5408,7 +5630,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			})
 		})
 		
-		const finalText = result.join('\n\n\n')
+		const finalText = result.join('\n')
 		console.log('🔍 getSelectedTextInVisualOrder result:', {
 			length: finalText.length,
 			text: finalText.substring(0, 200) + (finalText.length > 200 ? '...' : '')
@@ -6187,16 +6409,87 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		yPosition = Math.max(margin, afterTableY - gapAfterTable)
 
 		const hasAssessmentHtml = (assessmentHtml || '').trim().length > 0
-		const hasRichFormatting = /<[^>]+>/.test(selectedText)
+		const hasMeaningfulRichFormatting = (textValue) => {
+			const value = String(textValue || '')
+			if (!value) return false
+			if (/<(strong|b|em|i|u)\b/i.test(value)) return true
+			if (/<(span|font)\b[^>]*style\s*=\s*["'][^"']*(color|font-weight|font-style|text-decoration)/i.test(value)) return true
+			return false
+		}
+		const stripHtmlKeepLineBreaks = (textValue) => {
+			const tempDiv = document.createElement('div')
+			tempDiv.innerHTML = String(textValue || '').replace(/<br\s*\/?>/gi, '\n')
+			return (tempDiv.textContent || tempDiv.innerText || '').replace(/\n{3,}/g, '\n\n')
+		}
+		const hasRichFormatting = hasMeaningfulRichFormatting(selectedText)
+		if (!hasRichFormatting && /<[^>]+>/.test(selectedText)) {
+			selectedText = stripHtmlKeepLineBreaks(selectedText)
+		}
 		const normalizeCategoryName = (name) => (name || '').toString().replace(/\u00a0/g, ' ').trim().toLowerCase()
 
 		const categoriesWithMarks = new Set()
 		const mappedCategories = new Set()
-		const categoriesWithParagraphMarks = new Set()
-		const categoriesWithUnmarkedSelections = new Set()
+		const categoriesWithUncoveredSelections = new Set()
 		const paragraphInfoIndex = buildParagraphInfoIndex()
 		const paragraphsToSkip = new Set()
+		const coveredSelectedParagraphIds = new Set()
 		const normalizeLine = (val) => (val || '').toString().replace(/\u00a0/g, ' ').trim()
+		const toComparableParagraphBody = (value) => {
+			let text = cleanParagraphTextForDisplay(String(value || ''))
+			if (text.includes(': ')) {
+				const parts = text.split(': ')
+				if (parts.length >= 2) {
+					text = parts.slice(1).join(': ')
+				}
+			}
+			return normalizeLine(text)
+		}
+		const parseCategoryHeaderLine = (lineValue) => {
+			const match = String(lineValue || '').trim().match(/^(.+?):(?:\s*\[(.+?)\])?\s*$/)
+			if (!match) return null
+			const category = (match[1] || '').trim()
+			if (!category) return null
+			const suffix = (match[2] || '').trim()
+			return {
+				category,
+				display: suffix ? `${category}: [${suffix}]` : `${category}:`
+			}
+		}
+
+		const groupedParagraphsForCoverage = getGroupedParagraphs()
+		const getCategoryParagraphsInOrder = (normalizedCategory) => {
+			const result = []
+			groupedParagraphsForCoverage.forEach(group => {
+				if (normalizeCategoryName(group.category) !== normalizedCategory) return
+				Object.values(group.knowledgeAreas || {}).forEach(list => {
+					list.forEach(p => result.push(p))
+				})
+			})
+			return result
+		}
+
+		const coveredParagraphPositions = new Set()
+		const activeTableColumnMap = currentAssessment?.tableColumnMarkMap || tableColumnMarkMap || {}
+		Object.entries(activeTableColumnMap).forEach(([positionKey, columnValue]) => {
+			const position = parseInt(positionKey, 10)
+			const mappedColumn = parseInt(columnValue, 10)
+			if (Number.isFinite(position) && position > 0 && Number.isFinite(mappedColumn) && mappedColumn > 0) {
+				coveredParagraphPositions.add(position)
+			}
+		})
+
+		const getParagraphPositionInCategory = (selectedId, selectedInfo, categoryParagraphs) => {
+			let index = categoryParagraphs.findIndex(p => p.id === selectedId)
+			if (index !== -1) return index + 1
+
+			const selectedBody = toComparableParagraphBody(selectedInfo?.fullText || selectedInfo?.text || '')
+			if (!selectedBody) return -1
+
+			index = categoryParagraphs.findIndex(p => toComparableParagraphBody(p.fullText || p.text || '') === selectedBody)
+			if (index !== -1) return index + 1
+
+			return -1
+		}
 
 		if (hasAssessmentHtml) {
 			Object.entries(categoryMarks || {}).forEach(([name, val]) => {
@@ -6210,7 +6503,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			})
 		}
 
-		// Track categories that have selected paragraphs without a mark badge/value
+		// Skip only paragraphs whose positions are represented by the table mapping
 		selectedParagraphs.forEach(id => {
 			const info = paragraphInfoIndex[id]
 			const para = info || paragraphs.find(p => p.id === id)
@@ -6218,33 +6511,45 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const text = typeof para === 'string' ? para : para.text || ''
 			const categoryText = info?.category || (text.includes(': ') ? text.split(': ')[0] : '')
 			const normalized = normalizeCategoryName(categoryText)
-			const markInfo = info?.markInfo || (typeof para === 'object' ? para.markInfo : undefined)
-			const hasNumericMark = !!markInfo && [markInfo.numericValue, markInfo.value, markInfo.min, markInfo.max]
-				.some(val => Number.isFinite(parseNumericMarkValue(val)))
-			const hasRangeMark = !!markInfo && !!parseNumericRange(markInfo.value)
-			const hasParaMark = hasNumericMark || hasRangeMark
-			const categoryCovered = matchedCategoriesFromTable.has(normalized) || mappedCategories.has(normalized) || categoriesWithMarks.has(normalized) || categoriesWithParagraphMarks.has(normalized)
-			if (categoryCovered && hasParaMark) {
-				const cleaned = cleanParagraphTextForDisplay(info?.fullText || text)
-				const normalizedText = normalizeLine(cleaned)
+			const categoryCovered = matchedCategoriesFromTable.has(normalized) || mappedCategories.has(normalized) || categoriesWithMarks.has(normalized)
+			if (!categoryCovered) {
+				categoriesWithUncoveredSelections.add(normalized)
+				return
+			}
+
+			const categoryParagraphs = getCategoryParagraphsInOrder(normalized)
+			const paragraphPosition = getParagraphPositionInCategory(id, info || para, categoryParagraphs)
+			const isCoveredByTablePosition = coveredParagraphPositions.size > 0
+				? (paragraphPosition > 0 ? coveredParagraphPositions.has(paragraphPosition) : true)
+				: false
+
+			if (isCoveredByTablePosition) {
+				coveredSelectedParagraphIds.add(id)
+				const normalizedText = normalizeLine(cleanParagraphTextForDisplay(info?.fullText || text))
 				const normalizedRaw = normalizeLine(text)
+				const normalizedBodyFromFull = toComparableParagraphBody(info?.fullText || text)
+				const normalizedBodyFromRaw = toComparableParagraphBody(text)
 				if (normalizedText.length > 0) paragraphsToSkip.add(normalizedText)
 				if (normalizedRaw.length > 0) paragraphsToSkip.add(normalizedRaw)
-			}
-			if (hasParaMark) {
-				categoriesWithParagraphMarks.add(normalized)
+				if (normalizedBodyFromFull.length > 0) paragraphsToSkip.add(normalizedBodyFromFull)
+				if (normalizedBodyFromRaw.length > 0) paragraphsToSkip.add(normalizedBodyFromRaw)
 			} else {
-				categoriesWithUnmarkedSelections.add(normalized)
+				categoriesWithUncoveredSelections.add(normalized)
 			}
 		})
 
+		if (hasAssessmentHtml) {
+			selectedText = getSelectedTextInVisualOrder({
+				skipParagraphIds: coveredSelectedParagraphIds,
+				hideHeaderMarks: true
+			})
+		}
+
 		const isCategoryCoveredByTable = (normalizedCategory) => {
 			if (!hasAssessmentHtml) return false
-			// If any selected paragraph in this category has no mark/range, render it under the table
-			if (categoriesWithUnmarkedSelections.has(normalizedCategory)) return false
 			// Table match/mapping or entered marks/paragraph marks treat it as covered
 			if (matchedCategoriesFromTable.has(normalizedCategory) || mappedCategories.has(normalizedCategory)) return true
-			if (categoriesWithMarks.has(normalizedCategory) || categoriesWithParagraphMarks.has(normalizedCategory)) return true
+			if (categoriesWithMarks.has(normalizedCategory)) return true
 			return false
 		}
 
@@ -6283,10 +6588,22 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			if (trimmed === '' && (textLines[textLines.length - 1] || '').trim() === '') return
 			textLines.push(line)
 		})
+
+		const hasRenderableCategoryContent = (headerIndex) => {
+			for (let j = headerIndex + 1; j < textLines.length; j += 1) {
+				const lookaheadLine = textLines[j]
+				const lookaheadTrimmed = lookaheadLine.trim()
+				if (!lookaheadTrimmed) continue
+				if (parseCategoryHeaderLine(lookaheadTrimmed)) break
+				if (paragraphsToSkip.has(normalizeLine(lookaheadLine))) continue
+				return true
+			}
+			return false
+		}
 		
-		const blankLineGap = () => lineHeight * 0.35
-		const headerGap = () => lineHeight * 0.7
-		const paragraphGap = () => lineHeight * 0.35
+		const blankLineGap = () => lineHeight * 1
+		const headerGap = () => lineHeight * 1
+		const paragraphGap = () => 0
 		let previousBlank = false
 		for (let i = 0; i < textLines.length; i++) {
 			const line = textLines[i]
@@ -6314,24 +6631,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 			previousBlank = false
 			
-			// Check if this line is a category header
-			// A line ending with ':' is treated as a header for bold formatting
 			const trimmedLine = line.trim()
-			const endsWithColon = trimmedLine.endsWith(':')
+			const headerInfo = parseCategoryHeaderLine(trimmedLine)
 
-			// Check if it's an assessment-specific category (for skip logic)
-			const isAssessmentCategory = trimmedLine.includes('Sub Objective') ||
-				trimmedLine.includes('Sub Learning Objective') ||
-				trimmedLine.includes('Report') ||
-				trimmedLine.includes('Decision')
-
-			if (endsWithColon) {
-				// Extract category name (everything before the colon)
-				const categoryName = line.split(':')[0].trim()
+			if (headerInfo) {
+				const categoryName = headerInfo.category
 				currentCategory = normalizeCategoryName(categoryName)
+				const categoryCoveredByTable = isCategoryCoveredByTable(currentCategory)
 
-				// Only skip if it's an assessment-specific category covered by table
-				const shouldSkip = isAssessmentCategory && isCategoryCoveredByTable(currentCategory)
+				const shouldSkip = (categoryCoveredByTable && !categoriesWithUncoveredSelections.has(currentCategory)) || !hasRenderableCategoryContent(i)
 				if (shouldSkip) {
 					skipCurrentCategory = true
 					continue
@@ -6342,7 +6650,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				doc.setFont('helvetica', 'bold')
 				doc.setFontSize(currentBodyFontSize) // Same size as other content
 
-				doc.text(`${categoryName}:`, margin, yPosition)
+				const headerText = categoryCoveredByTable ? `${categoryName}:` : headerInfo.display
+				doc.text(headerText, margin, yPosition)
 
 				// Reset font to normal for content
 				doc.setFont('helvetica', 'normal')
@@ -6409,6 +6718,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		onMount(() => {
 			loadSubjects()
 			initializeDarkMode()
+			initializeAiModelSettings()
 
 		window.addEventListener('paste', handleStudentPhotoPaste)
 		window.addEventListener('pointerdown', handleGlobalPointerDown)
@@ -6455,6 +6765,60 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 							<i class="bi bi-moon"></i>
 						{/if}
 					</button>
+				</li>
+				<li class="nav-item position-relative" bind:this={aiModelSettingsContainer}>
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
+						onclick={toggleAiModelSettings}
+						title={`AI model settings: ${getAiModelLabel(selectedAiModel)} / ${getReasoningEffortLabel(selectedAiReasoningEffort)}`}
+						aria-label="Open AI model settings"
+						aria-expanded={showAiModelSettings}
+						aria-haspopup="true"
+					>
+						<i class="bi bi-sliders me-1"></i>Settings
+					</button>
+					{#if showAiModelSettings}
+						<div class="ai-settings-menu dropdown-menu dropdown-menu-end show shadow">
+							<div class="ai-settings-section">
+								<div class="ai-settings-heading">Select model</div>
+								<div class="ai-settings-list">
+									{#each AI_CHAT_MODEL_OPTIONS as option (option.value)}
+										<button
+											type="button"
+											class:selected={selectedAiModel === option.value}
+											class="ai-settings-option"
+											onclick={() => selectAiModel(option.value)}
+										>
+											<span>{option.label}</span>
+											{#if selectedAiModel === option.value}
+												<i class="bi bi-check-lg"></i>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							</div>
+							<div class="ai-settings-divider"></div>
+							<div class="ai-settings-section">
+								<div class="ai-settings-heading">Thinking level</div>
+								<div class="text-muted small mb-2">Controls reasoning depth when the selected model supports it.</div>
+								<div class="ai-settings-list compact">
+									{#each getSupportedReasoningOptionObjects() as option (option.value)}
+										<button
+											type="button"
+											class:selected={selectedAiReasoningEffort === option.value}
+											class="ai-settings-option"
+											onclick={() => selectAiReasoningEffort(option.value)}
+										>
+											<span>{option.label}</span>
+											{#if selectedAiReasoningEffort === option.value}
+												<i class="bi bi-check-lg"></i>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							</div>
+						</div>
+					{/if}
 				</li>
 				<li class="nav-item">
 					<button
@@ -7890,11 +8254,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																		{/if}
 																	</div>
 											{/if}
-											{#each paragraphs as {text, color, id, originalIndex, fullText, source, markInfo}, displayIndex}
+															{#each paragraphs as {text, color, id, createdAt, originalIndex, fullText, source, markInfo}, displayIndex}
 												{@const categorySequenceIndex = findParagraphSequenceIndex(categoryParagraphSequence, id, originalIndex)}
 										<div 
 											class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
 											class:selected-paragraph={selectedParagraphs.has(id)}
+											class:editing-save-warning={showEditingParagraphSaveWarning && editingParagraphIndex === originalIndex}
 										>
 																	<div class="d-flex align-items-start">
 																		{#if currentStudentId}
@@ -7966,9 +8331,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																				/>
 																			{:else}
 																				<div class="d-flex align-items-start">
-																					<div class="flex-grow-1">
-																						<div class="mb-0 fs-6 lh-base" style="white-space: pre-wrap;">{@html text}</div>
-																					</div>
+																	<div class="flex-grow-1">
+																		<div class="mb-0 fs-6 lh-base" style="white-space: pre-wrap;">{@html text}</div>
+																		{#if formatParagraphSavedDate(createdAt)}
+																			<div class="small text-body-secondary mt-1">Saved: {formatParagraphSavedDate(createdAt)}</div>
+																		{/if}
+																	</div>
 															<div class="ms-2">
 																{#if resolveParagraphOwner(source, id) === 'assignment'}
 																	<span class="badge bg-primary" title="Assignment paragraph">
@@ -8036,7 +8404,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													{/if}
 															<button
 																class="btn btn-outline-primary btn-sm"
-																onclick={() => sendParagraphToAiInput(text, group.category, knowledgeArea)}
+																onclick={() => sendParagraphToAiInput(text, group.category, knowledgeArea, id)}
 																title="Edit paragraph"
 																aria-label="Edit paragraph"
 															>
@@ -8080,9 +8448,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															{/if}
 														</div>
 													<div class="d-flex flex-column gap-2 w-100">
-													<div class="d-flex flex-wrap gap-2 align-items-start">
-														<button
-															class="btn btn-outline-secondary btn-sm"
+														<div class="d-flex flex-wrap gap-2 align-items-start quick-action-toolbar">
+															<button
+																class="btn btn-outline-secondary btn-sm quick-toolbar-btn"
 															type="button"
 															onclick={() => applyBoldToQuickAdd(group.category)}
 															title="Apply bold to selected text"
@@ -8103,16 +8471,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																title="Pick text colour"
 																style="width: 2.6rem; height: 2rem; padding: 0.15rem;"
 															>
-															<button
-																class="btn btn-outline-secondary btn-sm"
+																<button
+																	class="btn btn-outline-secondary btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => applyColorToQuickAdd(group.category, quickAddColorPicker[group.category])}
 																title="Apply selected colour to selected text"
 															>
 																<i class="bi bi-palette me-1"></i>Colour
 															</button>
-															<button
-																class={`btn btn-sm ${speechRecordingCategory === group.category ? 'btn-outline-danger' : 'btn-outline-secondary'}`}
+																<button
+																	class={`btn btn-sm quick-toolbar-btn ${speechRecordingCategory === group.category ? 'btn-outline-danger' : 'btn-outline-secondary'}`}
 																type="button"
 																onclick={() => toggleQuickAddSpeechToText(group.category)}
 																disabled={Boolean(speechRecordingCategory && speechRecordingCategory !== group.category) || Boolean(speechTranscribingByCategory[group.category])}
@@ -8129,7 +8497,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															</button>
 														</div>
 															<button
-																class="btn btn-outline-primary btn-sm"
+																class="btn btn-outline-primary btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithAI(group.category)}
 																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
@@ -8143,7 +8511,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																{/if}
 															</button>
 															<button
-																class="btn btn-outline-info btn-sm"
+																class="btn btn-outline-info btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithRag(group.category)}
 																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
@@ -8157,7 +8525,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																{/if}
 															</button>
 															<button
-																class="btn btn-outline-warning btn-sm"
+																class="btn btn-outline-warning btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => runEvidenceCheck(group.category)}
 																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !currentStudentId}
@@ -8171,7 +8539,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																{/if}
 															</button>
 													<button
-														class={`btn btn-sm ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
+														class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 										type="button"
 										onclick={() => viewFinalPrompt(group.category, 'ai')}
 										disabled={!quickAddText[group.category]?.trim()}
@@ -8180,7 +8548,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										<i class="bi bi-eye me-1"></i>View Improve Prompt
 									</button>
 															<button
-																class={`btn btn-sm ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
+																class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 																type="button"
 																onclick={() => viewFinalPrompt(group.category, 'rag')}
 																disabled={!quickAddText[group.category]?.trim()}
@@ -8189,7 +8557,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																<i class="bi bi-eye-fill me-1"></i>View RAG Prompt
 															</button>
 															<button
-																class="btn btn-outline-secondary btn-sm"
+																class="btn btn-outline-secondary btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => quickAddParagraph(group.category)}
 																title="Add a paragraph to this category"
@@ -8666,6 +9034,74 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	.student-submission-input {
 		resize: none;
 	}
+
+	:global(.quick-action-toolbar .quick-toolbar-btn) {
+		font-weight: 600;
+		color: #0b5ed7 !important;
+		border-color: #0b5ed7 !important;
+	}
+
+	:global(.quick-action-toolbar .btn-outline-secondary.quick-toolbar-btn) {
+		color: #0b5ed7 !important;
+		border-color: #0b5ed7 !important;
+	}
+
+	:global(.quick-action-toolbar .btn-outline-info.quick-toolbar-btn) {
+		color: #0b5ed7 !important;
+		border-color: #0b5ed7 !important;
+	}
+
+	:global(.quick-action-toolbar .btn-outline-primary.quick-toolbar-btn) {
+		color: #0b5ed7 !important;
+		border-color: #0b5ed7 !important;
+	}
+
+	:global(.quick-action-toolbar .btn-outline-warning.quick-toolbar-btn) {
+		color: #0b5ed7 !important;
+		border-color: #0b5ed7 !important;
+	}
+
+	:global(.quick-action-toolbar .btn-outline-light.quick-toolbar-btn),
+	:global(.quick-action-toolbar .btn-outline-dark.quick-toolbar-btn) {
+		color: #0b5ed7 !important;
+		border-color: #0b5ed7 !important;
+	}
+
+	:global(.quick-action-toolbar .quick-toolbar-btn:disabled) {
+		opacity: 0.72;
+	}
+
+	:global([data-bs-theme="dark"] .quick-action-toolbar .btn-outline-secondary.quick-toolbar-btn) {
+		color: #93c5fd !important;
+		border-color: #60a5fa !important;
+	}
+
+	:global([data-bs-theme="dark"] .quick-action-toolbar .btn-outline-info.quick-toolbar-btn) {
+		color: #93c5fd !important;
+		border-color: #60a5fa !important;
+	}
+
+	:global([data-bs-theme="dark"] .quick-action-toolbar .btn-outline-primary.quick-toolbar-btn) {
+		color: #93c5fd !important;
+		border-color: #60a5fa !important;
+	}
+
+	:global([data-bs-theme="dark"] .quick-action-toolbar .btn-outline-warning.quick-toolbar-btn) {
+		color: #93c5fd !important;
+		border-color: #60a5fa !important;
+	}
+
+	:global([data-bs-theme="dark"] .quick-action-toolbar .btn-outline-light.quick-toolbar-btn),
+	:global([data-bs-theme="dark"] .quick-action-toolbar .btn-outline-dark.quick-toolbar-btn) {
+		color: #93c5fd !important;
+		border-color: #60a5fa !important;
+	}
+
+	:global([data-bs-theme="dark"] .quick-action-toolbar .quick-toolbar-btn:disabled) {
+		color: #9ca3af !important;
+		border-color: #6b7280 !important;
+		opacity: 0.85;
+	}
 	
 	/* Override any app.css constraints */
 	:global(#app) {
@@ -8689,6 +9125,102 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	@keyframes spin {
 		from { transform: rotate(0deg); }
 		to { transform: rotate(360deg); }
+	}
+
+	.ai-settings-menu {
+		width: min(320px, calc(100vw - 2rem));
+		margin-top: 0.5rem;
+		padding: 0.85rem;
+		border-radius: 1rem;
+		border: 1px solid rgba(255, 255, 255, 0.14);
+		background: rgba(22, 22, 22, 0.96);
+		color: #f5f5f5;
+		backdrop-filter: blur(10px);
+		z-index: 1200;
+	}
+
+	.ai-settings-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.ai-settings-heading {
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.ai-settings-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.ai-settings-list.compact {
+		gap: 0.35rem;
+	}
+
+	.ai-settings-option {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: 0.55rem 0.7rem;
+		border: 0;
+		border-radius: 0.75rem;
+		background: transparent;
+		color: inherit;
+		text-align: left;
+		font-size: 0.95rem;
+	}
+
+	.ai-settings-option:hover,
+	.ai-settings-option.selected {
+		background: rgba(255, 255, 255, 0.1);
+	}
+
+	.ai-settings-option.selected {
+		font-weight: 600;
+	}
+
+	.ai-settings-divider {
+		height: 1px;
+		margin: 0.85rem 0;
+		background: rgba(255, 255, 255, 0.12);
+	}
+
+	.paragraph-item {
+		transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+	}
+
+	.paragraph-item.editing-save-warning {
+		background: #ffe5e5;
+		box-shadow: inset 4px 0 0 #f08c8c;
+	}
+
+	:global([data-bs-theme="light"]) .ai-settings-menu {
+		border-color: rgba(15, 23, 42, 0.12);
+		background: rgba(255, 255, 255, 0.97);
+		color: #111827;
+	}
+
+	:global([data-bs-theme="light"]) .ai-settings-heading {
+		color: rgba(17, 24, 39, 0.64);
+	}
+
+	:global([data-bs-theme="light"]) .ai-settings-option:hover,
+	:global([data-bs-theme="light"]) .ai-settings-option.selected {
+		background: rgba(15, 23, 42, 0.08);
+	}
+
+	:global([data-bs-theme="light"]) .ai-settings-divider {
+		background: rgba(15, 23, 42, 0.1);
+	}
+
+	:global([data-bs-theme="dark"]) .paragraph-item.editing-save-warning {
+		background: rgba(127, 29, 29, 0.35);
+		box-shadow: inset 4px 0 0 #fca5a5;
 	}
 </style>
 
@@ -8875,6 +9407,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				</div>
 				<div class="modal-body">
 					<div class="small text-muted mb-3">This is the final prompt payload prepared to send to the OpenAI API.</div>
+					{#if promptPreviewRequestPayload}
+						<div class="border rounded p-3 bg-light mb-3">
+							<div class="fw-bold text-uppercase small mb-2">Request Payload</div>
+							<pre class="mb-0 prompt-preview-pre">{JSON.stringify(promptPreviewRequestPayload, null, 2)}</pre>
+						</div>
+					{/if}
 					<div class="d-flex flex-column gap-3">
 						{#each promptPreviewMessages as message, index}
 							<div class="border rounded p-3 bg-light">

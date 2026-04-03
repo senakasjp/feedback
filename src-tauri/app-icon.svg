@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B5ED7"/>
+      <stop offset="1" stop-color="#0CA678"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="620" y1="620" x2="920" y2="920" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFC107"/>
+      <stop offset="1" stop-color="#FF922B"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="220" fill="url(#bg)"/>
+  <circle cx="250" cy="250" r="170" fill="white" fill-opacity="0.08"/>
+  <circle cx="820" cy="220" r="130" fill="white" fill-opacity="0.08"/>
+
+  <path d="M248 280C248 242.444 278.444 212 316 212H708C745.556 212 776 242.444 776 280V580C776 617.556 745.556 648 708 648H470L372 748V648H316C278.444 648 248 617.556 248 580V280Z" fill="white"/>
+
+  <rect x="320" y="300" width="384" height="52" rx="26" fill="#E7F5FF"/>
+  <rect x="320" y="390" width="312" height="52" rx="26" fill="#E7F5FF"/>
+  <rect x="320" y="480" width="252" height="52" rx="26" fill="#E7F5FF"/>
+
+  <circle cx="760" cy="760" r="152" fill="url(#badge)"/>
+  <path d="M692 760L736 804L830 710" stroke="#212529" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

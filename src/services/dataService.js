@@ -154,10 +154,13 @@ export const studentsService = {
   updateStudentSelectedParagraphs(students, studentId, assessmentId, selectedParagraphs) {
     return students.map(student => {
       if (student.id === studentId) {
+        const currentSelections = (student && typeof student.selectedParagraphs === 'object' && student.selectedParagraphs !== null)
+          ? student.selectedParagraphs
+          : {}
         return {
           ...student,
           selectedParagraphs: {
-            ...student.selectedParagraphs,
+            ...currentSelections,
             [assessmentId]: [...selectedParagraphs] // Replace old selection data
           },
           updatedAt: new Date().toISOString()

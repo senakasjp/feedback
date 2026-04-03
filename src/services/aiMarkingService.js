@@ -1,7 +1,8 @@
+import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
+
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions'
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
-const DEFAULT_MODEL = 'gpt-4o-mini'
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 const MAX_RETRIEVED_CHUNKS = 8
 const VECTOR_INDEX_VERSION = 1
@@ -11,6 +12,19 @@ function normaliseWhitespace(value) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.2, max_tokens = 1000 }) {
+  const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
+  const reasoning_effort = sanitizeReasoningEffort(model, modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+
+  return {
+    model,
+    temperature,
+    max_tokens,
+    reasoning_effort,
+    messages
+  }
 }
 
 function normaliseKey(value) {
@@ -540,7 +554,7 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
   }
 }
 
-export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = {} }) {
   if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
     throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
   }
@@ -565,12 +579,12 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
+    body: JSON.stringify(buildChatCompletionPayload({
+      modelPreference,
       temperature: 0.35,
       max_tokens: 900,
-      messages,
-    })
+      messages
+    }))
   })
 
   if (!response.ok) {
@@ -589,11 +603,16 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
   return {
     improvedText,
     retrievedContext,
-    retrievalMode
+    retrievalMode,
+    usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
+    usedReasoningEffort: sanitizeReasoningEffort(
+      modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
+      modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
+    )
   }
 }
 
-export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = {} }) {
   if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
     throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
   }
@@ -615,8 +634,8 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
+    body: JSON.stringify(buildChatCompletionPayload({
+      modelPreference,
       temperature: 0.2,
       max_tokens: 1000,
       messages: [
@@ -652,7 +671,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
           ].join('\n')
         }
       ]
-    })
+    }))
   })
 
   if (!response.ok) {
@@ -671,7 +690,12 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
   return {
     reportText,
     retrievedContext,
-    retrievalMode
+    retrievalMode,
+    usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
+    usedReasoningEffort: sanitizeReasoningEffort(
+      modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
+      modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
+    )
   }
 }
 
@@ -692,7 +716,7 @@ function extractJson(text) {
   }
 }
 
-export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '' }) {
+export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = {} }) {
   if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
     throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
   }
@@ -717,8 +741,8 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
+    body: JSON.stringify(buildChatCompletionPayload({
+      modelPreference,
       temperature: 0.2,
       max_tokens: 2200,
       messages: [
@@ -772,7 +796,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
           ].join('\n')
         }
       ]
-    })
+    }))
   })
 
   if (!response.ok) {
@@ -788,7 +812,12 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
     criteria: Array.isArray(parsed.criteria) ? parsed.criteria : [],
     overall_feedback: normaliseWhitespace(parsed.overall_feedback || ''),
     retrievedContext,
-    retrievalMode
+    retrievalMode,
+    usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
+    usedReasoningEffort: sanitizeReasoningEffort(
+      modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
+      modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
+    )
   }
 }
 

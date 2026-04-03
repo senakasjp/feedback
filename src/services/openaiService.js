@@ -3,6 +3,8 @@
  * Handles all interactions with the OpenAI API
  */
 
+import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
+
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions'
@@ -23,6 +25,19 @@ async function getErrorMessage(response) {
 
 function normaliseWhitespace(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.3, max_tokens = 1000 }) {
+  const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
+  const reasoning_effort = sanitizeReasoningEffort(model, modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+
+  return {
+    model,
+    messages,
+    temperature,
+    max_tokens,
+    reasoning_effort
+  }
 }
 
 function buildImproveEnglishMessages(text, customInstructions = '') {
@@ -61,7 +76,7 @@ function buildImproveEnglishMessages(text, customInstructions = '') {
  * @param {string} customInstructions - Optional per-answer instructions
  * @returns {Promise<string>} - The improved text
  */
-export async function improveEnglish(text, customInstructions = '') {
+export async function improveEnglish(text, customInstructions = '', modelPreference = {}) {
   if (!text || text.trim() === '') {
     throw new Error('Text cannot be empty')
   }
@@ -77,12 +92,12 @@ export async function improveEnglish(text, customInstructions = '') {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENAI_API_KEY}`
       },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', // Using the cost-effective model
+      body: JSON.stringify(buildChatCompletionPayload({
+        modelPreference,
         messages: buildImproveEnglishMessages(text, customInstructions),
-        temperature: 0.3, // Lower temperature for more consistent, focused improvements
+        temperature: 0.3,
         max_tokens: 1000
-      })
+      }))
     })
 
     if (!response.ok) {
@@ -97,7 +112,14 @@ export async function improveEnglish(text, customInstructions = '') {
       throw new Error('No response received from OpenAI')
     }
 
-    return improvedText
+    return {
+      improvedText,
+      usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
+      usedReasoningEffort: sanitizeReasoningEffort(
+        modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
+        modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
+      )
+    }
   } catch (error) {
     console.error('OpenAI API Error:', error)
     throw error
