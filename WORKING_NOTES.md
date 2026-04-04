@@ -5,6 +5,18 @@ Update this whenever logic is changed so it is easy to trace later.
 
 ## Latest (Mar 2026)
 
+### Evidence-check AI output handling
+- Evidence-check requests now use a larger completion budget (`2200`) and force `low` reasoning effort to reduce GPT-5 truncation cases where the model spends the whole budget reasoning and returns no visible text.
+- Evidence-check logging now records `finish_reason` so token-limit failures are easier to diagnose.
+- If OpenAI stops with `finish_reason: length` before producing visible output, the app now throws a specific token-limit error instead of the generic "no feedback returned" message.
+
+### Multi-paragraph AI feedback preservation
+- AI evidence-check and RAG-improved feedback now preserve blank-line paragraph breaks instead of flattening all whitespace into a single paragraph.
+- Paragraph normalization now keeps paragraph-level spacing while still collapsing extra internal spaces inside each paragraph.
+
+### PDF paragraph spacing
+- PDF export now adds a small vertical gap after each rendered paragraph block so multi-paragraph feedback is easier to read in generated reports.
+
 ### PDF table vs content below table
 - Category headers are detected as both `Category:` and `Category: [N MARKS]`.
 - If a selected paragraph is covered by table mapping position (`tableColumnMarkMap`), that paragraph is skipped below the table.

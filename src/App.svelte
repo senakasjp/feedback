@@ -8769,7 +8769,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<textarea
 														id={quickAddInputId(group.category)}
 														class="form-control form-control-sm {aiImprovedText[group.category] ? 'ai-improved-text' : ''}"
-														rows="2"
+														rows="8"
 																placeholder={`Add paragraph to ${group.category}...`}
 																value={quickAddText[group.category] || ''}
 																oninput={(e) => {
