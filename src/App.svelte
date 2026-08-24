@@ -6983,7 +6983,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 </script>
 
 <!-- Header -->
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="--bs-navbar-padding-y: 0.35rem;">
 	<div class="container-fluid">
 		<a class="navbar-brand d-inline-flex align-items-center gap-2 lh-1" href="/" style="font-size: 0.95rem;">
 			<span>Feedback Manager v3.3.4</span>
