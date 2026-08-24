@@ -1,0 +1,10 @@
+{
+  "name": "Utility Subagents",
+  "description": "Specialised utility subagents",
+  "icon": "🔧",
+  "agents": {
+    "image-specialist": {
+      "description": "Image editing and analysis using Gemini AI tools"
+    }
+  }
+}

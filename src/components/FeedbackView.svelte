@@ -33,7 +33,8 @@
     onAddPercentageRange,
     onDeletePercentageRange,
     onUpdateAssessment,
-    onHandleAssessmentHeaderPhotoUpload
+    onHandleAssessmentHeaderPhotoUpload,
+    knowledgeAreas
   } = $props()
 
   // Reactive statements

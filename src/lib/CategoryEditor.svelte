@@ -10,10 +10,14 @@
     // Props
     let { 
         categories = $bindable(),
-        onUpdateCategories
+        onUpdateCategories,
+        knowledgeAreas,
+        onUpdateKnowledgeAreas
     }: { 
         categories?: Category[];
         onUpdateCategories?: () => void;
+        knowledgeAreas?: string[];
+        onUpdateKnowledgeAreas?: () => void;
     } = $props()
 
     // Local state

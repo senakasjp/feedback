@@ -18,12 +18,14 @@
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags } from './utils/helpers.js'
 	import { getMotivationalMessage } from './utils/motivationalMessages.js'
+	import { debugInfo, debugLog, isVerboseDebugEnabled } from './utils/debug.js'
 	
 	// Import data services
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
 	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
-	import { AI_CHAT_MODEL_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeReasoningEffort } from './services/aiModelService.js'
+	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
+	import { getProvider as getLlmProvider, isProviderConfigured } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
 	
 	// Import constants
@@ -40,9 +42,11 @@
 	const NAVIGATION_STATE_KEY = 'feedback-navigation-state-v1'
 	const AI_MODEL_STORAGE_KEY = 'feedback-ai-selected-model-v1'
 	const AI_REASONING_STORAGE_KEY = 'feedback-ai-reasoning-effort-v1'
+	const AI_PROVIDER_STORAGE_KEY = 'feedback-ai-selected-provider-v1'
 	const TABLE_HTML_SPACER_SNIPPET = '<div style="margin-top: 20px;"></div>'
 	const TABLE_HTML_TICK_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10003;</td>'
 	const TABLE_HTML_CROSS_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10007;</td>'
+	const console = { ...globalThis.console, log: debugLog, info: debugInfo }
 
 	const ASSESSMENT_DOCUMENT_TYPES = [
 		{ value: 'assignment-brief', label: 'Assignment Brief' },
@@ -160,6 +164,12 @@
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
 	let checkboxDebugInfo = $state([])
+	let paragraphLookup = $derived.by(() => buildParagraphLookup())
+	let assessmentCategoryLookup = $derived.by(() => buildAssessmentCategoryLookup())
+	let orderedParagraphs = $derived.by(() => buildOrderedParagraphs())
+	let groupedParagraphs = $derived.by(() => buildGroupedParagraphs())
+	let paragraphInfoIndex = $derived.by(() => buildParagraphInfoIndex())
+	let groupedParagraphCaches = $derived.by(() => buildGroupedParagraphCaches())
 	
 	// Function to add debug messages
 	function addCheckboxDebug(message) {
@@ -307,6 +317,7 @@
 	let isDarkMode = $state(false) // Dark mode toggle state
 	let showAiModelSettings = $state(false)
 	let aiModelSettingsContainer = $state(null)
+	let selectedAiProvider = $state(DEFAULT_AI_PROVIDER)
 	let selectedAiModel = $state(DEFAULT_AI_CHAT_MODEL)
 	let selectedAiReasoningEffort = $state(DEFAULT_AI_REASONING_EFFORT)
 	let aiModelSettingsReady = $state(false)
@@ -409,7 +420,10 @@
 	function installAppLogging() {
 		;['log', 'info', 'warn', 'error', 'debug'].forEach((method) => {
 			console[method] = (...args) => {
-				addAppLog(method, ...args)
+				const shouldCapture = method === 'warn' || method === 'error' || isVerboseDebugEnabled()
+				if (shouldCapture) {
+					addAppLog(method, ...args)
+				}
 				originalConsoleMethods[method](...args)
 			}
 		})
@@ -424,7 +438,9 @@
 
 		window.addEventListener('error', handleWindowError)
 		window.addEventListener('unhandledrejection', handleUnhandledRejection)
-		addAppLog('info', 'Application logging initialized.')
+		if (isVerboseDebugEnabled()) {
+			addAppLog('info', 'Application logging initialized.')
+		}
 
 		return () => {
 			console.log = originalConsoleMethods.log
@@ -516,8 +532,10 @@
 	function initializeAiModelSettings() {
 		const savedModel = localStorage.getItem(AI_MODEL_STORAGE_KEY)
 		const nextModel = sanitizeAiChatModel(savedModel || DEFAULT_AI_CHAT_MODEL)
+		const savedProvider = localStorage.getItem(AI_PROVIDER_STORAGE_KEY)
 		const savedReasoningEffort = localStorage.getItem(AI_REASONING_STORAGE_KEY)
 
+		selectedAiProvider = sanitizeAiProvider(savedProvider || getProviderForModel(nextModel))
 		selectedAiModel = nextModel
 		manualAiModelInput = nextModel
 		selectedAiReasoningEffort = sanitizeReasoningEffort(nextModel, savedReasoningEffort || DEFAULT_AI_REASONING_EFFORT)
@@ -527,6 +545,7 @@
 	$effect(() => {
 		if (!aiModelSettingsReady) return
 		localStorage.setItem(AI_MODEL_STORAGE_KEY, selectedAiModel)
+		localStorage.setItem(AI_PROVIDER_STORAGE_KEY, selectedAiProvider)
 		localStorage.setItem(AI_REASONING_STORAGE_KEY, selectedAiReasoningEffort)
 	})
 
@@ -538,8 +557,17 @@
 		showAiModelSettings = false
 	}
 
+	function selectAiProvider(provider) {
+		selectedAiProvider = sanitizeAiProvider(provider)
+		const providerModels = getModelsForProvider(selectedAiProvider)
+		if (!providerModels.some(option => option.value === selectedAiModel)) {
+			selectAiModel(providerModels[0]?.value || selectedAiModel)
+		}
+	}
+
 	function selectAiModel(model) {
 		selectedAiModel = sanitizeAiChatModel(model)
+		selectedAiProvider = getProviderForModel(selectedAiModel)
 		manualAiModelInput = selectedAiModel
 		selectedAiReasoningEffort = sanitizeReasoningEffort(selectedAiModel, selectedAiReasoningEffort)
 	}
@@ -558,8 +586,17 @@
 	function getCurrentAiModelPreference() {
 		return {
 			selectedModel: selectedAiModel,
-			reasoningEffort: selectedAiReasoningEffort
+			reasoningEffort: selectedAiReasoningEffort,
+			provider: selectedAiProvider
 		}
+	}
+
+	function isCurrentAiProviderConfigured() {
+		return isProviderConfigured(selectedAiProvider)
+	}
+
+	function getCurrentAiProviderLabel() {
+		return getLlmProvider(selectedAiProvider).label
 	}
 
 	function getSupportedReasoningOptionObjects() {
@@ -935,8 +972,8 @@
 		temp.innerHTML = html
 		const labels = new Set()
 		const rows = Array.from(temp.querySelectorAll('table tr'))
-		rows.forEach(row => {
-			const firstCell = row.cells?.[0]
+		rows.forEach(			row => {
+			const firstCell = /** @type {HTMLTableRowElement} */ (row).cells?.[0]
 			if (!firstCell) return
 			const text = (firstCell.textContent || '').replace(/\u00a0/g, ' ').trim()
 			if (text) labels.add(text)
@@ -1820,8 +1857,8 @@
 			return
 		}
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
@@ -2252,8 +2289,8 @@
 			return
 		}
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
@@ -2262,21 +2299,22 @@
 		try {
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
-			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
-			const result = await improveFeedbackWithRag({
-				assessment: assessmentForAi,
-				categoryName,
-				shortFeedback: shortText,
-				answerInstructions,
-				student: getCurrentStudent(),
-				studentSubmission: getCombinedStudentSubmissionText(),
-				evidenceNotes: getSelectedEvidenceNotes(categoryName),
-				assessmentParagraphs,
-				priorEvaluations,
-				vectorIndex,
-				globalSystemInstructions: globalAiSystemInstructions,
-				modelPreference: getCurrentAiModelPreference()
-			})
+				const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+				const result = await improveFeedbackWithRag({
+					assessment: assessmentForAi,
+					categoryName,
+					shortFeedback: shortText,
+					answerInstructions,
+					student: getCurrentStudent(),
+					studentSubmission: getCombinedStudentSubmissionText(),
+					studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
+					evidenceNotes: getSelectedEvidenceNotes(categoryName),
+					assessmentParagraphs,
+					priorEvaluations,
+					vectorIndex,
+					globalSystemInstructions: globalAiSystemInstructions,
+					modelPreference: getCurrentAiModelPreference()
+				})
 
 			const cleanedText = stripHtmlTags(result.improvedText || '').trim()
 			if (!cleanedText) {
@@ -2300,8 +2338,8 @@
 			return
 		}
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
@@ -2364,8 +2402,8 @@
 			return
 		}
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
@@ -2463,15 +2501,17 @@
 
 	function buildPromptPreviewRequestPayload(messages = [], temperature = 0.3, maxTokens = 1000) {
 		const modelPreference = getCurrentAiModelPreference()
-		const normalizedTemperature = String(modelPreference.selectedModel || '').trim().toLowerCase().startsWith('gpt-5')
+		const provider = getLlmProvider(modelPreference.provider)
+		const isOpenAiProvider = modelPreference.provider === 'openai'
+		const normalizedTemperature = isOpenAiProvider && String(modelPreference.selectedModel || '').trim().toLowerCase().startsWith('gpt-5')
 			? 1
 			: temperature
 		return {
-			endpoint: 'https://api.openai.com/v1/chat/completions',
+			endpoint: provider.chatUrl,
 			model: modelPreference.selectedModel,
-			reasoning_effort: modelPreference.reasoningEffort,
+			...(isOpenAiProvider ? { reasoning_effort: modelPreference.reasoningEffort } : {}),
 			temperature: normalizedTemperature,
-			max_completion_tokens: maxTokens,
+			[isOpenAiProvider ? 'max_completion_tokens' : 'max_tokens']: maxTokens,
 			messages
 		}
 	}
@@ -2497,20 +2537,21 @@
 
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
-			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
-			const preview = await buildImproveFeedbackWithRagPromptPreview({
-				assessment: assessmentForAi,
-				categoryName,
-				shortFeedback: shortText,
-				answerInstructions,
-				student: getCurrentStudent(),
-				studentSubmission: getCombinedStudentSubmissionText(),
-				evidenceNotes: getSelectedEvidenceNotes(categoryName),
-				assessmentParagraphs,
-				priorEvaluations,
-				vectorIndex,
-				globalSystemInstructions: globalAiSystemInstructions
-			})
+				const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+				const preview = await buildImproveFeedbackWithRagPromptPreview({
+					assessment: assessmentForAi,
+					categoryName,
+					shortFeedback: shortText,
+					answerInstructions,
+					student: getCurrentStudent(),
+					studentSubmission: getCombinedStudentSubmissionText(),
+					studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
+					evidenceNotes: getSelectedEvidenceNotes(categoryName),
+					assessmentParagraphs,
+					priorEvaluations,
+					vectorIndex,
+					globalSystemInstructions: globalAiSystemInstructions
+				})
 
 			promptPreviewMessages = preview.messages
 			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
@@ -2712,7 +2753,7 @@
 
 	async function startWebAudioFallbackRecording(categoryName) {
 		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-		const AudioContextClass = window.AudioContext || window.webkitAudioContext
+		const AudioContextClass = /** @type {any} */ (window).AudioContext || /** @type {any} */ (window).webkitAudioContext
 		if (!AudioContextClass) {
 			stream.getTracks().forEach(track => track.stop())
 			throw new Error('Web Audio API is not available.')
@@ -3274,7 +3315,7 @@
 
 	function getCategoryParagraphIndices(categoryName) {
 		const target = normalizeCategoryName(categoryName)
-		const group = getGroupedParagraphs().find(item => normalizeCategoryName(item.category) === target)
+		const group = groupedParagraphCaches.groupsByNormalizedCategory[target]
 		if (!group) return []
 
 		const indices = []
@@ -3688,7 +3729,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			currentAssessment.categories.forEach(cat => categoriesToCheck.add(cat.name))
 		}
 
-		const paragraphInfoIndex = buildParagraphInfoIndex()
 		const nextWarnings = {}
 		categoriesToCheck.forEach(category => {
 			const warning = getCategoryWarningState(category, paragraphInfoIndex)
@@ -4143,6 +4183,65 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		}
 	}
 
+	function cloneAssignmentParagraphsForStudentSelection() {
+		const snapshot = assignmentParagraphSnapshot.filter(paragraph => !isStudentOwnedParagraph(paragraph))
+		if (snapshot.length > 0) {
+			return snapshot.map(paragraph => typeof paragraph === 'object' ? { ...paragraph } : paragraph)
+		}
+
+		const currentAssignmentParagraphs = paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))
+		return currentAssignmentParagraphs.map(paragraph => typeof paragraph === 'object' ? { ...paragraph } : paragraph)
+	}
+
+	function normalizeParagraphComparisonKey(paragraph) {
+		const text = typeof paragraph === 'string' ? paragraph : paragraph?.text
+		const color = typeof paragraph === 'object' ? paragraph?.color : ''
+		return `${String(text || '').trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')}::${String(color || '')}`
+	}
+
+	function paragraphsDifferByContent(assignmentParagraphs, studentParagraphs) {
+		if (studentParagraphs.length === 0) {
+			return false
+		}
+
+		if (assignmentParagraphs.length !== studentParagraphs.length) {
+			return true
+		}
+
+		const assignmentCounts = new Map()
+		for (const paragraph of assignmentParagraphs) {
+			const key = normalizeParagraphComparisonKey(paragraph)
+			assignmentCounts.set(key, (assignmentCounts.get(key) || 0) + 1)
+		}
+
+		for (const paragraph of studentParagraphs) {
+			const key = normalizeParagraphComparisonKey(paragraph)
+			const nextCount = assignmentCounts.get(key)
+			if (!nextCount) {
+				return true
+			}
+			if (nextCount === 1) {
+				assignmentCounts.delete(key)
+			} else {
+				assignmentCounts.set(key, nextCount - 1)
+			}
+		}
+
+		return assignmentCounts.size > 0
+	}
+
+	async function loadStudentEvaluationRecord(studentId, assessmentId) {
+		try {
+			const data = await invoke('read_student_evaluation', { studentId, assessmentId })
+			return data ? JSON.parse(data) : null
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-evaluation-${studentId}-${assessmentId}`
+			const data = localStorage.getItem(key)
+			return data ? JSON.parse(data) : null
+		}
+	}
+
 	function getCurrentStudent() {
 		return students.find(s => s.id === currentStudentId)
 	}
@@ -4473,8 +4572,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// Load student evaluation data
 	async function loadStudentEvaluation() {
+		const requestedStudentId = currentStudentId
+		const requestedAssessmentId = currentAssessmentId
+		const requestedSubjectId = currentSubjectId
+
 		// STRICT FILTER: Validate context before loading student evaluation
-		if (!currentStudentId || !currentAssessmentId) {
+		if (!requestedStudentId || !requestedAssessmentId) {
 			console.log('STRICT FILTER: No student or assessment selected for evaluation')
 			return
 		}
@@ -4491,20 +4594,25 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			return
 		}
 		
-		const assessmentExists = currentSubject.assessments.some(assessment => assessment.id === currentAssessmentId)
+		const assessmentExists = currentSubject.assessments.some(assessment => assessment.id === requestedAssessmentId)
 		if (!assessmentExists) {
-			console.error(`STRICT FILTER: Assessment ${currentAssessmentId} not found in current subject for student evaluation`)
+			console.error(`STRICT FILTER: Assessment ${requestedAssessmentId} not found in current subject for student evaluation`)
 			return
 		}
 
-		console.log(`STRICT FILTER: Loading student evaluation for student ${currentStudentId} in assessment ${currentAssessmentId}`)
+		console.log(`STRICT FILTER: Loading student evaluation for student ${requestedStudentId} in assessment ${requestedAssessmentId}`)
 
-		// Load assignment paragraphs first
-		await loadAssessmentData(currentSubjectId, currentAssessmentId, true) // preserveSelections = true
-		const assignmentParagraphs = [...paragraphs]
+		const assignmentParagraphs = cloneAssignmentParagraphsForStudentSelection()
 
-		// Load student paragraphs for this specific student (without overwriting assignment paragraphs)
-		const studentParagraphs = await loadStudentParagraphsForMerging()
+		// Load student paragraphs and evaluation record in parallel
+		const [studentParagraphs, evaluationData] = await Promise.all([
+			loadStudentParagraphsForMerging(requestedStudentId, requestedSubjectId, requestedAssessmentId),
+			loadStudentEvaluationRecord(requestedStudentId, requestedAssessmentId)
+		])
+
+		if (currentStudentId !== requestedStudentId || currentAssessmentId !== requestedAssessmentId || currentSubjectId !== requestedSubjectId) {
+			return
+		}
 
 		console.log('MERGE DEBUG: Before merging:', {
 			assignmentCount: assignmentParagraphs.length,
@@ -4519,74 +4627,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}))
 		})
 
-		// Check if student paragraphs are identical to assignment paragraphs
-		let studentHasChanges = false
-		
-		// If no student paragraphs exist, treat as identical (merged)
-		if (studentParagraphs.length === 0) {
-			console.log('MERGE DEBUG: No student paragraphs found - treating as merged with assignment')
-			studentHasChanges = false
-		} else {
-			// CONTENT-BASED COMPARISON: Compare paragraphs by content, not by index
-			console.log('MERGE DEBUG: Starting content-based comparison')
-			
-			// Create normalized versions for comparison
-			const normalizedAssignmentParagraphs = assignmentParagraphs.map(para => {
-				const text = typeof para === 'string' ? para : para.text
-				const color = typeof para === 'object' ? para.color : ''
-				return {
-					text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
-					color: color || '',
-					original: para
-				}
-			})
-			
-			const normalizedStudentParagraphs = studentParagraphs.map(para => {
-				const text = typeof para === 'string' ? para : para.text
-				const color = typeof para === 'object' ? para.color : ''
-				return {
-					text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
-					color: color || '',
-					original: para
-				}
-			})
-			
-			// Check if all assignment paragraphs have matching student paragraphs
-			for (const assignmentPara of normalizedAssignmentParagraphs) {
-				const matchingStudentPara = normalizedStudentParagraphs.find(studentPara => 
-					studentPara.text === assignmentPara.text && studentPara.color === assignmentPara.color
-				)
-				
-				console.log(`MERGE DEBUG: Looking for match for assignment paragraph:`, {
-					assignmentText: assignmentPara.text.substring(0, 50) + '...',
-					assignmentColor: assignmentPara.color,
-					foundMatch: !!matchingStudentPara,
-					studentText: matchingStudentPara ? matchingStudentPara.text.substring(0, 50) + '...' : 'none',
-					studentColor: matchingStudentPara ? matchingStudentPara.color : 'none'
-				})
-				
-				if (!matchingStudentPara) {
-					studentHasChanges = true
-					console.log(`MERGE DEBUG: No matching student paragraph found - student has changes`)
-					break
-				}
-			}
-			
-			// Also check if there are extra student paragraphs not in assignment
-			if (!studentHasChanges) {
-				for (const studentPara of normalizedStudentParagraphs) {
-					const matchingAssignmentPara = normalizedAssignmentParagraphs.find(assignmentPara => 
-						assignmentPara.text === studentPara.text && assignmentPara.color === studentPara.color
-					)
-					
-					if (!matchingAssignmentPara) {
-						studentHasChanges = true
-						console.log(`MERGE DEBUG: Extra student paragraph found - student has changes`)
-						break
-					}
-				}
-			}
-		}
+		const studentHasChanges = paragraphsDifferByContent(assignmentParagraphs, studentParagraphs)
 		
 		let mergedParagraphs
 		if (!studentHasChanges) {
@@ -4621,77 +4662,38 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.log('DEBUG: Student selectedParagraphs:', currentStudent.selectedParagraphs)
 			console.log('DEBUG: Looking for assessmentId:', currentAssessmentId)
 			
-			const studentSelectedParagraphs = studentsService.getStudentSelectedParagraphs(currentStudent, currentAssessmentId)
+			const studentSelectedParagraphs = studentsService.getStudentSelectedParagraphs(currentStudent, requestedAssessmentId)
 			console.log('DEBUG: Retrieved student selected paragraphs:', studentSelectedParagraphs)
 			
 			if (studentSelectedParagraphs && studentSelectedParagraphs.length > 0) {
 				savedSelectedParagraphs = new Set(studentSelectedParagraphs)
 				console.log('✅ LOADED: Selected paragraphs from student properties:', Array.from(savedSelectedParagraphs))
 			} else {
-				console.log('⚠️ No selections found in student properties for assessment:', currentAssessmentId)
+				console.log('⚠️ No selections found in student properties for assessment:', requestedAssessmentId)
 			}
 		} else {
 			console.log('❌ ERROR: Current student not found for ID:', currentStudentId)
 		}
 
-		// Then load other evaluation data (marks, etc.) from evaluation file
-		try {
-			const data = await invoke('read_student_evaluation', { 
-				studentId: currentStudentId,
-				assessmentId: currentAssessmentId
-			})
-			if (data) {
-				const evaluationData = JSON.parse(data)
-				
-				// STRICT FILTER: Validate that the loaded data matches the current context
-				if (evaluationData.studentId !== currentStudentId || evaluationData.assessmentId !== currentAssessmentId) {
-					console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
-					return
-				}
-				
-				// Only use evaluation file selectedParagraphs if not found in student properties (legacy data)
-				if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
-					savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
-					console.log('🔄 LEGACY: Selected paragraphs from evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
-					console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
-				}
-				
-				savedStudentName = evaluationData.studentName || ''
-				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
-				savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
-				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
-				savedCategoryMarks = evaluationData.categoryMarks || {}
-				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
-				savedQuickAddText = evaluationData.quickAddText || {}
+		if (evaluationData) {
+			if (evaluationData.studentId !== requestedStudentId || evaluationData.assessmentId !== requestedAssessmentId) {
+				console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
+				return
 			}
-		} catch (error) {
-			console.log('Tauri not available, using browser storage')
-			const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
-			const data = localStorage.getItem(key)
-			if (data) {
-				const evaluationData = JSON.parse(data)
-				
-				// STRICT FILTER: Validate that the loaded data matches the current context
-				if (evaluationData.studentId !== currentStudentId || evaluationData.assessmentId !== currentAssessmentId) {
-					console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
-					return
-				}
-				
-				// Only use evaluation file selectedParagraphs if not found in student properties (legacy data)
-				if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
-					savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
-					console.log('🔄 LEGACY: Selected paragraphs from localStorage evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
-					console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
-				}
-				
-				savedStudentName = evaluationData.studentName || ''
-				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
-				savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
-				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
-				savedCategoryMarks = evaluationData.categoryMarks || {}
-				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
-				savedQuickAddText = evaluationData.quickAddText || {}
+
+			if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
+				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
+				console.log('🔄 LEGACY: Selected paragraphs from evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
+				console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
 			}
+
+			savedStudentName = evaluationData.studentName || ''
+			savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
+			savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
+			savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
+			savedCategoryMarks = evaluationData.categoryMarks || {}
+			savedManualTotalMarks = evaluationData.manualTotalMarks || ''
+			savedQuickAddText = evaluationData.quickAddText || {}
 		}
 
 		console.log('SELECTION DEBUG: Before mapping:', {
@@ -4734,9 +4736,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		studentSubmissionText = savedStudentSubmissionText
 		studentSubmissionDocuments = Array.isArray(savedStudentSubmissionDocuments) ? savedStudentSubmissionDocuments : []
 		studentPhoto = savedStudentImage || getStudentPhoto(getCurrentStudent()) || ''
-		if (savedStudentImage && currentStudentId) {
+		if (savedStudentImage && requestedStudentId) {
 			students = students.map(student => (
-				student.id === currentStudentId && !getStudentPhoto(student)
+				student.id === requestedStudentId && !getStudentPhoto(student)
 					? { ...student, studentImage: savedStudentImage, photo: savedStudentImage }
 					: student
 			))
@@ -5191,12 +5193,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	}
 
 	// Load student paragraphs for merging (without overwriting paragraphs variable)
-	async function loadStudentParagraphsForMerging() {
-		if (!currentStudentId) return []
+	async function loadStudentParagraphsForMerging(studentId = currentStudentId, subjectId = currentSubjectId, assessmentId = currentAssessmentId) {
+		if (!studentId) return []
 
 		try {
 			const data = await invoke('read_student_paragraphs', { 
-				studentId: currentStudentId
+				studentId
 			})
 			if (data) {
 				const studentData = JSON.parse(data)
@@ -5206,13 +5208,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				const filteredParagraphs = allStudentParagraphs.filter(para => {
 					// If paragraph has subjectId and assessmentId, use strict filtering
 					if (para.subjectId && para.assessmentId) {
-						const matches = para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+						const matches = para.subjectId === subjectId && para.assessmentId === assessmentId
 						if (!matches) {
 							console.log('MERGE FILTERED OUT: Paragraph from different assignment:', {
 								paraSubjectId: para.subjectId,
 								paraAssessmentId: para.assessmentId,
-								currentSubjectId,
-								currentAssessmentId,
+								subjectId,
+								assessmentId,
 								text: para.text?.substring(0, 50)
 							})
 						}
@@ -5228,7 +5230,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
-			const key = `student-paragraphs-${currentStudentId}`
+			const key = `student-paragraphs-${studentId}`
 			const data = localStorage.getItem(key)
 			if (data) {
 				const studentData = JSON.parse(data)
@@ -5239,7 +5241,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				const filteredParagraphs = allStudentParagraphs.filter(para => {
 					// If paragraph has subjectId and assessmentId, use strict filtering
 					if (para.subjectId && para.assessmentId) {
-						return para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+						return para.subjectId === subjectId && para.assessmentId === assessmentId
 					}
 					// For legacy paragraphs without context, include them (will be migrated on next save)
 					console.log('LEGACY DATA: Including paragraph without subjectId/assessmentId for migration:', para.text?.substring(0, 50))
@@ -5445,12 +5447,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// getSectionOrder function is now imported from utils/helpers.js
 
-	function getOrderedParagraphs() {
-		console.log('🔍 getOrderedParagraphs called with:', {
-			paragraphsCount: paragraphs.length,
-			paragraphs: paragraphs.map(p => ({ id: p.id, text: p.text?.substring(0, 50) }))
-		})
-		
+	function buildOrderedParagraphs() {
 		const ordered = paragraphs
 			.map((paragraph, originalIndex) => {
 				// Handle both string and object formats
@@ -5473,14 +5470,35 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				// If same section, maintain original order
 				return a.originalIndex - b.originalIndex
 			})
-		
-		console.log('🔍 getOrderedParagraphs result:', {
-			orderedCount: ordered.length,
-			orderedIds: ordered.map(o => o.id),
-			orderedTexts: ordered.map(o => o.paragraph?.substring(0, 30))
-		})
-		
+
 		return ordered
+	}
+
+	function getOrderedParagraphs() {
+		return orderedParagraphs
+	}
+
+	function buildParagraphLookup() {
+		const byId = {}
+		const mainIndexById = {}
+		paragraphs.forEach((paragraph, index) => {
+			const paragraphId = paragraph?.id
+			if (paragraphId === undefined || paragraphId === null || paragraphId === '') return
+			byId[paragraphId] = paragraph
+			mainIndexById[paragraphId] = index
+		})
+		return { byId, mainIndexById }
+	}
+
+	function buildAssessmentCategoryLookup() {
+		const byExactName = {}
+		const byNormalizedName = {}
+		for (const category of currentAssessment?.categories || []) {
+			if (!category?.name) continue
+			byExactName[category.name] = category
+			byNormalizedName[normalizeCategoryName(category.name)] = category
+		}
+		return { byExactName, byNormalizedName }
 	}
 
 	// getColorBadgeClass function is now imported from utils/helpers.js
@@ -5491,8 +5509,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// extractKnowledgeArea function is now imported from utils/helpers.js
 
-	function getGroupedParagraphs() {
-		const ordered = getOrderedParagraphs()
+	function buildGroupedParagraphs() {
+		const ordered = orderedParagraphs
+		const { byId } = paragraphLookup
+		const { byExactName, byNormalizedName } = assessmentCategoryLookup
 		const grouped = {}
 		
 		// First, initialize all categories from the assessment (even if they have no paragraphs)
@@ -5515,7 +5535,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// Then process paragraphs and add them to their respective categories
 		ordered.forEach(({paragraph, color, id, originalIndex}) => {
 			// Get the source information from the paragraph object
-			const paragraphObj = paragraphs.find(p => p.id === id)
+			const paragraphObj = byId[id]
 			const source = paragraphObj?._source
 			const createdAt = paragraphObj?.createdAt
 			// Extract category and knowledge area from paragraph text
@@ -5563,9 +5583,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const groupKey = finalCategory
 			
 			if (!grouped[groupKey]) {
-				const matchedCategory = (currentAssessment?.categories || []).find(
-					item => normalizeCategoryName(item.name) === normalizeCategoryName(finalCategory)
-				)
+				const matchedCategory = byNormalizedName[normalizeCategoryName(finalCategory)]
 				grouped[groupKey] = {
 					categoryId: matchedCategory?.id || finalCategory,
 					category: finalCategory,
@@ -5595,7 +5613,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						}
 					}
 				} else if (effectiveMode === 'percentage') {
-					const categoryObj = currentAssessment?.categories?.find(cat => cat.name === finalCategory)
+					const categoryObj = byExactName[finalCategory] || byNormalizedName[normalizeCategoryName(finalCategory)]
 					const allocatedMarks = categoryObj?.allocatedMarks
 					const range = getMarksRange(color, allocatedMarks)
 					const bounds = getColorPercentageBounds(color)
@@ -5632,9 +5650,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return Object.values(grouped)
 	}
 
+	function getGroupedParagraphs() {
+		return groupedParagraphs
+	}
+
 	function buildParagraphInfoIndex() {
 		const index = {}
-		const groupedParagraphs = getGroupedParagraphs()
 		groupedParagraphs.forEach(group => {
 			Object.values(group.knowledgeAreas || {}).forEach(paragraphsInArea => {
 				paragraphsInArea.forEach(paragraphObj => {
@@ -5648,6 +5669,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return index
 	}
 
+	function buildGroupedParagraphCaches() {
+		const groupsByNormalizedCategory = {}
+		const categoryParagraphsByNormalized = {}
+		groupedParagraphs.forEach(group => {
+			const normalizedCategory = normalizeCategoryName(group.category)
+			groupsByNormalizedCategory[normalizedCategory] = group
+			categoryParagraphsByNormalized[normalizedCategory] = Object.values(group.knowledgeAreas || {}).flat()
+		})
+		return { groupsByNormalizedCategory, categoryParagraphsByNormalized }
+	}
+
 	function getCategoryParagraphSequence(group) {
 		if (!group?.knowledgeAreas) return []
 		return Object.values(group.knowledgeAreas).flat()
@@ -5656,8 +5688,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	function resolveParagraphMainIndex(entry) {
 		if (!entry) return -1
 		if (entry.id !== undefined && entry.id !== null && entry.id !== '') {
-			const byId = paragraphs.findIndex(paragraph => paragraph?.id === entry.id)
-			if (byId !== -1) return byId
+			const byId = paragraphLookup.mainIndexById[entry.id]
+			if (byId !== undefined) return byId
 		}
 		return Number.isInteger(entry.originalIndex) ? entry.originalIndex : -1
 	}
@@ -5697,7 +5729,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		})
 		
 		// Use the EXACT same order as the UI display (getGroupedParagraphs)
-		const groupedParagraphs = getGroupedParagraphs()
 		const result = []
 		const processedCategories = new Set()
 		
@@ -5789,6 +5820,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	}
 
 	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth, matchedCategories = new Set()) {
+		const normalizeParagraphCategory = (str) => (str || '')
 		const htmlContent = normalizeHtmlQuotes(assessmentHtml || '').trim()
 		if (!htmlContent) return startY
 
@@ -5797,14 +5829,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const pxPerMm = 96 / 25.4 // approximate CSS pixel density
 		const maxContentWidthMm = pageWidth - (margin * 2)
 		const maxContentWidthPx = maxContentWidthMm * pxPerMm
-		const paragraphInfoIndex = buildParagraphInfoIndex()
 		const getParagraphCategoryKey = (para) => {
 			const info = para?.id ? paragraphInfoIndex[para.id] : null
-			if (info?.category) return normalize(info.category)
+			if (info?.category) return normalizeParagraphCategory(info.category)
 			const paraText = typeof para === 'string' ? para : para?.text || ''
 			if (!paraText) return ''
 			const prefix = paraText.split(':')[0]
-			return normalize(prefix)
+			return normalizeParagraphCategory(prefix)
 		}
 		const container = document.createElement('div')
 		container.className = 'pdf-assessment-html'
@@ -5851,12 +5882,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		})
 
 		// Strip inline padding/line-height on cells so our injected styles win
-		container.querySelectorAll('th, td').forEach(cell => {
+		container.querySelectorAll('th, td').forEach(/** @type {HTMLElement} */ (cell) => {
+			// @ts-ignore - cell is HTMLTableCellElement which has style
 			cell.style.padding = ''
+			// @ts-ignore
 			cell.style.lineHeight = ''
 
 			// Fix text color visibility - ensure text is visible on all backgrounds
+			// @ts-ignore
 			const bgColor = cell.style.backgroundColor || window.getComputedStyle(cell).backgroundColor
+			// @ts-ignore
 			const currentColor = cell.style.color
 
 			// If background is dark (red, green, blue with low RGB values), ensure white text
@@ -5873,13 +5908,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					// If dark background (brightness < 128), use white text
 					// If light background, use black text
 					if (brightness < 128) {
+						// @ts-ignore
 						cell.style.color = '#ffffff'
 					} else {
+						// @ts-ignore
 						cell.style.color = '#000000'
 					}
 				}
 			} else if (!currentColor || currentColor === 'white' || currentColor === '#ffffff') {
 				// If no background but text is white, make it black
+				// @ts-ignore
 				cell.style.color = '#000000'
 			}
 		})
@@ -5951,7 +5989,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const selectedMarkMap = {}
 			const selectedCategoryKeys = new Set()
 			Object.keys(marksMap).forEach(key => selectedCategoryKeys.add(key))
-			const grouped = getGroupedParagraphs()
+			const grouped = groupedParagraphs
 			grouped.forEach(group => {
 				Object.values(group.knowledgeAreas || {}).forEach(paras => {
 					paras.forEach(p => {
@@ -5980,16 +6018,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			})
 
 			// Build UI-order paragraph cache by category for position lookup
-			const groupedParagraphs = getGroupedParagraphs()
 			const getCategoryParagraphsInOrder = (catKey) => {
-				const result = []
-				groupedParagraphs.forEach(group => {
-					if (normalize(group.category) !== catKey) return
-					Object.values(group.knowledgeAreas || {}).forEach(list => {
-						list.forEach(p => result.push(p))
-					})
-				})
-				return result
+				return groupedParagraphCaches.categoryParagraphsByNormalized[catKey] || []
 			}
 
 			const tables = Array.from(container.querySelectorAll('table'))
@@ -6078,8 +6108,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.error('Auto-highlight rubric cells failed:', err)
 		}
 
-		container.querySelectorAll('[data-color]').forEach(el => {
+		container.querySelectorAll('[data-color]').forEach(/** @type {HTMLElement} */ (el) => {
+			// @ts-ignore
 			el.style.backgroundColor = highlightColor
+			// @ts-ignore
 			el.style.color = '#000'
 		})
 
@@ -6435,8 +6467,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		doc.setFontSize(headingFontSize)
 		const headingMetrics = doc.getTextDimensions
 			? doc.getTextDimensions(headingText)
-			: { h: doc.internal.getLineHeight() }
-		const headingHeight = headingMetrics?.h || doc.internal.getLineHeight()
+			: { h: /** @type {any} */ (doc.internal).getLineHeight?.() || 10 }
+		const headingHeight = headingMetrics?.h || /** @type {any} */ (doc.internal).getLineHeight?.() || 10
 
 		const drawHeading = () => {
 			doc.setFont('helvetica', 'bold')
@@ -6579,7 +6611,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const categoriesWithMarks = new Set()
 		const mappedCategories = new Set()
 		const categoriesWithUncoveredSelections = new Set()
-		const paragraphInfoIndex = buildParagraphInfoIndex()
 		const paragraphsToSkip = new Set()
 		const coveredSelectedParagraphIds = new Set()
 		const normalizeLine = (val) => (val || '').toString().replace(/\u00a0/g, ' ').trim()
@@ -6605,16 +6636,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		}
 
-		const groupedParagraphsForCoverage = getGroupedParagraphs()
 		const getCategoryParagraphsInOrder = (normalizedCategory) => {
-			const result = []
-			groupedParagraphsForCoverage.forEach(group => {
-				if (normalizeCategoryName(group.category) !== normalizedCategory) return
-				Object.values(group.knowledgeAreas || {}).forEach(list => {
-					list.forEach(p => result.push(p))
-				})
-			})
-			return result
+			return groupedParagraphCaches.categoryParagraphsByNormalized[normalizedCategory] || []
 		}
 
 		const coveredParagraphPositions = new Set()
@@ -6921,7 +6944,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					<button
 						class="btn btn-outline-light btn-sm ms-2"
 						onclick={toggleAiModelSettings}
-						title={`AI model settings: ${getAiModelLabel(selectedAiModel)} / ${getReasoningEffortLabel(selectedAiReasoningEffort)}`}
+						title={`AI model settings: ${getCurrentAiProviderLabel()} · ${getAiModelLabel(selectedAiModel)} / ${getReasoningEffortLabel(selectedAiReasoningEffort)}`}
 						aria-label="Open AI model settings"
 						aria-expanded={showAiModelSettings}
 						aria-haspopup="true"
@@ -6931,9 +6954,30 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					{#if showAiModelSettings}
 						<div class="ai-settings-menu dropdown-menu dropdown-menu-end show shadow">
 							<div class="ai-settings-section">
+								<div class="ai-settings-heading">Provider</div>
+								<div class="ai-settings-list compact">
+									{#each AI_PROVIDER_OPTIONS as option (option.value)}
+										<button
+											type="button"
+											class:selected={selectedAiProvider === option.value}
+											class="ai-settings-option"
+											onclick={() => selectAiProvider(option.value)}
+										>
+											<span>{option.label}</span>
+											{#if !isProviderConfigured(option.value)}
+												<i class="bi bi-exclamation-triangle text-warning" title="API key not configured"></i>
+											{:else if selectedAiProvider === option.value}
+												<i class="bi bi-check-lg"></i>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							</div>
+							<div class="ai-settings-divider"></div>
+							<div class="ai-settings-section">
 								<div class="ai-settings-heading">Select model</div>
 								<div class="ai-settings-list">
-									{#each AI_CHAT_MODEL_OPTIONS as option (option.value)}
+									{#each getModelsForProvider(selectedAiProvider) as option (option.value)}
 										<button
 											type="button"
 											class:selected={selectedAiModel === option.value}
@@ -6948,7 +6992,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									{/each}
 								</div>
 								<div class="ai-settings-manual mt-2">
-									<label class="form-label small mb-1" for="manualAiModelInput">Manual model</label>
+									<label class="form-label small mb-1" for="manualAiModelInput">Manual model ({getCurrentAiProviderLabel()})</label>
 									<div class="ai-settings-manual-row">
 										<input
 											id="manualAiModelInput"
@@ -7413,7 +7457,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												rows="6"
 												bind:value={assessmentHtml}
 												oninput={(e) => {
-													assessmentHtml = e.target.value
+													assessmentHtml = /** @type {HTMLInputElement} */ (e.target).value
 													if (currentAssessment) {
 														currentAssessment.rubricHtml = assessmentHtml
 														if (!currentAssessment.tableRowCategoryMap) {
@@ -7610,7 +7654,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<div class="col-md-4">
 															<label for="assessmentDocumentType" class="form-label fw-bold small">Document Type</label>
 															<select id="assessmentDocumentType" class="form-select form-select-sm" bind:value={selectedAssessmentDocumentType}>
-																{#each ASSESSMENT_DOCUMENT_TYPES as option}
+																{#each ASSESSMENT_DOCUMENT_TYPES as option (option.value)}
 																	<option value={option.value}>{option.label}</option>
 																{/each}
 															</select>
@@ -7630,7 +7674,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													</div>
 													{#if assessmentReferenceDocuments.length > 0}
 														<div class="list-group list-group-flush mt-3 border rounded">
-															{#each assessmentReferenceDocuments as document}
+															{#each assessmentReferenceDocuments as document (document.id)}
 																<div class="list-group-item d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-start">
 																	<div>
 																		<div class="fw-semibold">{document.name}</div>
@@ -7722,7 +7766,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<i class="bi bi-bar-chart-fill me-2"></i>Mark Ranges for {selectedCategory}
 													</h6>
 													<div class="d-flex flex-wrap gap-2">
-														{#each getCategoryMarkRanges(selectedCategoryAllocatedMarks, currentAssessment.percentageRanges) as markRange}
+														{#each getCategoryMarkRanges(selectedCategoryAllocatedMarks, currentAssessment.percentageRanges) as markRange (markRange.range)}
 															<div class="badge p-2" style="background-color: {markRange.color}; color: white; font-size: 0.85rem;">
 																{markRange.range}
 															</div>
@@ -7746,7 +7790,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													bind:value={selectedKnowledgeArea}
 												>
 													<option value="">Choose a knowledge area...</option>
-													{#each (currentAssessment?.knowledgeAreas || []) as area}
+													{#each (currentAssessment?.knowledgeAreas || []) as area (area)}
 														<option value={area}>{area}</option>
 													{/each}
 												</select>
@@ -7759,7 +7803,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													bind:value={selectedCategory}
 												>
 													<option value="">Choose a category...</option>
-													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category}
+													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category (category.id)}
 														<option value={category.name}>{category.name}</option>
 													{/each}
 												</select>
@@ -7901,7 +7945,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										{#if (currentAssessment?.knowledgeAreas || []).length > 0}
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
-													{#each (currentAssessment?.knowledgeAreas || []) as area}
+													{#each (currentAssessment?.knowledgeAreas || []) as area (area)}
 														<div class="d-flex align-items-center bg-light border rounded px-1 py-0 small">
 															<span class="text-muted me-1">{area}</span>
 																<button 
@@ -7982,7 +8026,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
-													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category, index}
+													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category, index (category.id)}
 														<div class="d-flex align-items-center bg-light border rounded px-2 py-1 small">
 															<span class="text-muted me-1">
 																{category.name}
@@ -8141,7 +8185,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																{#if getFilteredStudents().length === 0}
 																	<div class="student-picker-empty">No matching students</div>
 																{:else}
-																	{#each getFilteredStudents() as student}
+																	{#each getFilteredStudents() as student (student.id)}
 																		<button
 																			type="button"
 																			class="student-picker-option {student.id === currentStudentId ? 'is-active' : ''}"
@@ -8215,7 +8259,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<div class="col-md-4">
 															<label for="studentDocumentType" class="form-label fw-bold small">File Type</label>
 													<select id="studentDocumentType" class="form-select form-select-sm" bind:value={selectedStudentDocumentType} disabled={!currentStudentId || uploadingStudentDocument}>
-																{#each STUDENT_DOCUMENT_TYPES as option}
+																{#each STUDENT_DOCUMENT_TYPES as option (option.value)}
 																	<option value={option.value}>{option.label}</option>
 																{/each}
 															</select>
@@ -8238,7 +8282,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											{/if}
 													{#if studentSubmissionDocuments.length > 0}
 														<div class="list-group list-group-flush mt-3 border rounded">
-															{#each studentSubmissionDocuments as document}
+															{#each studentSubmissionDocuments as document (document.id)}
 																<div class="list-group-item d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-start">
 																	<div>
 																		<div class="fw-semibold">{document.name}</div>
@@ -8331,7 +8375,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										</div>
 									{:else}
 										<div class="p-3">
-											{#each getGroupedParagraphs() as group}
+											{#each groupedParagraphs as group (group.category)}
 												<div class="card mb-3 border-start border-info border-4">
 													<div class="card-header bg-info text-white py-2">
 														<div class="d-flex align-items-center w-100 mb-2">
@@ -8417,7 +8461,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																<small class="text-muted">Add paragraphs using the form above</small>
 															</div>
 														{:else}
-											{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs]}
+											{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs] (knowledgeArea)}
 												{@const categoryParagraphSequence = getCategoryParagraphSequence(group)}
 												{#if knowledgeArea !== 'No Knowledge Area'}
 																	<div class="bg-light border-bottom px-3 py-2 d-flex align-items-center justify-content-between">
@@ -8436,7 +8480,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																		{/if}
 																	</div>
 											{/if}
-															{#each paragraphs as {text, color, id, createdAt, originalIndex, fullText, source, markInfo}, displayIndex}
+															{#each paragraphs as {text, color, id, createdAt, originalIndex, fullText, source, markInfo}, displayIndex (id)}
 												{@const categorySequenceIndex = findParagraphSequenceIndex(categoryParagraphSequence, id, originalIndex)}
 										<div 
 											class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
@@ -8623,7 +8667,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																	}}
 																>
 																	<option value="">No knowledge area</option>
-																	{#each (currentAssessment?.knowledgeAreas || []) as area}
+																	{#each (currentAssessment?.knowledgeAreas || []) as area (area)}
 																		<option value={area}>{area}</option>
 																	{/each}
 																</select>
@@ -8929,7 +8973,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 							{#if checkboxDebugInfo.length === 0}
 								<p class="text-muted mb-0">No debug messages yet. Try clicking a checkbox.</p>
 							{:else}
-								{#each checkboxDebugInfo as message}
+								{#each checkboxDebugInfo as message (message)}
 									<div class="mb-1">{message}</div>
 								{/each}
 							{/if}
@@ -8937,7 +8981,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						<div class="mt-3">
 							<h6>Current Paragraph IDs:</h6>
 							<div style="max-height: 100px; overflow-y: auto; background-color: #e9ecef; padding: 10px; border-radius: 3px; font-family: monospace; font-size: 0.8em;">
-								{#each paragraphs as para, index}
+								{#each paragraphs as para, index (para.id)}
 									<div class="mb-1">
 										<span class="badge {selectedParagraphs.has(para.id) ? 'bg-success' : 'bg-secondary'} me-2">
 											{selectedParagraphs.has(para.id) ? '✓' : '○'}
@@ -9548,7 +9592,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						<div class="alert alert-warning mb-0">No reviewable AI criterion suggestions were produced.</div>
 					{:else}
 						<div class="d-flex flex-column gap-3">
-							{#each aiDraftReviewItems as item, index}
+							{#each aiDraftReviewItems as item, index (index)}
 								<div class="card border-0 shadow-sm bg-light">
 									<div class="card-body">
 										<div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-2">
@@ -9632,7 +9676,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						</div>
 					{/if}
 					<div class="d-flex flex-column gap-3">
-						{#each promptPreviewMessages as message, index}
+						{#each promptPreviewMessages as message, index (index)}
 							<div class="border rounded p-3 bg-light">
 								<div class="fw-bold text-uppercase small mb-2">Message {index + 1} - {message.role}</div>
 								<pre class="mb-0 prompt-preview-pre">{message.content}</pre>
@@ -9776,7 +9820,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						</div>
 					{:else}
 						<div class="list-group">
-							{#each sortedStudents as student}
+							{#each sortedStudents as student (student.id)}
 								<div class="list-group-item d-flex justify-content-between align-items-center">
 									<div>
 										<h6 class="mb-1">{student.name}</h6>

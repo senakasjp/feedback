@@ -22,7 +22,7 @@ export function toggleDarkMode() {
   const currentMode = document.documentElement.getAttribute('data-bs-theme')
   const newMode = currentMode === 'dark' ? 'light' : 'dark'
   document.documentElement.setAttribute('data-bs-theme', newMode)
-  localStorage.setItem('darkMode', newMode === 'dark')
+  localStorage.setItem('darkMode', String(newMode === 'dark'))
 }
 
 // Removed autosave management to prevent data contamination
@@ -258,8 +258,9 @@ export function saveEditParagraph(paragraphs, editingParagraphIndex, editingPara
 // Paragraph reordering functions
 export function moveParagraphUp(paragraphIndex, paragraphs) {
   if (paragraphIndex > 0) {
-    const newParagraphs = [...paragraphs]
-    [newParagraphs[paragraphIndex], newParagraphs[paragraphIndex - 1]] = [newParagraphs[paragraphIndex - 1], newParagraphs[paragraphIndex]]
+    const newParagraphs = [...paragraphs];
+    [newParagraphs[paragraphIndex], newParagraphs[paragraphIndex - 1]] = 
+      [newParagraphs[paragraphIndex - 1], newParagraphs[paragraphIndex]];
     
     // Update order and originalIndex values
     newParagraphs.forEach((para, index) => {
@@ -276,8 +277,9 @@ export function moveParagraphUp(paragraphIndex, paragraphs) {
 
 export function moveParagraphDown(paragraphIndex, paragraphs) {
   if (paragraphIndex < paragraphs.length - 1) {
-    const newParagraphs = [...paragraphs]
-    [newParagraphs[paragraphIndex], newParagraphs[paragraphIndex + 1]] = [newParagraphs[paragraphIndex + 1], newParagraphs[paragraphIndex]]
+    const newParagraphs = [...paragraphs];
+    [newParagraphs[paragraphIndex], newParagraphs[paragraphIndex + 1]] = 
+      [newParagraphs[paragraphIndex + 1], newParagraphs[paragraphIndex]];
     
     // Update order and originalIndex values
     newParagraphs.forEach((para, index) => {

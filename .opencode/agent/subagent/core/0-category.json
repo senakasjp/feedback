@@ -1,0 +1,43 @@
+{
+  "name": "Core Subagents",
+  "description": "Discovery, execution, testing, review, and documentation subagents",
+  "icon": "⚙️",
+  "agents": {
+    "contextscout": {
+      "description": "Discovers and recommends context files ranked by priority"
+    },
+    "externalscout": {
+      "description": "Fetches live, version-specific docs for external libraries"
+    },
+    "documentation": {
+      "description": "Documentation authoring agent (DocWriter)"
+    },
+    "coder-agent": {
+      "description": "Executes coding subtasks in sequence with self-review"
+    },
+    "build-agent": {
+      "description": "Type check and build validation agent"
+    },
+    "code-reviewer": {
+      "description": "Code review, security, and quality assurance agent"
+    },
+    "test-engineer": {
+      "description": "Test authoring and TDD agent"
+    },
+    "batch-executor": {
+      "description": "Execute multiple tasks in parallel batches"
+    },
+    "task-manager": {
+      "description": "JSON-driven task breakdown specialist"
+    },
+    "context-manager": {
+      "description": "Context organisation and lifecycle management specialist"
+    },
+    "context-retriever": {
+      "description": "Generic context search and retrieval specialist"
+    },
+    "stage-orchestrator": {
+      "description": "Multi-stage workflow orchestrator with validation gates"
+    }
+  }
+}

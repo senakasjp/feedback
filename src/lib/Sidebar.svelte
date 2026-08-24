@@ -18,6 +18,14 @@
 	export let percentageRanges = [];
 	/** @type {any} */
 	export let categoryMarks = {}; // Used in template for total marks display
+	/** @type {Function} */
+	export const getTotalMarks = () => 0;
+	/** @type {Function} */
+	export const onUpdateAssessment = () => {};
+	/** @type {Function} */
+	export const onUpdateSubject = () => {};
+	/** @type {Function} */
+	export const onUpdateKnowledgeAreas = () => {};
 	
 	// Calculate total marks locally - make it reactive
 	let totalMarks = 0
