@@ -115,6 +115,8 @@
 	let quickAddKnowledgeArea = $state({}) // Store quick-add knowledge area selection per category
 	let quickAddText = $state({}) // Store quick-add paragraph text per category
 	let quickAddAiInstructions = $state({}) // Store per-answer AI instructions per category
+	let quickAddIncludeCommonPrompt = $state({}) // Per-category: whether the assessment's common AI prompt applies (default true)
+	let showCommonPromptBox = $state(false)
 	let quickAddInstructionAssessmentKey = $state('')
 	let quickAddInstructionExpanded = $state({})
 	const quickAddInstructionSaveTimers = {}
@@ -1207,6 +1209,7 @@
 					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
 					assessmentReferenceDocuments = currentAssessment?.aiReferenceDocuments || []
 					quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+					quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 					quickAddInstructionExpanded = {}
 					quickAddInstructionAssessmentKey = `${subjectId || ''}:${assessmentId || ''}`
 					// Keep HTML card collapsed by default; user can expand manually
@@ -1341,6 +1344,7 @@
 					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
 					assessmentReferenceDocuments = currentAssessment?.aiReferenceDocuments || []
 					quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+					quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 					quickAddInstructionExpanded = {}
 					quickAddInstructionAssessmentKey = `${subjectId || ''}:${assessmentId || ''}`
 					// Keep HTML card collapsed by default; user can expand manually
@@ -1383,6 +1387,7 @@
 		stopSpeechRecorder()
 		speechTranscribingByCategory = {}
 		quickAddAiInstructions = {}
+		quickAddIncludeCommonPrompt = {}
 		quickAddInstructionExpanded = {}
 		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
 			clearTimeout(quickAddInstructionSaveTimers[key])
@@ -1400,9 +1405,8 @@
 		aiDraftReviewItems = []
 		showAiDraftReviewModal = false
 		showPromptPreviewModal = false
-		promptPreviewTitle = ''
-		promptPreviewMessages = []
-		promptPreviewRequestPayload = null
+		// Note: promptPreviewTitle/Messages/RequestPayload are NOT cleared here — the header
+		// "Last Prompt" button keeps the most recently sent prompt available across assessments.
 		activeFeedbackTab = 'enter-data'
 		quickAddToAssessmentWhenStudentSelected = false
 
@@ -1417,6 +1421,7 @@
 	$effect(() => {
 		if (!currentAssessment?.categories || !currentAssessmentId) {
 			quickAddAiInstructions = {}
+			quickAddIncludeCommonPrompt = {}
 			quickAddInstructionExpanded = {}
 			quickAddInstructionAssessmentKey = ''
 			return
@@ -1425,6 +1430,7 @@
 		const assessmentKey = `${currentSubjectId || ''}:${currentAssessmentId || ''}`
 		if (quickAddInstructionAssessmentKey !== assessmentKey) {
 			quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+			quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 			quickAddInstructionExpanded = {}
 			quickAddInstructionAssessmentKey = assessmentKey
 		}
@@ -1814,7 +1820,7 @@
 
 	async function improveTextWithAI(categoryName) {
 		const text = stripHtmlTags((quickAddText[categoryName] || '').trim())
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 		if (!text) {
 			showSuccessNotification('⚠️ Please enter some text first')
 			return
@@ -1829,6 +1835,9 @@
 		improvingText = { ...improvingText, [categoryName]: true }
 
 		try {
+			promptPreviewTitle = `Improve Prompt - ${categoryName}`
+			promptPreviewMessages = buildImproveEnglishPromptPreview(text, answerInstructions)
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(promptPreviewMessages, 0.3, 1000)
 			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference())
 			// Strip any HTML tags that might have been introduced
 			const cleanedText = stripHtmlTags(result.improvedText || '')
@@ -1931,6 +1940,66 @@
 
 		subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
 		await saveSubjects()
+	}
+
+	function buildQuickAddIncludeCommonPromptDefaults() {
+		const defaults = {}
+		const perAnswerMap = currentAssessment?.commonPromptEnabledByCategory || {}
+		for (const category of currentAssessment?.categories || []) {
+			const mappedValue = perAnswerMap[category.name] ?? perAnswerMap[normalizeCategoryName(category.name)]
+			defaults[category.name] = mappedValue ?? (category.includeCommonAiPrompt ?? true)
+		}
+		return defaults
+	}
+
+	function isCommonPromptIncluded(categoryName) {
+		return quickAddIncludeCommonPrompt[categoryName] !== false
+	}
+
+	async function persistCategoryIncludeCommonPrompt(categoryName, isIncluded) {
+		quickAddIncludeCommonPrompt = { ...quickAddIncludeCommonPrompt, [categoryName]: isIncluded }
+		if (!currentAssessment || !currentAssessmentId || !currentSubjectId) return
+
+		const nextPerAnswerMap = {
+			...(currentAssessment.commonPromptEnabledByCategory || {}),
+			[categoryName]: isIncluded,
+			[normalizeCategoryName(categoryName)]: isIncluded
+		}
+
+		let updatedCategories = currentAssessment.categories || []
+		const categoryIndex = updatedCategories.findIndex(
+			category => normalizeCategoryName(category.name) === normalizeCategoryName(categoryName)
+		)
+		if (categoryIndex !== -1) {
+			updatedCategories = [...updatedCategories]
+			updatedCategories[categoryIndex] = {
+				...updatedCategories[categoryIndex],
+				includeCommonAiPrompt: isIncluded
+			}
+		}
+
+		currentAssessment = {
+			...currentAssessment,
+			categories: updatedCategories,
+			commonPromptEnabledByCategory: nextPerAnswerMap
+		}
+
+		const subjectIndex = subjects.findIndex(subject => subject.id === currentSubjectId)
+		if (subjectIndex === -1) return
+		const assessmentIndex = subjects[subjectIndex].assessments.findIndex(assessment => assessment.id === currentAssessmentId)
+		if (assessmentIndex === -1) return
+
+		subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+		await saveSubjects()
+	}
+
+	// Merges the assessment-wide common prompt (unless opted out per category) with this category's own instructions.
+	function getCombinedAnswerInstructions(categoryName) {
+		const common = isCommonPromptIncluded(categoryName)
+			? (currentAssessment?.commonParagraphAiInstructions || '').trim()
+			: ''
+		const perCategory = (quickAddAiInstructions[categoryName] || '').trim()
+		return [common, perCategory].filter(Boolean).join('\n\n')
 	}
 
 	function updateAssessmentReferenceDocuments(nextDocuments) {
@@ -2246,7 +2315,7 @@
 
 	async function improveTextWithRag(categoryName) {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 		if (!shortText) {
 			showSuccessNotification('⚠️ Please enter some text first')
 			return
@@ -2263,7 +2332,7 @@
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
-			const result = await improveFeedbackWithRag({
+			const ragArgs = {
 				assessment: assessmentForAi,
 				categoryName,
 				shortFeedback: shortText,
@@ -2274,7 +2343,14 @@
 				assessmentParagraphs,
 				priorEvaluations,
 				vectorIndex,
-				globalSystemInstructions: globalAiSystemInstructions,
+				globalSystemInstructions: globalAiSystemInstructions
+			}
+			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
+			promptPreviewTitle = `RAG Prompt - ${categoryName}`
+			promptPreviewMessages = preview.messages
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
+			const result = await improveFeedbackWithRag({
+				...ragArgs,
 				modelPreference: getCurrentAiModelPreference()
 			})
 
@@ -2305,7 +2381,7 @@
 			return
 		}
 
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 		const studentSubmission = getCombinedStudentSubmissionText()
 		const evidenceNotes = getSelectedEvidenceNotes(categoryName)
 
@@ -2455,10 +2531,16 @@
 	}
 
 	function closePromptPreviewModal() {
+		// Keep the last prompt cached (not cleared) so the header "Last Prompt" button can reopen it.
 		showPromptPreviewModal = false
-		promptPreviewTitle = ''
-		promptPreviewMessages = []
-		promptPreviewRequestPayload = null
+	}
+
+	function openLastAiPromptModal() {
+		if (promptPreviewMessages.length === 0) {
+			showSuccessNotification('ℹ️ No AI prompt has been sent yet in this session.')
+			return
+		}
+		showPromptPreviewModal = true
 	}
 
 	function buildPromptPreviewRequestPayload(messages = [], temperature = 0.3, maxTokens = 1000) {
@@ -2478,7 +2560,7 @@
 
 	async function viewFinalPrompt(categoryName, mode = 'ai') {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 
 		if (!shortText) {
 			showSuccessNotification('⚠️ Please enter some text first')
@@ -4133,6 +4215,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.log(`STRICT FILTER: Selecting student ${studentId} for assessment ${currentAssessmentId}`)
 			await loadStudentEvaluation()
 			quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+			quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 		} else {
 			// Clear only student-specific data, keep paragraphs and header photo visible
 			studentName = ''
@@ -7019,6 +7102,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				<li class="nav-item">
 					<button
 						class="btn btn-outline-light btn-sm ms-2"
+						onclick={openLastAiPromptModal}
+						title={promptPreviewMessages.length > 0 ? `View last AI prompt: ${promptPreviewTitle}` : 'No AI prompt sent yet'}
+						aria-label="View last AI prompt"
+						disabled={promptPreviewMessages.length === 0}
+					>
+						<i class="bi bi-chat-left-text me-1"></i>Last Prompt
+					</button>
+				</li>
+				<li class="nav-item">
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
 						onclick={() => showCheckboxDebug = !showCheckboxDebug}
 						title="Toggle Checkbox Debug"
 						aria-label="Toggle Checkbox Debug"
@@ -8322,6 +8416,34 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										</div>
 									</div>
 								</div>
+								{#if currentAssessment}
+									<div class="px-3 pt-3">
+										<button
+											type="button"
+											class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
+											onclick={() => showCommonPromptBox = !showCommonPromptBox}
+											aria-expanded={showCommonPromptBox}
+											aria-controls="commonParagraphPromptPanel"
+										>
+											<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-1`}></i>
+											Common AI Prompt (all paragraphs){#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
+										</button>
+										{#if showCommonPromptBox}
+											<div id="commonParagraphPromptPanel" class="mt-2">
+												<textarea
+													id="commonParagraphPromptInput"
+													class="form-control form-control-sm"
+													rows="2"
+													placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
+													value={currentAssessment.commonParagraphAiInstructions || ''}
+													oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
+													onchange={persistAssessmentAiSettings}
+												></textarea>
+												<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
+											</div>
+										{/if}
+									</div>
+								{/if}
 								<div class="card-body p-0">
 									{#if paragraphs.length === 0}
 										<div class="text-center py-4 px-3">
@@ -8830,6 +8952,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																onblur={() => persistCategoryAiInstruction(group.category)}
 															></textarea>
 																	<div class="form-text">Only for this answer. Not global system behaviour.</div>
+																	<div class="form-check form-switch mt-2">
+																		<input
+																			class="form-check-input"
+																			type="checkbox"
+																			id={`includeCommonPrompt-${group.category}`}
+																			checked={isCommonPromptIncluded(group.category)}
+																			onchange={(e) => persistCategoryIncludeCommonPrompt(group.category, e.currentTarget.checked)}
+																		>
+																		<label class="form-check-label small" for={`includeCommonPrompt-${group.category}`}>
+																			Apply the assessment's common AI prompt to this paragraph
+																		</label>
+																	</div>
 																</div>
 															{/if}
 														</div>
