@@ -1,14 +1,39 @@
 /**
  * LLM Provider Registry
  * Each provider adapts the shared chat-completion call shape to its own API.
- * To add a provider: add an entry to PROVIDERS with apiKey/chatUrl/headers/buildBody/parseResponse,
+ * To add a provider: add an entry to PROVIDERS with envApiKey/chatUrl/headers/buildBody/parseResponse,
  * then list its models in aiModelService.js with `provider: '<id>'`.
+ * API keys can be entered in-app (Settings > API Keys, stored in localStorage) and take
+ * priority over the build-time VITE_*_API_KEY env var — see getEffectiveApiKey().
  */
 
 const PLACEHOLDER = 'your-api-key-here'
+const API_KEY_STORAGE_PREFIX = 'feedback-ai-apikey-'
 
 function isConfiguredKey(key) {
   return Boolean(key && key !== PLACEHOLDER)
+}
+
+/** A key entered in the GUI (Settings > API Keys) overrides the .env value at runtime. */
+export function getStoredApiKey(providerId = '') {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE_PREFIX + providerId) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setStoredApiKey(providerId = '', apiKey = '') {
+  const trimmed = String(apiKey || '').trim()
+  if (trimmed) {
+    localStorage.setItem(API_KEY_STORAGE_PREFIX + providerId, trimmed)
+  } else {
+    localStorage.removeItem(API_KEY_STORAGE_PREFIX + providerId)
+  }
+}
+
+export function getEffectiveApiKey(providerId = '') {
+  return getStoredApiKey(providerId) || getProvider(providerId).envApiKey
 }
 
 async function readErrorMessage(response) {
@@ -110,7 +135,7 @@ const PROVIDERS = {
   openai: {
     id: 'openai',
     label: 'OpenAI',
-    apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+    envApiKey: import.meta.env.VITE_OPENAI_API_KEY,
     chatUrl: 'https://api.openai.com/v1/chat/completions',
     headers(apiKey) {
       return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }
@@ -128,7 +153,7 @@ const PROVIDERS = {
   anthropic: {
     id: 'anthropic',
     label: 'Anthropic',
-    apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
+    envApiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
     chatUrl: 'https://api.anthropic.com/v1/messages',
     headers(apiKey) {
       return {
@@ -165,7 +190,7 @@ export function getProvider(providerId = '') {
 }
 
 export function isProviderConfigured(providerId = '') {
-  return isConfiguredKey(getProvider(providerId).apiKey)
+  return isConfiguredKey(getEffectiveApiKey(providerId))
 }
 
 export function getProviderLabel(providerId = '') {
@@ -178,14 +203,15 @@ export function getProviderLabel(providerId = '') {
  */
 export async function callChatCompletion({ providerId = DEFAULT_PROVIDER_ID, model, messages = [], temperature = 0.3, maxTokens = 1000, reasoningEffort = '' }) {
   const provider = getProvider(providerId)
+  const apiKey = getEffectiveApiKey(providerId)
 
-  if (!isConfiguredKey(provider.apiKey)) {
-    throw new Error(`${provider.label} API key is not configured. Please add your API key to the .env file.`)
+  if (!isConfiguredKey(apiKey)) {
+    throw new Error(`${provider.label} API key is not configured. Add it in Settings > API Keys, or in the .env file.`)
   }
 
   const response = await fetch(provider.chatUrl, {
     method: 'POST',
-    headers: provider.headers(provider.apiKey),
+    headers: provider.headers(apiKey),
     body: JSON.stringify(provider.buildBody({ model, messages, temperature, maxTokens, reasoningEffort }))
   })
 

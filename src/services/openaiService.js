@@ -4,9 +4,8 @@
  */
 
 import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getProviderForModel, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
-import { callChatCompletion } from './llmProviders.js'
+import { callChatCompletion, getEffectiveApiKey } from './llmProviders.js'
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions'
 
 async function getErrorMessage(response) {
@@ -103,7 +102,8 @@ export async function improveEnglish(text, customInstructions = '', modelPrefere
  * @returns {boolean} - True if API key is configured
  */
 export function isOpenAIConfigured() {
-  return Boolean(OPENAI_API_KEY && OPENAI_API_KEY !== 'your-api-key-here')
+  const apiKey = getEffectiveApiKey('openai')
+  return Boolean(apiKey && apiKey !== 'your-api-key-here')
 }
 
 export function buildImproveEnglishPromptPreview(text, customInstructions = '') {
@@ -115,8 +115,9 @@ export async function transcribeAudioBlob(audioBlob) {
     throw new Error('Audio recording is empty')
   }
 
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
-    throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
+  const apiKey = getEffectiveApiKey('openai')
+  if (!apiKey || apiKey === 'your-api-key-here') {
+    throw new Error('OpenAI API key is not configured. Add it in Settings > API Keys, or in the .env file.')
   }
 
   const formData = new FormData()
@@ -127,7 +128,7 @@ export async function transcribeAudioBlob(audioBlob) {
   const response = await fetch(OPENAI_TRANSCRIBE_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`
+      'Authorization': `Bearer ${apiKey}`
     },
     body: formData
   })

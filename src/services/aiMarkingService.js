@@ -1,7 +1,6 @@
 import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getProviderForModel, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
-import { callChatCompletion } from './llmProviders.js'
+import { callChatCompletion, getEffectiveApiKey } from './llmProviders.js'
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 const MAX_RETRIEVED_CHUNKS = 8
@@ -363,8 +362,9 @@ async function getErrorMessage(response) {
 }
 
 async function createEmbeddings(inputs = []) {
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
-    throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
+  const apiKey = getEffectiveApiKey('openai')
+  if (!apiKey || apiKey === 'your-api-key-here') {
+    throw new Error('OpenAI API key is not configured. Add it in Settings > API Keys, or in the .env file.')
   }
 
   if (!inputs.length) {
@@ -375,7 +375,7 @@ async function createEmbeddings(inputs = []) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`
+      'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
       model: EMBEDDING_MODEL,

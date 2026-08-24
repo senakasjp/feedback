@@ -25,7 +25,7 @@
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
 	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
 	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
-	import { getProvider as getLlmProvider, isProviderConfigured } from './services/llmProviders.js'
+	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
 	
 	// Import constants
@@ -321,6 +321,7 @@
 	let showAiModelSettings = $state(false)
 	let aiModelSettingsContainer = $state(null)
 	let selectedAiProvider = $state(DEFAULT_AI_PROVIDER)
+	let apiKeyDrafts = $state({})
 	let selectedAiModel = $state(DEFAULT_AI_CHAT_MODEL)
 	let selectedAiReasoningEffort = $state(DEFAULT_AI_REASONING_EFFORT)
 	let aiModelSettingsReady = $state(false)
@@ -542,6 +543,7 @@
 		selectedAiModel = nextModel
 		manualAiModelInput = nextModel
 		selectedAiReasoningEffort = sanitizeReasoningEffort(nextModel, savedReasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+		apiKeyDrafts = Object.fromEntries(AI_PROVIDER_OPTIONS.map(option => [option.value, getStoredApiKey(option.value)]))
 		aiModelSettingsReady = true
 	}
 
@@ -566,6 +568,18 @@
 		if (!providerModels.some(option => option.value === selectedAiModel)) {
 			selectAiModel(providerModels[0]?.value || selectedAiModel)
 		}
+	}
+
+	function saveApiKey(providerId) {
+		setStoredApiKey(providerId, apiKeyDrafts[providerId] || '')
+		apiKeyDrafts = { ...apiKeyDrafts, [providerId]: getStoredApiKey(providerId) }
+		showSuccessNotification(`✅ ${getLlmProvider(providerId).label} API key saved.`)
+	}
+
+	function clearApiKey(providerId) {
+		setStoredApiKey(providerId, '')
+		apiKeyDrafts = { ...apiKeyDrafts, [providerId]: '' }
+		showSuccessNotification(`${getLlmProvider(providerId).label} API key cleared (falls back to .env if set).`)
 	}
 
 	function selectAiModel(model) {
@@ -7074,6 +7088,55 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										</button>
 									{/each}
 								</div>
+							</div>
+							<div class="ai-settings-divider"></div>
+							<div class="ai-settings-section">
+								<div class="ai-settings-heading">API Keys</div>
+								{#each AI_PROVIDER_OPTIONS as option (option.value)}
+									<div class="ai-settings-manual mt-2">
+										<label class="form-label small mb-1" for="apiKeyInput-{option.value}">
+											{option.label} key
+											{#if isProviderConfigured(option.value)}
+												<i class="bi bi-check-circle-fill text-success ms-1" title="Configured"></i>
+											{/if}
+										</label>
+										<div class="ai-settings-manual-row">
+											<input
+												id="apiKeyInput-{option.value}"
+												type="password"
+												autocomplete="off"
+												class="form-control form-control-sm ai-settings-input"
+												value={apiKeyDrafts[option.value] || ''}
+												oninput={(e) => { apiKeyDrafts = { ...apiKeyDrafts, [option.value]: e.currentTarget.value } }}
+												placeholder={getLlmProvider(option.value).envApiKey ? 'Using key from .env' : 'sk-...'}
+												onkeydown={(event) => {
+													if (event.key === 'Enter') {
+														event.preventDefault()
+														saveApiKey(option.value)
+													}
+												}}
+											>
+											<button
+												type="button"
+												class="btn btn-sm btn-outline-primary ai-settings-apply"
+												onclick={() => saveApiKey(option.value)}
+											>
+												Save
+											</button>
+											{#if apiKeyDrafts[option.value]}
+												<button
+													type="button"
+													class="btn btn-sm btn-outline-secondary ai-settings-apply"
+													onclick={() => clearApiKey(option.value)}
+													title="Clear stored key"
+													aria-label={`Clear stored ${option.label} API key`}
+												>
+													<i class="bi bi-x-lg"></i>
+												</button>
+											{/if}
+										</div>
+									</div>
+								{/each}
 							</div>
 							<div class="ai-settings-divider"></div>
 							<div class="ai-settings-section">
