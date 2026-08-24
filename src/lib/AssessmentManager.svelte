@@ -3,7 +3,9 @@
 	import { getDynamicColor, getGradeColor } from './colorUtils.js'
 import { generateCSVContent } from './printUtils.js'
 import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../utils/exportColumns.js'
+	import { debugLog } from '../utils/debug.js'
 	import jsPDF from 'jspdf'
+	const console = { ...globalThis.console, log: debugLog, info: debugLog }
 
   // Types
   type Assessment = {
@@ -13,6 +15,10 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
     categories?: Category[];
     weight?: number;
     headerPhoto?: string;
+    knowledgeAreas?: string[];
+    totalMarks?: number;
+    markingMode?: string;
+    percentageRanges?: any[];
   }
 
   type Topic = {
@@ -24,6 +30,36 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
     id: string;
     name: string;
     description?: string;
+    allocatedMarks?: number;
+  }
+
+  type Student = {
+    id: string;
+    name: string;
+    studentId?: string;
+    displayName?: string;
+    photo?: string;
+    image?: string;
+  }
+
+  type Evaluation = {
+    studentId?: string;
+    assessmentId?: string;
+    paragraphs?: any[];
+    selectedParagraphs?: any[];
+    studentName?: string;
+    studentImage?: string;
+    categoryMarks?: Record<string, any>;
+    manualTotalMarks?: string;
+    savedAt?: string;
+  }
+
+  type StudentSummaryCache = {
+    marksByStudent: Record<string, Record<string, any>>;
+    weightedByStudent: Record<string, Record<string, any>>;
+    summaryByStudent: Record<string, any>;
+    gradeByStudent: Record<string, string>;
+    maxRawMarksByAssessment: Record<string, number>;
   }
 
   // Props
@@ -33,22 +69,33 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
     subjectName = 'Unknown Subject',
     subjectId = '',
     onSelectAssessment, 
+    onAssessmentSelect,
     onUpdateAssessments,
+    onUpdateAssessment,
+    onDeleteAssessment,
+    onBack,
 		showAddAssessment = false,
 		newAssessmentName = '',
 		onAddAssessment,
 		addCheckboxDebug = () => {}
   }: {
     assessments?: Assessment[];
-    students?: any[];
+    students?: Student[];
     subjectName?: string;
-    onSelectAssessment: (assessment: Assessment) => void;
-    onUpdateAssessments: (assessments: Assessment[]) => void;
+    subjectId?: string;
+    onSelectAssessment?: (assessment: Assessment) => void;
+    onAssessmentSelect?: (assessment: Assessment) => void;
+    onUpdateAssessments?: (assessments: Assessment[]) => void;
+    onUpdateAssessment?: (assessment: Assessment) => void;
+    onDeleteAssessment?: (assessment: Assessment) => void;
+    onBack?: () => void;
 		showAddAssessment?: boolean;
 		newAssessmentName?: string;
 		onAddAssessment?: (name: string) => void;
 		addCheckboxDebug?: (message: string) => void;
   } = $props()
+
+	const DEFAULT_MARKS_PER_CATEGORY = 20;
 
 	// ID helpers
 	function generateAssessmentId(): string {
@@ -73,12 +120,15 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 	let showStudentDeleteConfirm = $state(false);
 	let studentToDelete = $state(null);
 	let localNewAssessmentName = $state('');
-	let studentEvaluations = $state({}); // Store student evaluation data
+	let studentEvaluations: Record<string, Record<string, Evaluation>> = $state({}); // Store student evaluation data
 	let studentsWithMarks = $state([]); // Students who have marks for this subject
+	let lastEvaluationLoadSignature = '';
+	let evaluationLoadRequestId = 0;
 	let editingWeight = $state({}); // Track which weight is being edited
 	let tempWeightValue = $state(''); // Temporary value while editing
 	let hiddenColumnsInput = $state('');
 	let hiddenColumnsSet = $derived(buildHiddenColumnSet(hiddenColumnsInput));
+	let studentSummaryCache = $derived.by(() => buildStudentSummaryCache());
 	let exportColumnOptions = $derived(
 		(() => {
 			const options = [
@@ -234,6 +284,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 
 	// Load student evaluation data for all students and assessments
 	async function loadStudentEvaluations() {
+		const requestId = ++evaluationLoadRequestId;
 		const evaluations = {};
 		const studentsWithData = [];
 
@@ -285,6 +336,10 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 				studentsWithData.push(student);
 			}
 		}
+
+		if (requestId !== evaluationLoadRequestId) {
+			return;
+		}
 		
 		studentEvaluations = evaluations;
 		studentsWithMarks = studentsWithData;
@@ -297,75 +352,49 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		console.log('assessments:', assessments);
 	}
 
+	function buildEvaluationLoadSignature() {
+		const studentSignature = students
+			.map(student => `${student?.id || ''}:${student?.name || ''}:${student?.studentId || ''}`)
+			.join('|');
+		const assessmentSignature = assessments
+			.map(assessment => {
+				const categoryCount = Array.isArray(assessment?.categories) ? assessment.categories.length : 0;
+				return `${assessment?.id || ''}:${assessment?.name || ''}:${assessment?.weight ?? ''}:${categoryCount}`;
+			})
+			.join('|');
+		return `${subjectId || ''}::${studentSignature}::${assessmentSignature}`;
+	}
+
 	// Load evaluations when component mounts or when students/assessments change
   $effect(() => {
-    if (students.length > 0 && assessments.length > 0) {
+		const loadSignature = buildEvaluationLoadSignature();
+
+		if (students.length === 0 || assessments.length === 0) {
+			lastEvaluationLoadSignature = loadSignature;
+			studentEvaluations = {};
+			studentsWithMarks = [];
+			return;
+		}
+
+		if (loadSignature !== lastEvaluationLoadSignature) {
+			lastEvaluationLoadSignature = loadSignature;
 			loadStudentEvaluations();
 		}
 	});
 
 	// Helper function to get marks for a student-assessment combination
 	function getStudentMarks(studentId: string, assessmentId: string) {
-		const studentData = studentEvaluations[studentId];
-		if (!studentData || !studentData[assessmentId]) {
-			return null;
-		}
-		
-		const evaluation = studentData[assessmentId];
-		const categoryMarks = evaluation.categoryMarks || {};
-		const manualTotal = evaluation.manualTotalMarks;
-		
-		// Calculate total from category marks if no manual total
-		const calculatedTotal = Object.values(categoryMarks).reduce((total: number, marks: unknown) => {
-			const numMarks = parseFloat(String(marks)) || 0;
-			return total + numMarks;
-		}, 0);
-		
-		// Prioritize calculated total from category marks; only use manual total when no category marks exist
-		const hasCategoryMarks = Object.keys(categoryMarks).length > 0;
-		const manualTotalNum = manualTotal ? parseFloat(String(manualTotal)) : 0;
-		const finalTotal = hasCategoryMarks ? Number(calculatedTotal) : manualTotalNum;
-		
-		
-		return {
-			categoryMarks,
-			total: finalTotal,
-			hasMarks: hasCategoryMarks
-		};
+		return studentSummaryCache.marksByStudent?.[studentId]?.[assessmentId] ?? null;
 	}
 
 	// Helper function to calculate weighted marks
 	function getWeightedMarks(studentId: string, assessmentId: string) {
-		const marks = getStudentMarks(studentId, assessmentId);
-		const assessment = assessments.find(a => a.id === assessmentId);
-		
-		if (!marks || !marks.hasMarks || !assessment || !assessment.weight) {
-			return null;
-		}
-
-		// Weighted contribution: raw mark * (weight / 100)
-		const weightedMarks = Number(marks.total) * (assessment.weight / 100);
-		return {
-			weightedMarks: weightedMarks,
-			displayValue: weightedMarks.toFixed(1)
-		};
+		return studentSummaryCache.weightedByStudent?.[studentId]?.[assessmentId] ?? null;
 	}
 
 	// Helper function to get the maximum possible raw marks for an assessment
 	function getMaxPossibleRawMarks(assessmentId: string): number {
-		const assessment = assessments.find(a => a.id === assessmentId);
-		if (!assessment || !assessment.categories) {
-			return 100; // Default fallback
-		}
-		const totalMarks = assessment.categories.reduce((total, category) => total + ((category as any).allocatedMarks || 0), 0);
-		
-		
-		// If no allocated marks are set, use a default based on number of categories
-		if (totalMarks === 0 && assessment.categories.length > 0) {
-			return assessment.categories.length * 20; // 20 marks per category as default
-		}
-		
-		return totalMarks || 100; // Fallback to 100 if still 0
+		return studentSummaryCache.maxRawMarksByAssessment?.[assessmentId] ?? 100;
 	}
 
 	// Helper function to calculate grade based on percentage
@@ -384,56 +413,119 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 	}
 
 	function getFinalSummary(studentId: string) {
-		let totalWeightedMarks = 0;
-		let totalWeight = 0;
-		let hasAnyMarks = false;
-		let assessmentsWithMarks = 0;
-
-		for (const assessment of assessments) {
-			const weighted = getWeightedMarks(studentId, assessment.id);
-			if (weighted) {
-				totalWeightedMarks += weighted.weightedMarks;
-				hasAnyMarks = true;
-				assessmentsWithMarks++;
-			}
-
-			if (assessment.weight) {
-				totalWeight += assessment.weight;
-			}
-		}
-
-		// Use the straight sum of weighted contributions (already scaled by each assessment's weight)
-		const percentage = totalWeight > 0 ? totalWeightedMarks : null;
-		const isComplete = hasAnyMarks && totalWeight > 0 && assessmentsWithMarks === assessments.length;
-
-		return {
-			totalWeightedMarks,
-			totalWeight,
-			percentage,
-			isComplete,
-			assessmentsWithMarks
+		return studentSummaryCache.summaryByStudent?.[studentId] ?? {
+			totalWeightedMarks: 0,
+			totalWeight: 0,
+			percentage: null,
+			isComplete: false,
+			assessmentsWithMarks: 0
 		};
 	}
 
 	// Helper function to calculate final weighted grade for a student
 	function getFinalGrade(studentId: string): string {
-		const { percentage, isComplete, totalWeightedMarks, totalWeight, assessmentsWithMarks } = getFinalSummary(studentId);
+		return studentSummaryCache.gradeByStudent?.[studentId] ?? "N/A";
+	}
 
-		if (!isComplete || percentage === null) {
-			return "N/A";
+	function buildStudentSummaryCache(): StudentSummaryCache {
+		const marksByStudent = {};
+		const weightedByStudent = {};
+		const summaryByStudent = {};
+		const gradeByStudent = {};
+		const maxRawMarksByAssessment = {};
+		const weightCarryingAssessments = assessments.filter(assessment => Number.isFinite(assessment?.weight) && assessment.weight > 0);
+		const weightCarryingCount = weightCarryingAssessments.length;
+
+		for (const assessment of assessments) {
+			const assessmentId = assessment?.id;
+			if (!assessmentId) continue;
+			if (!assessment.categories) {
+				maxRawMarksByAssessment[assessmentId] = 100;
+				continue;
+			}
+			const totalMarks = assessment.categories.reduce((total, category) => total + (category.allocatedMarks || 0), 0);
+			if (totalMarks === 0 && assessment.categories.length > 0) {
+				maxRawMarksByAssessment[assessmentId] = assessment.categories.length * DEFAULT_MARKS_PER_CATEGORY;
+				continue;
+			}
+			maxRawMarksByAssessment[assessmentId] = totalMarks || 100;
 		}
 
-		// Debug logging
-		console.log(`Final grade calculation for student ${studentId}:`, {
-			totalWeightedMarks,
-			totalWeight,
-			assessmentsWithMarks,
-			totalAssessments: assessments.length,
-			finalPercentage: Math.round(percentage * 100) / 100,
-			grade: getGrade(percentage)
-		});
-		
-		return getGrade(percentage);
+		for (const student of students) {
+			const studentId = student?.id;
+			if (!studentId) continue;
+			const marksByAssessment = {};
+			const weightedByAssessment = {};
+			let totalWeightedMarks = 0;
+			let totalWeight = 0;
+			let hasAnyMarks = false;
+			let assessmentsWithMarks = 0;
+
+			for (const assessment of assessments) {
+				const assessmentId = assessment?.id;
+				if (!assessmentId) continue;
+				const evaluation = studentEvaluations?.[studentId]?.[assessmentId];
+				let marksResult = null;
+				if (evaluation) {
+					const categoryMarks = evaluation.categoryMarks || {};
+					const manualTotal = evaluation.manualTotalMarks;
+					const calculatedTotal = Object.values(categoryMarks).reduce((total: number, marks: unknown) => {
+						const numMarks = parseFloat(String(marks)) || 0;
+						return total + numMarks;
+					}, 0);
+					const hasCategoryMarks = Object.keys(categoryMarks).length > 0;
+					const manualTotalNum = manualTotal ? parseFloat(String(manualTotal)) : 0;
+					const finalTotal = hasCategoryMarks ? Number(calculatedTotal) : manualTotalNum;
+					marksResult = {
+						categoryMarks,
+						total: finalTotal,
+						hasMarks: hasCategoryMarks
+					};
+				}
+
+				marksByAssessment[assessmentId] = marksResult;
+
+				let weightedResult = null;
+				if (marksResult?.hasMarks && assessment?.weight) {
+					const weightedMarks = Number(marksResult.total) * (assessment.weight / 100);
+					weightedResult = {
+						weightedMarks: weightedMarks,
+						displayValue: weightedMarks.toFixed(1)
+					};
+					totalWeightedMarks += weightedMarks;
+					hasAnyMarks = true;
+					assessmentsWithMarks += 1;
+				}
+
+				if (Number.isFinite(assessment?.weight) && assessment.weight > 0) {
+					totalWeight += assessment.weight;
+				}
+
+				weightedByAssessment[assessmentId] = weightedResult;
+			}
+
+			marksByStudent[studentId] = marksByAssessment;
+			weightedByStudent[studentId] = weightedByAssessment;
+
+			const percentage = totalWeight > 0 ? totalWeightedMarks : null;
+			const isComplete = hasAnyMarks && totalWeight > 0 && assessmentsWithMarks === weightCarryingCount;
+			summaryByStudent[studentId] = {
+				totalWeightedMarks,
+				totalWeight,
+				percentage,
+				isComplete,
+				assessmentsWithMarks
+			};
+			gradeByStudent[studentId] = isComplete && percentage !== null ? getGrade(percentage) : "N/A";
+		}
+
+		return {
+			marksByStudent,
+			weightedByStudent,
+			summaryByStudent,
+			gradeByStudent,
+			maxRawMarksByAssessment
+		};
 	}
 
 	// Print marks table to PDF
@@ -947,7 +1039,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		}
 		
 		// Calculate grade distribution - include all grades even if 0 students
-		const gradeDistribution = {};
+		const gradeDistribution: Record<string, number> = {};
 		const allPossibleGrades = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'E']; // Define all possible grades
 		
 		// Grade ranges mapping
@@ -1296,10 +1388,10 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 				categories: assessmentToDuplicate.categories ? JSON.parse(JSON.stringify(assessmentToDuplicate.categories)) : [],
 				weight: assessmentToDuplicate.weight,
 				headerPhoto: assessmentToDuplicate.headerPhoto,
-				knowledgeAreas: (assessmentToDuplicate as any).knowledgeAreas ? JSON.parse(JSON.stringify((assessmentToDuplicate as any).knowledgeAreas)) : [],
-				totalMarks: (assessmentToDuplicate as any).totalMarks,
-				markingMode: (assessmentToDuplicate as any).markingMode,
-				percentageRanges: (assessmentToDuplicate as any).percentageRanges ? JSON.parse(JSON.stringify((assessmentToDuplicate as any).percentageRanges)) : []
+				knowledgeAreas: assessmentToDuplicate.knowledgeAreas ? JSON.parse(JSON.stringify(assessmentToDuplicate.knowledgeAreas)) : [],
+				totalMarks: assessmentToDuplicate.totalMarks,
+				markingMode: assessmentToDuplicate.markingMode,
+				percentageRanges: assessmentToDuplicate.percentageRanges ? JSON.parse(JSON.stringify(assessmentToDuplicate.percentageRanges)) : []
 			};
 
 			// Copy assessment data (paragraphs, mappings, etc.) using existing storage keys
@@ -1591,9 +1683,10 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			await loadStudentEvaluations();
 			
 			// Close modal and show success notification
+			const deletedName = studentToDelete?.name || 'Student';
 			showStudentDeleteConfirm = false;
 			studentToDelete = null;
-			alert(`${studentToDelete?.name || 'Student'} has been successfully removed from this subject.`);
+			alert(`${deletedName} has been successfully removed from this subject.`);
     } catch (error) {
 			console.error('Error deleting student from subject:', error);
 			alert('Error removing student from subject. Please try again.');
@@ -1675,7 +1768,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 
 	{#if sortedAssessments.length > 0}
 		<div class="d-flex flex-wrap gap-3">
-			{#each sortedAssessments as assessment}
+			{#each sortedAssessments as assessment (assessment.id)}
 				<div class="border rounded p-3 shadow-sm d-flex flex-column" style="min-width: 300px; max-width: 350px; aspect-ratio: 1; height: 300px;">
 					<!-- Header Section -->
 					<div class="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">
@@ -1832,7 +1925,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 											<th scope="col" class="sticky-top">
 												<i class="bi bi-person me-2"></i>Student
 											</th>
-											{#each assessments as assessment}
+								{#each assessments as assessment (assessment.id)}
 												<th scope="col" class="text-center sticky-top" colspan="2">
 													<div class="d-flex flex-column align-items-center">
 														<i class="bi bi-clipboard-check me-1"></i>
@@ -1851,7 +1944,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 											<th scope="col" class="sticky-top">
 												<!-- Empty for student column -->
 											</th>
-											{#each assessments as assessment}
+{#each assessments as assessment (assessment.id)}
 												<th scope="col" class="text-center sticky-top">
 													<small class="text-muted">Marks</small>
 												</th>
@@ -1918,8 +2011,9 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 										</tr>
 									</thead>
 									<tbody>
-										{#each studentsWithMarks as student, index}
-											{@const finalSummary = getFinalSummary(student.id)}
+								{#each studentsWithMarks as student, index (student.id)}
+									{@const finalSummary = getFinalSummary(student.id)}
+									{@const finalGrade = getFinalGrade(student.id)}
 											<tr class="drag-row" 
 												style="cursor: move;">
 												<td class="align-middle sticky-start bg-white" style="min-width: 200px;">
@@ -1965,34 +2059,33 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 														</div>
 													</div>
 												</td>
-												{#each assessments as assessment}
-													<!-- Marks Column -->
-													<td class="align-middle text-center">
-														{#if getStudentMarks(student.id, assessment.id)}
-															{@const marks = getStudentMarks(student.id, assessment.id)}
-															{#if marks.hasMarks}
-																<span class="badge bg-success fs-6">
-																	{marks.total}
-																</span>
-															{:else}
-																<span class="text-muted small">No marks</span>
-															{/if}
-														{:else}
-															<span class="text-muted small">No marks</span>
-														{/if}
-													</td>
+								{#each assessments as assessment (assessment.id)}
+									{@const marks = getStudentMarks(student.id, assessment.id)}
+									{@const weighted = getWeightedMarks(student.id, assessment.id)}
+									{@const maxRawMarks = getMaxPossibleRawMarks(assessment.id)}
+									{@const fallbackMaxMarks = 100}
+									{@const effectiveMaxMarks = maxRawMarks > 0 ? maxRawMarks : fallbackMaxMarks}
+									{@const barPercentage = marks ? (marks.total / effectiveMaxMarks) * 100 : 0}
+									<!-- Marks Column -->
+									<td class="align-middle text-center">
+										{#if marks}
+											{#if marks.hasMarks}
+												<span class="badge bg-success fs-6">
+													{marks.total}
+												</span>
+											{:else}
+												<span class="text-muted small">No marks</span>
+											{/if}
+										{:else}
+											<span class="text-muted small">No marks</span>
+										{/if}
+									</td>
 													<!-- Weight Percentage Column (showing proportional bar and weighted value) -->
 													<td class="align-middle text-center">
 														<div class="d-flex flex-column align-items-center gap-2">
 															<!-- Proportional Bar (representing calculated marks) -->
-															<div class="w-100" style="max-width: 80px;">
-																{#if getWeightedMarks(student.id, assessment.id)}
-																	{@const weighted = getWeightedMarks(student.id, assessment.id)}
-																	{@const marks = getStudentMarks(student.id, assessment.id)}
-																	{@const maxRawMarks = getMaxPossibleRawMarks(assessment.id)}
-																	{@const fallbackMaxMarks = 100}
-																	{@const effectiveMaxMarks = maxRawMarks > 0 ? maxRawMarks : fallbackMaxMarks}
-																	{@const barPercentage = (marks.total / effectiveMaxMarks) * 100}
+										<div class="w-100" style="max-width: 80px;">
+											{#if weighted}
 																	
 																	<div class="progress" style="height: 8px; background-color: #e9ecef;">
 																		<div 
@@ -2025,11 +2118,10 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 														<span class="text-muted">N/A</span>
 													{/if}
 												</td>
-												<!-- Grades Column -->
-												<td class="align-middle text-center">
-													{#if getFinalGrade(student.id) !== "N/A"}
-														{@const finalGrade = getFinalGrade(student.id)}
-														{@const gradeColor = getGradeColor(finalGrade)}
+									<!-- Grades Column -->
+									<td class="align-middle text-center">
+										{#if finalGrade !== "N/A"}
+											{@const gradeColor = getGradeColor(finalGrade)}
 														<span class="badge {gradeColor} fs-6">
 															{finalGrade}
 														</span>
@@ -2049,7 +2141,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 
 			<!-- Performance Highlights Cards for Each Assessment -->
 			<div class="performance-highlights-grid mt-4">
-				{#each assessments as assessment}
+				{#each assessments as assessment (assessment.id)}
 					{@const highlights = getAssessmentPerformanceHighlights(assessment.id)}
 					{#if highlights.highestPerformers.length > 0 || highlights.mediumPerformers.length > 0 || highlights.needsSupport.length > 0}
 						<div class="performance-highlight-card">
@@ -2074,7 +2166,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 												</div>
 												<span class="fw-bold text-success small">Highest Performer{highlights.highestPerformers.length > 1 ? 's' : ''}</span>
 											</div>
-											{#each highlights.highestPerformers as performer}
+                                            {#each highlights.highestPerformers as performer (performer.student.id)}
 												<div class="d-flex justify-content-between align-items-center mb-1">
 													<span class="small">{performer.student.name}</span>
 													<span class="badge bg-success text-white fw-bold">
@@ -2094,7 +2186,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 												</div>
 												<span class="fw-bold text-warning small">Medium Performer{highlights.mediumPerformers.length > 1 ? 's' : ''}</span>
 											</div>
-											{#each highlights.mediumPerformers as performer}
+                                            {#each highlights.mediumPerformers as performer (performer.student.id)}
 												<div class="d-flex justify-content-between align-items-center mb-1">
 													<span class="small">{performer.student.name}</span>
 													<span class="badge bg-warning text-dark fw-bold">
@@ -2114,7 +2206,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 												</div>
 												<span class="fw-bold text-danger small">Needs Support</span>
 											</div>
-											{#each highlights.needsSupport as performer}
+                                            {#each highlights.needsSupport as performer (performer.student.id)}
 												<div class="d-flex justify-content-between align-items-center mb-1">
 													<span class="small">{performer.student.name}</span>
 													<span class="badge bg-danger text-white fw-bold">
@@ -2162,7 +2254,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 										</tr>
 									</thead>
 									<tbody>
-										{#each getGradeDistribution() as gradeData}
+                                        {#each getGradeDistribution() as gradeData (gradeData.grade)}
 											<tr>
 												<td class="align-middle">
 													<span class="badge {gradeData.color} fs-6 fw-bold">

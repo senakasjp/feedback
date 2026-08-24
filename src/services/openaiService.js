@@ -3,10 +3,10 @@
  * Handles all interactions with the OpenAI API
  */
 
-import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
+import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getProviderForModel, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
+import { callChatCompletion } from './llmProviders.js'
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions'
 
 async function getErrorMessage(response) {
@@ -25,115 +25,6 @@ async function getErrorMessage(response) {
 
 function normaliseWhitespace(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
-}
-
-function extractTextFromContentPart(part) {
-  if (typeof part === 'string') return part
-  if (typeof part?.text === 'string') return part.text
-  if (typeof part?.text?.value === 'string') return part.text.value
-  if (typeof part?.content === 'string') return part.content
-  if (typeof part?.value === 'string') return part.value
-  if (typeof part?.output_text === 'string') return part.output_text
-  if (Array.isArray(part?.content)) {
-    return part.content.map(extractTextFromContentPart).filter(Boolean).join('\n')
-  }
-  return ''
-}
-
-function collectTextCandidates(value, results = [], seen = new WeakSet()) {
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (trimmed) results.push(trimmed)
-    return results
-  }
-
-  if (!value || typeof value !== 'object') {
-    return results
-  }
-
-  if (seen.has(value)) {
-    return results
-  }
-  seen.add(value)
-
-  if (Array.isArray(value)) {
-    value.forEach(item => collectTextCandidates(item, results, seen))
-    return results
-  }
-
-  const preferredKeys = ['output_text', 'text', 'value', 'content', 'message', 'refusal']
-  preferredKeys.forEach(key => {
-    if (key in value) {
-      collectTextCandidates(value[key], results, seen)
-    }
-  })
-
-  Object.entries(value).forEach(([key, nestedValue]) => {
-    if (!preferredKeys.includes(key)) {
-      collectTextCandidates(nestedValue, results, seen)
-    }
-  })
-
-  return results
-}
-
-function extractMessageText(payload = {}) {
-  const content = payload?.choices?.[0]?.message?.content
-  if (typeof content === 'string') {
-    return content.trim()
-  }
-  if (Array.isArray(content)) {
-    return content.map(extractTextFromContentPart).filter(Boolean).join('\n').trim()
-  }
-  if (typeof content?.text === 'string') {
-    return content.text.trim()
-  }
-  if (typeof content?.text?.value === 'string') {
-    return content.text.value.trim()
-  }
-  if (typeof payload?.choices?.[0]?.message?.output_text === 'string') {
-    return payload.choices[0].message.output_text.trim()
-  }
-  if (typeof payload?.choices?.[0]?.text === 'string') {
-    return payload.choices[0].text.trim()
-  }
-  if (typeof payload?.output_text === 'string') {
-    return payload.output_text.trim()
-  }
-  if (Array.isArray(payload?.output)) {
-    return payload.output
-      .map(item => extractTextFromContentPart(item))
-      .filter(Boolean)
-      .join('\n')
-      .trim()
-  }
-  const recursiveText = collectTextCandidates(payload).join('\n').trim()
-  if (recursiveText) {
-    return recursiveText
-  }
-  return ''
-}
-
-function resolveTemperatureForModel(model = '', requestedTemperature = 1) {
-  const normalizedModel = String(model || '').trim().toLowerCase()
-  if (normalizedModel.startsWith('gpt-5')) {
-    return 1
-  }
-  return requestedTemperature
-}
-
-function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.3, max_completion_tokens = 1000 }) {
-  const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
-  const reasoning_effort = sanitizeReasoningEffort(model, modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT)
-  const resolvedTemperature = resolveTemperatureForModel(model, temperature)
-
-  return {
-    model,
-    messages,
-    temperature: resolvedTemperature,
-    max_completion_tokens,
-    reasoning_effort
-  }
 }
 
 function buildImproveEnglishMessages(text, customInstructions = '') {
@@ -170,54 +61,39 @@ function buildImproveEnglishMessages(text, customInstructions = '') {
  * Improve the English grammar and clarity of the given text
  * @param {string} text - The text to improve
  * @param {string} customInstructions - Optional per-answer instructions
- * @returns {Promise<string>} - The improved text
+ * @param {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} [modelPreference] - AI model preferences
+ * @returns {Promise<{ improvedText: string, usedModel: string, usedReasoningEffort: string }>} - Result object
  */
 export async function improveEnglish(text, customInstructions = '', modelPreference = {}) {
   if (!text || text.trim() === '') {
     throw new Error('Text cannot be empty')
   }
 
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
-    throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
-  }
+  const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
+  const reasoningEffort = sanitizeReasoningEffort(model, modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+  const providerId = modelPreference?.provider || getProviderForModel(model)
 
   try {
-    const response = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify(buildChatCompletionPayload({
-        modelPreference,
-        messages: buildImproveEnglishMessages(text, customInstructions),
-        temperature: 0.3,
-        max_completion_tokens: 1000
-      }))
+    const { text: improvedText } = await callChatCompletion({
+      providerId,
+      model,
+      messages: buildImproveEnglishMessages(text, customInstructions),
+      temperature: 0.3,
+      maxTokens: 1000,
+      reasoningEffort
     })
 
-    if (!response.ok) {
-      const message = await getErrorMessage(response)
-      throw new Error(message || `API request failed with status ${response.status}`)
-    }
-
-    const data = await response.json()
-    const improvedText = extractMessageText(data)
-
     if (!improvedText) {
-      throw new Error('No response received from OpenAI')
+      throw new Error('No response received from the AI provider')
     }
 
     return {
       improvedText,
-      usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
-      usedReasoningEffort: sanitizeReasoningEffort(
-        modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
-        modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
-      )
+      usedModel: model,
+      usedReasoningEffort: reasoningEffort
     }
   } catch (error) {
-    console.error('OpenAI API Error:', error)
+    console.error('AI provider error:', error)
     throw error
   }
 }

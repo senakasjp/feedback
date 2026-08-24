@@ -1,0 +1,206 @@
+{
+  "runtime_fallback": {
+    "enabled": true,
+    "retry_on_errors": [
+      401,
+      403,
+      404,
+      429,
+      500,
+      502,
+      503,
+      504
+    ],
+    "max_fallback_attempts": 20,
+    "cooldown_seconds": 30
+  },
+  "agents": {
+    // ── Tier 1: SOTA Model Required ──────────────────────────────
+    "COREAGENT": {
+      "model": "openai/gpt-5.4-fast",
+      "fallback_models": [
+        "openrouter/openai/gpt-5.1-codex-mini",
+        "deepseek/deepseek-v4-pro"
+      ]
+    },
+    "planner": {
+      "model": "openai/gpt-5.5",
+      "fallback_models": [
+        "openrouter/anthropic/claude-sonnet-4.6",
+        "deepseek/deepseek-v4-pro"
+      ]
+    },
+    "serious-planner": {
+      "model": {
+        "name": "openai/gpt-5.5",
+        "reasoning_depth": "high"
+      },
+      "fallback_models": [
+        {
+          "name": "openrouter/anthropic/claude-sonnet-4.6",
+          "reasoning_depth": "high"
+        },
+        {
+          "name": "deepseek/deepseek-v4-pro",
+          "reasoning_depth": "max"
+        }
+      ]
+    },
+    "moderate-planner": {
+      "model": "openai/o3",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    "coder-agent": {
+      "model": "openai/gpt-5.5",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    "reviewer": {
+      "model": "deepseek/deepseek-v4-pro",
+      "fallback_models": [
+        "openai/gpt-5.5",
+        "openrouter/anthropic/claude-sonnet-4.6",
+        "deepseek/deepseek-v4-flash",
+        "openai/gpt-5.4-fast"
+      ]
+    },
+    // ── Tier 2: Strong Model Recommended ─────────────────────────
+    "contextscout": {
+      "model": "dopenai/gpt-5.4-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash",
+        "openrouter/anthropic/claude-sonnet-4.6"
+      ]
+    },
+    "task-manager": {
+      "model": "deepseek/deepseek-v4-pro",
+      "fallback_models": [
+        "openai/gpt-5.4-fast",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    "routine-planner": {
+      "model": "deepseek/deepseek-v4-pro",
+      "fallback_models": [
+        "openai/gpt-5.4-fast",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    "test-engineer": {
+      "model": "deepseek/deepseek-v4-pro",
+      "fallback_models": [
+        "openai/gpt-5.4-fast",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    "code-reviewer": {
+      "model": "deepseek/deepseek-v4-pro",
+      "fallback_models": [
+        "openai/gpt-5.4-fast",
+        "deepseek/deepseek-v4-flash",
+        "openrouter/anthropic/claude-sonnet-4.6"
+      ]
+    },
+    // ── Tier 3: Mid-Tier Model Acceptable ────────────────────────
+    "frontend-specialist": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-flash",
+        "openai/gpt-5.4-fast",
+        "openrouter/qwen/qwen3-coder:free"
+      ]
+    },
+    "devops-specialist": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-flash",
+        "openai/gpt-5.4-fast",
+        "openrouter/qwen/qwen3-coder:free"
+      ]
+    },
+    "build-agent": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    "documentation": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    "externalscout": {
+      "model": "openai/gpt-5.4-mini-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash"
+      ]
+    },
+    // ── Tier 4: Cost-Optimized Model Fine ────────────────────────
+    "batch-executor": {
+      "model": "openai/gpt-5.4-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "openrouter/qwen/qwen3-coder:free",
+        "openrouter/deepseek/deepseek-r1"
+      ]
+    },
+    "stage-orchestrator": {
+      "model": "openai/gpt-5.4-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "openrouter/deepseek/deepseek-r1",
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+      ]
+    },
+    "context-manager": {
+      "model": "openai/gpt-5.4-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "openrouter/deepseek/deepseek-r1",
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+      ]
+    },
+    "context-retriever": {
+      "model": "openai/gpt-5.4-fast",
+      "fallback_models": [
+        "deepseek/deepseek-v4-pro",
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+        "openrouter/deepseek/deepseek-r1"
+      ]
+    },
+    "explore": {
+      "model": "deepseek/deepseek-v4-pro",
+      "fallback_models": [
+        "openai/gpt-5.4-fast",
+        "openrouter/deepseek/deepseek-r1",
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+      ]
+    },
+    "general": {
+      "model": "deepseek/deepseek-v4-pro",
+      "fallback_models": [
+        "openai/gpt-5.4-fast",
+        "openrouter/deepseek/deepseek-r1",
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free"
+      ]
+    },
+    "image-specialist": {
+      // gpt-5.4-fast supports vision; v4-flash and r1 do not — using vision-capable free fallbacks
+      "model": "openai/gpt-5.4-fast",
+      "fallback_models": [
+        "openrouter/google/gemma-4-31b-it:free",
+        "openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+      ]
+    }
+  }
+}

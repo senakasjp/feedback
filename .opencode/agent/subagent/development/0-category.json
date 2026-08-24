@@ -1,0 +1,13 @@
+{
+  "name": "Development Specialists",
+  "description": "Domain-specific development subagents for frontend and DevOps tasks",
+  "icon": "💻",
+  "agents": {
+    "frontend-specialist": {
+      "description": "Frontend UI design specialist — design systems, themes, animations"
+    },
+    "devops-specialist": {
+      "description": "DevOps specialist — CI/CD, infrastructure as code, deployment automation"
+    }
+  }
+}

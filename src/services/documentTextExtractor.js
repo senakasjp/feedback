@@ -77,7 +77,7 @@ async function extractTextFromPdf(file) {
     pdf = await pdfjsLib.getDocument({ data: buffer }).promise
   } catch {
     // Tauri/WebView fallback: disable worker when worker boot fails
-    pdf = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise
+    pdf = await pdfjsLib.getDocument(/** @type {any} */ ({ data: buffer, disableWorker: true })).promise
   }
   const pages = []
 

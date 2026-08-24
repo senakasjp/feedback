@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp"]
+    },
+    "semble": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "semble[mcp]", "semble"]
+    },
+    "websearch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@zhafron/mcp-web-search"]
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "vibe-check": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@pv-bhat/vibe-check-mcp", "start", "--stdio"]
+    },
+    "semgrep": {
+      "type": "stdio",
+      "command": "semgrep",
+      "args": ["mcp"]
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}

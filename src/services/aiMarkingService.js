@@ -1,7 +1,7 @@
-import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
+import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getProviderForModel, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
+import { callChatCompletion } from './llmProviders.js'
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
-const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions'
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 const MAX_RETRIEVED_CHUNKS = 8
@@ -24,124 +24,29 @@ function normaliseParagraphText(value) {
     .join('\n\n')
 }
 
-function extractTextFromContentPart(part) {
-  if (typeof part === 'string') return part
-  if (typeof part?.text === 'string') return part.text
-  if (typeof part?.text?.value === 'string') return part.text.value
-  if (typeof part?.content === 'string') return part.content
-  if (typeof part?.value === 'string') return part.value
-  if (typeof part?.output_text === 'string') return part.output_text
-  if (Array.isArray(part?.content)) {
-    return part.content.map(extractTextFromContentPart).filter(Boolean).join('\n')
-  }
-  return ''
-}
-
-function collectTextCandidates(value, results = [], seen = new WeakSet()) {
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (trimmed) results.push(trimmed)
-    return results
-  }
-
-  if (!value || typeof value !== 'object') {
-    return results
-  }
-
-  if (seen.has(value)) {
-    return results
-  }
-  seen.add(value)
-
-  if (Array.isArray(value)) {
-    value.forEach(item => collectTextCandidates(item, results, seen))
-    return results
-  }
-
-  const preferredKeys = ['output_text', 'text', 'value', 'content', 'message', 'refusal']
-  preferredKeys.forEach(key => {
-    if (key in value) {
-      collectTextCandidates(value[key], results, seen)
-    }
-  })
-
-  Object.entries(value).forEach(([key, nestedValue]) => {
-    if (!preferredKeys.includes(key)) {
-      collectTextCandidates(nestedValue, results, seen)
-    }
-  })
-
-  return results
-}
-
-function extractMessageText(payload = {}) {
-  const content = payload?.choices?.[0]?.message?.content
-  if (typeof content === 'string') {
-    return content.trim()
-  }
-  if (Array.isArray(content)) {
-    return content.map(extractTextFromContentPart).filter(Boolean).join('\n').trim()
-  }
-  if (typeof content?.text === 'string') {
-    return content.text.trim()
-  }
-  if (typeof content?.text?.value === 'string') {
-    return content.text.value.trim()
-  }
-  if (typeof payload?.choices?.[0]?.message?.output_text === 'string') {
-    return payload.choices[0].message.output_text.trim()
-  }
-  if (typeof payload?.choices?.[0]?.text === 'string') {
-    return payload.choices[0].text.trim()
-  }
-  if (typeof payload?.output_text === 'string') {
-    return payload.output_text.trim()
-  }
-  if (Array.isArray(payload?.output)) {
-    return payload.output
-      .map(item => extractTextFromContentPart(item))
-      .filter(Boolean)
-      .join('\n')
-      .trim()
-  }
-  const recursiveText = collectTextCandidates(payload).join('\n').trim()
-  if (recursiveText) {
-    return recursiveText
-  }
-  return ''
-}
-
-function buildPayloadPreview(payload = {}) {
-  try {
-    return JSON.stringify(payload, null, 2).slice(0, 4000)
-  } catch {
-    return '[unserializable payload]'
-  }
-}
-
-function resolveTemperatureForModel(model = '', requestedTemperature = 1) {
-  const normalizedModel = String(model || '').trim().toLowerCase()
-  if (normalizedModel.startsWith('gpt-5')) {
-    return 1
-  }
-  return requestedTemperature
-}
-
-function buildChatCompletionPayload({ modelPreference = {}, messages = [], temperature = 0.2, max_completion_tokens = 1000, reasoningEffortOverride = '' }) {
+/**
+ * Resolves the model/provider/reasoning-effort triple for a chat-completion call
+ * and routes it through the shared provider registry.
+ * @param {{ modelPreference?: { selectedModel?: string; reasoningEffort?: string; provider?: string }; messages?: any[]; temperature?: number; maxTokens?: number; reasoningEffortOverride?: string }} params
+ */
+async function runChatCompletion({ modelPreference = {}, messages = [], temperature = 0.2, maxTokens = 1000, reasoningEffortOverride = '' }) {
   const model = sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL)
-  const reasoning_effort = sanitizeReasoningEffort(
+  const reasoningEffort = sanitizeReasoningEffort(
     model,
     reasoningEffortOverride || modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
   )
-  const resolvedTemperature = resolveTemperatureForModel(model, temperature)
+  const providerId = modelPreference?.provider || getProviderForModel(model)
 
-  return {
+  const { text, finishReason, raw } = await callChatCompletion({
+    providerId,
     model,
-    temperature: resolvedTemperature,
-    max_completion_tokens,
-    reasoning_effort,
-    messages
-  }
+    messages,
+    temperature,
+    maxTokens,
+    reasoningEffort
+  })
+
+  return { model, reasoningEffort, rawText: text, finishReason, raw }
 }
 
 function normaliseKey(value) {
@@ -153,6 +58,10 @@ function normaliseKey(value) {
 
 function tokenize(value) {
   return Array.from(new Set(normaliseKey(value).split(' ').filter(token => token.length > 2)))
+}
+
+function unique(items = []) {
+  return Array.from(new Set(items.filter(Boolean)))
 }
 
 function scoreTextMatch(queryTokens, candidateText, sourceType = '') {
@@ -365,6 +274,53 @@ function buildQueryText({ assessment, studentSubmission = '', evidenceNotes = ''
   ].filter(Boolean).join(' ')
 }
 
+function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', shortFeedback = '', maxParagraphs = 6, maxChars = 2200 }) {
+  const sourceText = String(studentSubmission || '').trim()
+  if (!sourceText) {
+    return ''
+  }
+
+  const paragraphs = sourceText
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.replace(/[ \t\f\v]+/g, ' ').trim())
+    .filter(Boolean)
+
+  if (paragraphs.length === 0) {
+    return ''
+  }
+
+  const queryTokens = unique([
+    ...tokenize(categoryName),
+    ...tokenize(evidenceNotes),
+    ...tokenize(shortFeedback)
+  ])
+
+  const scored = paragraphs
+    .map((paragraph, index) => ({
+      paragraph,
+      index,
+      score: queryTokens.length > 0 ? scoreTextMatch(queryTokens, paragraph, 'submission') : 0
+    }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+
+  const selected = (scored.length > 0 ? scored : paragraphs.slice(0, Math.min(maxParagraphs, paragraphs.length)).map((paragraph, index) => ({
+    paragraph,
+    index,
+    score: 0
+  })))
+    .slice(0, maxParagraphs)
+    .sort((a, b) => a.index - b.index)
+
+  let excerpt = selected.map(item => item.paragraph).join('\n\n').trim()
+  if (excerpt.length > maxChars) {
+    excerpt = `${excerpt.slice(0, maxChars).trim()}...`
+  }
+
+  return excerpt
+}
+
 function hashChunkSource({ assessment, candidateChunks = [], priorEvaluations = [] }) {
   return JSON.stringify({
     assessmentId: assessment?.id || null,
@@ -471,6 +427,50 @@ function formatRetrievedContext(chunks = []) {
   }))
 }
 
+function selectRetrievedChunks(chunks = [], maxChunks = MAX_RETRIEVED_CHUNKS) {
+  const selected = []
+  const labelCounts = new Map()
+  const typeCounts = new Map()
+
+  const typeCaps = {
+    rubric: 2,
+    brief: 2,
+    paragraph: 1,
+    'prior-feedback': 1
+  }
+
+  for (const chunk of chunks) {
+    if (!chunk || !chunk.text) {
+      continue
+    }
+
+    const normalizedLabel = normaliseKey(chunk.label || chunk.id || '')
+    const labelCount = labelCounts.get(normalizedLabel) || 0
+    const typeCount = typeCounts.get(chunk.type) || 0
+    const typeCap = typeCaps[chunk.type] || maxChunks
+
+    if (normalizedLabel && labelCount >= 1) {
+      continue
+    }
+
+    if (typeCount >= typeCap) {
+      continue
+    }
+
+    selected.push(chunk)
+    if (normalizedLabel) {
+      labelCounts.set(normalizedLabel, labelCount + 1)
+    }
+    typeCounts.set(chunk.type, typeCount + 1)
+
+    if (selected.length >= maxChunks) {
+      break
+    }
+  }
+
+  return selected
+}
+
 function isChunkCategoryMatch(chunk, categoryName = '') {
   const target = normaliseKey(categoryName)
   if (!target) return true
@@ -528,6 +528,84 @@ function buildPerAnswerSystemMessages(answerInstructions = '') {
   ]
 }
 
+function buildRetrievedContextMessages(retrievedContext = [], retrievalMode = '') {
+  const normalizedMode = normaliseWhitespace(retrievalMode || 'not-specified')
+  const compactContext = Array.isArray(retrievedContext)
+    ? retrievedContext
+      .map((item, index) => {
+        const source = normaliseWhitespace(item?.source || `Context ${index + 1}`)
+        const type = normaliseWhitespace(item?.type || 'reference')
+        const text = normaliseWhitespace(item?.text || '')
+
+        if (!text) {
+          return ''
+        }
+
+        return [
+          `Context ${index + 1}`,
+          `Source: ${source}`,
+          `Type: ${type}`,
+          `Text: ${text}`
+        ].join('\n')
+      })
+      .filter(Boolean)
+      .join('\n\n')
+    : ''
+
+  return [
+    {
+      role: 'system',
+      content: [
+        `Retrieved context mode: ${normalizedMode}`,
+        'Use the retrieved context as supporting reference material only.',
+        'Prioritise the student submission, assessor notes, and explicit rubric criteria when they conflict with generic examples.',
+        'Do not claim to have used sources that are not present in the retrieved context block.'
+      ].join('\n')
+    },
+    {
+      role: 'assistant',
+      content: compactContext
+        ? `Retrieved context block:\n\n${compactContext}`
+        : 'Retrieved context block:\n\nNo retrieved context was available.'
+    }
+  ]
+}
+
+function buildStudentPortfolioMessages(studentSubmissionDocuments = []) {
+  const compactContext = Array.isArray(studentSubmissionDocuments)
+    ? studentSubmissionDocuments
+      .map((document, index) => {
+        const name = normaliseWhitespace(document?.name || `Document ${index + 1}`)
+        const type = normaliseWhitespace(document?.documentType || 'student-document')
+        const text = normaliseWhitespace(document?.extractedText || '')
+
+        if (!text) {
+          return ''
+        }
+
+        return [
+          `Portfolio document ${index + 1}`,
+          `Name: ${name}`,
+          `Type: ${type}`,
+          `Text: ${text}`
+        ].join('\n')
+      })
+      .filter(Boolean)
+      .join('\n\n')
+    : ''
+
+  if (!compactContext) {
+    return []
+  }
+
+  return [
+    {
+      role: 'assistant',
+      content: `Student portfolio documents:\n\n${compactContext}`
+    }
+  ]
+}
+
 function extractFeedbackTextFromPossibleJson(rawText) {
   const trimmed = String(rawText || '').trim()
   if (!trimmed) return ''
@@ -555,8 +633,14 @@ function extractFeedbackTextFromPossibleJson(rawText) {
   }
 }
 
-export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
-  const retrievalQuery = [categoryName, answerInstructions, shortFeedback, studentSubmission].filter(Boolean).join('\n\n')
+export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+  const submissionExcerpt = buildRelevantStudentEvidenceExcerpt({
+    studentSubmission,
+    categoryName,
+    evidenceNotes,
+    shortFeedback
+  })
+  const retrievalQuery = [categoryName, answerInstructions, shortFeedback, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
@@ -573,35 +657,31 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
+      ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildStudentPortfolioMessages(studentSubmissionDocuments),
       {
         role: 'user',
         content: [
           `Assessment: ${assessment?.name || 'Unnamed assessment'}`,
           `Criterion or category: ${normaliseWhitespace(categoryName || 'General feedback')}`,
-          `Academic level: ${normaliseWhitespace(assessment?.academicLevel || 'Not specified')}`,
-          `Question: ${normaliseWhitespace(assessment?.questionText || 'Not provided')}`,
-          `Assessment-specific instructions: ${normaliseWhitespace(assessment?.aiModerationNotes || 'Not provided')}`,
-          `Student: ${student?.displayName || student?.id || 'Not specified'}`,
+          student?.displayName || student?.id ? `Student: ${student?.displayName || student?.id}` : '',
           `Retrieval mode: ${retrievalMode}`,
           '',
           'Assessor short draft:',
           shortFeedback || 'Not provided.',
           '',
-          'Student submission or answer:',
-          studentSubmission || 'Not provided.',
+          'Relevant student evidence excerpt:',
+          submissionExcerpt || 'Not provided.',
           '',
           'Assessor evidence notes:',
           evidenceNotes || 'Not provided.',
-          '',
-          'Retrieved context:',
-          JSON.stringify(retrievedContext, null, 2),
           '',
           'Output instructions:',
           '- Rewrite and improve the assessor short draft using only the data above.',
           '- Prioritise evidence and references that match the selected criterion/category.',
           '- Keep the assessor intent and judgement aligned with the provided instructions.',
           '- Return plain feedback text only.'
-        ].join('\n')
+        ].filter(Boolean).join('\n')
       }
     ]
   }
@@ -626,7 +706,7 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
 
     return {
       criteria,
-      retrievedContext: formatRetrievedContext(categoryPrioritised.slice(0, MAX_RETRIEVED_CHUNKS)),
+      retrievedContext: formatRetrievedContext(selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS)),
       retrievalMode: hasCategoryMatch ? 'lexical-category' : 'lexical'
     }
   }
@@ -652,7 +732,7 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
 
     return {
       criteria,
-      retrievedContext: formatRetrievedContext(categoryPrioritised.slice(0, MAX_RETRIEVED_CHUNKS)),
+      retrievedContext: formatRetrievedContext(selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS)),
       retrievalMode: hasCategoryMatch ? 'vector-category' : 'vector'
     }
   } catch {
@@ -665,23 +745,20 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
 
     return {
       criteria,
-      retrievedContext: formatRetrievedContext(categoryPrioritised.slice(0, MAX_RETRIEVED_CHUNKS)),
+      retrievedContext: formatRetrievedContext(selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS)),
       retrievalMode: hasCategoryMatch ? 'lexical-fallback-category' : 'lexical-fallback'
     }
   }
 }
 
-export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = {} }) {
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
-    throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
-  }
-
+export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { messages, retrievedContext, retrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
     assessment,
     categoryName,
     shortFeedback,
     student,
     studentSubmission,
+    studentSubmissionDocuments,
     evidenceNotes,
     assessmentParagraphs,
     priorEvaluations,
@@ -690,50 +767,42 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     answerInstructions
   })
 
-  const response = await fetch(OPENAI_CHAT_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify(buildChatCompletionPayload({
-      modelPreference,
-      temperature: 0.35,
-      max_completion_tokens: 900,
-      messages
-    }))
+  const { model, reasoningEffort, rawText, finishReason } = await runChatCompletion({
+    modelPreference,
+    temperature: 0.35,
+    maxTokens: 2200,
+    reasoningEffortOverride: 'low',
+    messages
   })
 
-  if (!response.ok) {
-    const message = await getErrorMessage(response)
-    throw new Error(message || `API request failed with status ${response.status}`)
-  }
-
-  const data = await response.json()
-  const rawText = extractMessageText(data)
   const improvedText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
 
+  console.info('RAG feedback improvement response parsed', {
+    retrievalMode,
+    finishReason,
+    rawTextLength: rawText.length,
+    improvedTextLength: improvedText.length,
+    rawTextPreview: rawText.slice(0, 500)
+  })
+
   if (!improvedText) {
-    throw new Error('No improved feedback was returned from OpenAI')
+    console.error('RAG feedback improvement returned no usable text', { rawText, finishReason })
+    if (finishReason === 'length') {
+      throw new Error('The AI provider stopped before producing visible improved feedback. The response hit the token limit.')
+    }
+    throw new Error('No improved feedback was returned from the AI provider')
   }
 
   return {
     improvedText,
     retrievedContext,
     retrievalMode,
-    usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
-    usedReasoningEffort: sanitizeReasoningEffort(
-      modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
-      modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
-    )
+    usedModel: model,
+    usedReasoningEffort: reasoningEffort
   }
 }
 
-export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = {} }) {
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
-    throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
-  }
-
+export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   console.info('Evidence check request started', {
     assessment: assessment?.name || 'Unnamed assessment',
     categoryName: normaliseWhitespace(categoryName || 'General feedback'),
@@ -753,67 +822,48 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     categoryName
   })
 
-  const response = await fetch(OPENAI_CHAT_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify(buildChatCompletionPayload({
-      modelPreference,
-      temperature: 0.2,
-      max_completion_tokens: 2200,
-      reasoningEffortOverride: 'low',
-      messages: [
-        ...buildSystemMessages(globalSystemInstructions, ''),
-        ...buildPerAnswerSystemMessages(answerInstructions),
-        {
-          role: 'user',
-          content: [
-            'Task: Create an evidence-check feedback report for the selected criterion/category using only the provided student notes, uploaded student documents, and retrieved context.',
-            `Assessment: ${assessment?.name || 'Unnamed assessment'}`,
-            `Criterion or category: ${normaliseWhitespace(categoryName || 'General feedback')}`,
-            `Academic level: ${normaliseWhitespace(assessment?.academicLevel || 'Not specified')}`,
-            `Question: ${normaliseWhitespace(assessment?.questionText || 'Not provided')}`,
-            `Assessment-specific instructions: ${normaliseWhitespace(assessment?.aiModerationNotes || 'Not provided')}`,
-            `Student: ${student?.displayName || student?.id || 'Not specified'}`,
-            `Retrieval mode: ${retrievalMode}`,
-            '',
-            'Student submission and uploaded student documents:',
-            studentSubmission || 'Not provided.',
-            '',
-            'Selected evidence notes:',
-            evidenceNotes || 'Not provided.',
-            '',
-            'Retrieved context:',
-            JSON.stringify(retrievedContext, null, 2),
-            '',
-            'Output instructions:',
-            '- Focus on whether the student has demonstrated the expected evidence for this category.',
-            '- Mention clear strengths and what evidence is missing or insufficient.',
-            '- Keep the tone aligned with assessor instructions.',
-            '- Do not invent evidence or claims.',
-            '- Return plain feedback text only.'
-          ].join('\n')
-        }
-      ]
-    }))
+  const { model, reasoningEffort, rawText, finishReason } = await runChatCompletion({
+    modelPreference,
+    temperature: 0.2,
+    maxTokens: 2200,
+    reasoningEffortOverride: 'low',
+    messages: [
+      ...buildSystemMessages(globalSystemInstructions, ''),
+      ...buildPerAnswerSystemMessages(answerInstructions),
+      ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      {
+        role: 'user',
+        content: [
+          'Task: Create an evidence-check feedback report for the selected criterion/category using only the provided student notes, uploaded student documents, and retrieved context.',
+          `Assessment: ${assessment?.name || 'Unnamed assessment'}`,
+          `Criterion or category: ${normaliseWhitespace(categoryName || 'General feedback')}`,
+          `Academic level: ${normaliseWhitespace(assessment?.academicLevel || 'Not specified')}`,
+          `Question: ${normaliseWhitespace(assessment?.questionText || 'Not provided')}`,
+          `Assessment-specific instructions: ${normaliseWhitespace(assessment?.aiModerationNotes || 'Not provided')}`,
+          `Student: ${student?.displayName || student?.id || 'Not specified'}`,
+          `Retrieval mode: ${retrievalMode}`,
+          '',
+          'Student submission and uploaded student documents:',
+          studentSubmission || 'Not provided.',
+          '',
+          'Selected evidence notes:',
+          evidenceNotes || 'Not provided.',
+          '',
+          'Output instructions:',
+          '- Focus on whether the student has demonstrated the expected evidence for this category.',
+          '- Mention clear strengths and what evidence is missing or insufficient.',
+          '- Keep the tone aligned with assessor instructions.',
+          '- Do not invent evidence or claims.',
+          '- Return plain feedback text only.'
+        ].join('\n')
+      }
+    ]
   })
 
-  if (!response.ok) {
-    const message = await getErrorMessage(response)
-    throw new Error(message || `API request failed with status ${response.status}`)
-  }
-
-  const data = await response.json()
-  const rawText = extractMessageText(data)
   const reportText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
-  const finishReason = payloadChoiceFinishReason(data)
 
   console.info('Evidence check response parsed', {
     retrievalMode,
-    topLevelKeys: Object.keys(data || {}),
-    choiceCount: Array.isArray(data?.choices) ? data.choices.length : 0,
     finishReason,
     rawTextLength: rawText.length,
     reportTextLength: reportText.length,
@@ -821,32 +871,20 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
   })
 
   if (!reportText) {
-    console.error('Evidence check returned no usable text', {
-      rawText,
-      finishReason,
-      payloadPreview: buildPayloadPreview(data)
-    })
+    console.error('Evidence check returned no usable text', { rawText, finishReason })
     if (finishReason === 'length') {
-      throw new Error('OpenAI stopped before producing visible evidence-check text. The response hit the token limit.')
+      throw new Error('The AI provider stopped before producing visible evidence-check text. The response hit the token limit.')
     }
-    throw new Error('No evidence-check feedback was returned from OpenAI')
+    throw new Error('No evidence-check feedback was returned from the AI provider')
   }
 
   return {
     reportText,
     retrievedContext,
     retrievalMode,
-    usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
-    usedReasoningEffort: sanitizeReasoningEffort(
-      modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
-      modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
-    )
+    usedModel: model,
+    usedReasoningEffort: reasoningEffort
   }
-}
-
-function payloadChoiceFinishReason(payload = {}) {
-  const finishReason = payload?.choices?.[0]?.finish_reason
-  return typeof finishReason === 'string' ? finishReason : ''
 }
 
 function extractJson(text) {
@@ -866,11 +904,7 @@ function extractJson(text) {
   }
 }
 
-export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = {} }) {
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-api-key-here') {
-    throw new Error('OpenAI API key is not configured. Please add your API key to the .env file.')
-  }
-
+export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { criteria, retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
@@ -885,89 +919,70 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
   }
 
   const maxMarks = criteria.reduce((total, criterion) => total + (Number(criterion.max_mark) || 0), 0)
-  const response = await fetch(OPENAI_CHAT_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify(buildChatCompletionPayload({
-      modelPreference,
-      temperature: 0.2,
-      max_completion_tokens: 2200,
-      messages: [
-        ...buildSystemMessages(globalSystemInstructions, ''),
-        {
-          role: 'user',
-          content: [
-            'Task: Assess the student answer against the supplied rubric, criteria, evidence notes, and retrieved context.',
-            `Assessment: ${assessment?.name || 'Unnamed assessment'}`,
-            `Academic level: ${normaliseWhitespace(assessment?.academicLevel || 'Not specified')}`,
-            `Question: ${normaliseWhitespace(assessment?.questionText || 'Not provided')}`,
-            `Assessment-specific instructions: ${normaliseWhitespace(assessment?.aiModerationNotes || 'Not provided')}`,
-            `Maximum marks: ${maxMarks || 'Not specified'}`,
-            `Student: ${student?.displayName || student?.id || 'Unknown student'}`,
-            `Retrieval mode: ${retrievalMode}`,
-            '',
-            'Criteria:',
-            JSON.stringify(criteria, null, 2),
-            '',
-            'Student submission or answer:',
-            studentSubmission || 'Not provided.',
-            '',
-            'Assessor evidence notes:',
-            evidenceNotes || 'Not provided.',
-            '',
-            'Retrieved context:',
-            JSON.stringify(retrievedContext, null, 2),
-            '',
-            'Return valid JSON with this exact shape:',
-            JSON.stringify({
-              criteria: [
-                {
-                  criterion_name: 'string',
-                  awarded_mark: 0,
-                  judgement: 'string',
-                  evidence: ['string'],
-                  improvement_advice: 'string',
-                  suggested_feedback: 'string'
-                }
-              ],
-              overall_feedback: 'string'
-            }, null, 2),
-            '',
-            'Requirements:',
-            '- Use only the supplied criterion names.',
-            '- Keep awarded marks within each criterion maximum.',
-            '- Base judgements only on the provided submission, notes, and retrieved context.',
-            '- Do not invent evidence or achievement claims.',
-            '- Keep suggested_feedback ready to paste into the feedback app.',
-            '- Return valid JSON only.'
-          ].join('\n')
-        }
-      ]
-    }))
+  const { model, reasoningEffort, rawText } = await runChatCompletion({
+    modelPreference,
+    temperature: 0.2,
+    maxTokens: 2200,
+    messages: [
+      ...buildSystemMessages(globalSystemInstructions, ''),
+      ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      {
+        role: 'user',
+        content: [
+          'Task: Assess the student answer against the supplied rubric, criteria, evidence notes, and retrieved context.',
+          `Assessment: ${assessment?.name || 'Unnamed assessment'}`,
+          `Academic level: ${normaliseWhitespace(assessment?.academicLevel || 'Not specified')}`,
+          `Question: ${normaliseWhitespace(assessment?.questionText || 'Not provided')}`,
+          `Assessment-specific instructions: ${normaliseWhitespace(assessment?.aiModerationNotes || 'Not provided')}`,
+          `Maximum marks: ${maxMarks || 'Not specified'}`,
+          `Student: ${student?.displayName || student?.id || 'Unknown student'}`,
+          `Retrieval mode: ${retrievalMode}`,
+          '',
+          'Criteria:',
+          JSON.stringify(criteria, null, 2),
+          '',
+          'Student submission or answer:',
+          studentSubmission || 'Not provided.',
+          '',
+          'Assessor evidence notes:',
+          evidenceNotes || 'Not provided.',
+          '',
+          'Return valid JSON with this exact shape:',
+          JSON.stringify({
+            criteria: [
+              {
+                criterion_name: 'string',
+                awarded_mark: 0,
+                judgement: 'string',
+                evidence: ['string'],
+                improvement_advice: 'string',
+                suggested_feedback: 'string'
+              }
+            ],
+            overall_feedback: 'string'
+          }, null, 2),
+          '',
+          'Requirements:',
+          '- Use only the supplied criterion names.',
+          '- Keep awarded marks within each criterion maximum.',
+          '- Base judgements only on the provided submission, notes, and retrieved context.',
+          '- Do not invent evidence or achievement claims.',
+          '- Keep suggested_feedback ready to paste into the feedback app.',
+          '- Return valid JSON only.'
+        ].join('\n')
+      }
+    ]
   })
 
-  if (!response.ok) {
-    const message = await getErrorMessage(response)
-    throw new Error(message || `API request failed with status ${response.status}`)
-  }
-
-  const data = await response.json()
-  const content = extractMessageText(data)
-  const parsed = extractJson(content)
+  const parsed = extractJson(rawText)
 
   return {
     criteria: Array.isArray(parsed.criteria) ? parsed.criteria : [],
     overall_feedback: normaliseWhitespace(parsed.overall_feedback || ''),
     retrievedContext,
     retrievalMode,
-    usedModel: sanitizeAiChatModel(modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL),
-    usedReasoningEffort: sanitizeReasoningEffort(
-      modelPreference?.selectedModel || DEFAULT_AI_CHAT_MODEL,
-      modelPreference?.reasoningEffort || DEFAULT_AI_REASONING_EFFORT
-    )
+    usedModel: model,
+    usedReasoningEffort: reasoningEffort
   }
 }
 
