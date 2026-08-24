@@ -83,6 +83,7 @@
 	let paragraphs = $state([])
 	let assignmentParagraphSnapshot = $state([])
 	let selectedParagraphs = $state(new Set())
+	let missingParagraphCategories = $state(new Set()) // Category names with no paragraphs added, flagged when generating a PDF
 	let studentName = $state('')
 	let studentPhoto = $state('')
 	// No studentImage - only header photo for assessment
@@ -5736,6 +5737,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return Object.values(group.knowledgeAreas).flat()
 	}
 
+	function findCategoriesMissingParagraphs() {
+		return getGroupedParagraphs()
+			.filter(group => group.category && getCategoryParagraphSequence(group).length === 0)
+			.map(group => group.category)
+	}
+
 	function resolveParagraphMainIndex(entry) {
 		if (!entry) return -1
 		if (entry.id !== undefined && entry.id !== null && entry.id !== '') {
@@ -6472,6 +6479,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		async function generatePDF() {
 			console.log('📄 generatePDF called')
+
+			// Flag categories with no paragraphs added yet, so the user can see them highlighted before submitting
+			const missingCategories = findCategoriesMissingParagraphs()
+			missingParagraphCategories = new Set(missingCategories)
+			if (missingCategories.length > 0) {
+				showSuccessNotification(`⚠️ Cannot generate PDF - these categories have no paragraphs added: ${missingCategories.join(', ')}`)
+				return
+			}
+
 		// Check for unentered text in quick-add textareas
 		if (currentStudentId) {
 			const hasUnenteredText = Object.values(quickAddText).some(text => text && text.trim() !== '')
@@ -7920,7 +7936,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												class="form-control form-control-sm" 
 												rows="4" 
 												bind:value={newParagraph} 
-												placeholder="Type your paragraph here..."
+												placeholder="Comment here..."
 											></textarea>
 											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph} style="min-width: 120px;">
 												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
@@ -8457,13 +8473,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									{:else}
 										<div class="p-3">
 											{#each getGroupedParagraphs() as group}
-												<div class="card mb-3 border-start border-info border-4">
+												<div class="card mb-3 border-start border-4 {missingParagraphCategories.has(group.category) ? 'border-danger' : 'border-info'}">
 													<div class="card-header bg-info text-white py-2">
 														<div class="d-flex align-items-center w-100 mb-2">
 															<div class="flex-grow-1">
 																<h6 class="mb-0 fw-bold">
 																	{#if group.category && group.category !== 'No Knowledge Area'}
 																		{group.category}
+																		{#if missingParagraphCategories.has(group.category)}
+																			<i class="bi bi-exclamation-circle-fill text-danger ms-1" title="No paragraphs added yet"></i>
+																		{/if}
 																	{/if}
 																</h6>
 															</div>
@@ -8634,7 +8653,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																					onChange={(newText) => editingParagraphText = newText}
 																					readonly={false}
 																					rows={3}
-																					placeholder="Edit paragraph text..."
+																					placeholder="Comment here..."
 																				/>
 																			{:else}
 																				<div class="d-flex align-items-start">
@@ -8895,7 +8914,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														id={quickAddInputId(group.category)}
 														class="form-control form-control-sm {aiImprovedText[group.category] ? 'ai-improved-text' : ''}"
 														rows="8"
-																placeholder={`Add paragraph to ${group.category}...`}
+																placeholder="Comment here..."
 																value={quickAddText[group.category] || ''}
 																oninput={(e) => {
 																	quickAddText = {

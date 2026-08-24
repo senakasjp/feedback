@@ -46,6 +46,26 @@ async function readFileAsText(file) {
   })
 }
 
+function reconstructLinesFromTextItems(items) {
+  const lines = []
+  let currentLine = []
+  let lastY = null
+
+  for (const item of items) {
+    if (!('str' in item)) continue
+    const y = Array.isArray(item.transform) ? item.transform[5] : null
+    if (lastY !== null && y !== null && Math.abs(y - lastY) > 1) {
+      lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim())
+      currentLine = []
+    }
+    if (item.str) currentLine.push(item.str)
+    if (y !== null) lastY = y
+  }
+  if (currentLine.length) lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim())
+
+  return lines.filter(Boolean).join('\n')
+}
+
 async function extractTextFromPdf(file) {
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const buffer = await readFileAsArrayBuffer(file)
@@ -64,14 +84,10 @@ async function extractTextFromPdf(file) {
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber)
     const content = await page.getTextContent()
-    const text = content.items
-      .map(item => ('str' in item ? item.str : ''))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    const text = reconstructLinesFromTextItems(content.items)
 
     if (text) {
-      pages.push(`Page ${pageNumber}: ${text}`)
+      pages.push(`Page ${pageNumber}:\n${text}`)
     }
   }
 
