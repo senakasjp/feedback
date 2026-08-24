@@ -6969,7 +6969,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 <!-- Header -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 	<div class="container-fluid">
-		<a class="navbar-brand d-inline-flex align-items-center gap-2 lh-1" href="/">
+		<a class="navbar-brand d-inline-flex align-items-center gap-2 lh-1" href="/" style="font-size: 0.95rem;">
 			<span>Feedback Manager v3.3.4</span>
 			<span class="small text-white-50 lh-1">({__BUILD_TIME__})</span>
 		</a>
