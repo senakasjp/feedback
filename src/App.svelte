@@ -8475,7 +8475,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											{#each getGroupedParagraphs() as group}
 												<div class="card mb-3 border-start border-4 {missingParagraphCategories.has(group.category) ? 'border-danger' : 'border-info'}">
 													<div class="card-header bg-info text-white py-2">
-														<div class="d-flex align-items-center w-100 mb-2">
+														<div class="d-flex align-items-center w-100">
 															<div class="flex-grow-1">
 																<h6 class="mb-0 fw-bold">
 																	{#if group.category && group.category !== 'No Knowledge Area'}
