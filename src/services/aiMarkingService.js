@@ -5,6 +5,10 @@ const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 const MAX_RETRIEVED_CHUNKS = 8
 const VECTOR_INDEX_VERSION = 1
+// Repeated in each prompt's closing instructions block (not just the earlier system message) because
+// models weight instructions closest to generation far more heavily - a rule stated once near the top
+// of a long prompt gets diluted by the time generation starts.
+const NO_MARKDOWN_INSTRUCTION = '- No markdown formatting (no **, no #, no bullet/numbered lists unless explicitly requested).'
 
 function normaliseWhitespace(value) {
   return String(value || '')
@@ -668,7 +672,8 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           '- Rewrite and improve the assessor short draft using only the data above.',
           '- Prioritise evidence and references that match the selected criterion/category.',
           '- Keep the assessor intent and judgement aligned with the provided instructions.',
-          '- Return plain feedback text only.'
+          '- Return plain feedback text only.',
+          NO_MARKDOWN_INSTRUCTION
         ].filter(Boolean).join('\n')
       }
     ]
@@ -843,7 +848,8 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
           '- Mention clear strengths and what evidence is missing or insufficient.',
           '- Keep the tone aligned with assessor instructions.',
           '- Do not invent evidence or claims.',
-          '- Return plain feedback text only.'
+          '- Return plain feedback text only.',
+          NO_MARKDOWN_INSTRUCTION
         ].join('\n')
       }
     ]
@@ -958,6 +964,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
           '- Base judgements only on the provided submission, notes, and retrieved context.',
           '- Do not invent evidence or achievement claims.',
           '- Keep suggested_feedback ready to paste into the feedback app.',
+          NO_MARKDOWN_INSTRUCTION,
           '- Return valid JSON only.'
         ].join('\n')
       }
