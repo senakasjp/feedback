@@ -5,10 +5,22 @@ const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 const MAX_RETRIEVED_CHUNKS = 8
 const VECTOR_INDEX_VERSION = 1
-// Repeated in each prompt's closing instructions block (not just the earlier system message) because
-// models weight instructions closest to generation far more heavily - a rule stated once near the top
-// of a long prompt gets diluted by the time generation starts.
-const NO_MARKDOWN_INSTRUCTION = '- No markdown formatting (no **, no #, no bullet/numbered lists unless explicitly requested).'
+
+// Repeats whatever the assessor actually typed (word limits, tone, "no markdown", anything) at the end
+// of the prompt, not just in an earlier system message - models weight instructions closest to
+// generation far more heavily, so a rule stated once near the top of a long prompt gets diluted by the
+// time generation starts. Generic by design: this is a shared template across subjects/assessments, so
+// it must echo back whatever instructions were entered rather than hardcoding a specific rule.
+function buildClosingInstructionsReminder(instructions = '') {
+  const text = normaliseWhitespace(instructions)
+  return text
+    ? [
+      '',
+      'Reminder - the assessor instructions below apply exactly to this output (word/length limits, tone, formatting, anything specified). Follow them precisely:',
+      text
+    ]
+    : []
+}
 
 function normaliseWhitespace(value) {
   return String(value || '')
@@ -673,7 +685,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           '- Prioritise evidence and references that match the selected criterion/category.',
           '- Keep the assessor intent and judgement aligned with the provided instructions.',
           '- Return plain feedback text only.',
-          NO_MARKDOWN_INSTRUCTION
+          ...buildClosingInstructionsReminder(answerInstructions)
         ].filter(Boolean).join('\n')
       }
     ]
@@ -849,8 +861,8 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
           '- Keep the tone aligned with assessor instructions.',
           '- Do not invent evidence or claims.',
           '- Return plain feedback text only.',
-          NO_MARKDOWN_INSTRUCTION
-        ].join('\n')
+          ...buildClosingInstructionsReminder(answerInstructions)
+        ].filter(Boolean).join('\n')
       }
     ]
   })
@@ -964,9 +976,9 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
           '- Base judgements only on the provided submission, notes, and retrieved context.',
           '- Do not invent evidence or achievement claims.',
           '- Keep suggested_feedback ready to paste into the feedback app.',
-          NO_MARKDOWN_INSTRUCTION,
-          '- Return valid JSON only.'
-        ].join('\n')
+          '- Return valid JSON only.',
+          ...buildClosingInstructionsReminder(assessment?.commonParagraphAiInstructions)
+        ].filter(Boolean).join('\n')
       }
     ]
   })
