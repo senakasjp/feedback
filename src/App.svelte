@@ -2071,6 +2071,23 @@
 		return Array.isArray(studentSubmissionDocuments) ? studentSubmissionDocuments : []
 	}
 
+	// Drops the tail of a report from its first Table of Contents/References/Appendix heading onward -
+	// these are never evidence for a marking criterion, and are the single biggest source of prompt bloat.
+	// ponytail: heading search is restricted to the back half of the document to avoid matching a stray
+	// in-body mention (e.g. a Table of Contents entry) or a false positive early in the text. Upgrade path:
+	// parse real heading/style boundaries if a report's structure ever breaks this assumption.
+	function stripTrailingReportBoilerplate(text) {
+		const source = String(text || '')
+		if (source.length < 500) {
+			return source
+		}
+
+		const searchStart = Math.floor(source.length * 0.5)
+		const boundary = /\b(table of contents|references|appendix)\b/i.exec(source.slice(searchStart))
+
+		return boundary ? source.slice(0, searchStart + boundary.index).trim() : source
+	}
+
 	function getCombinedStudentSubmissionText() {
 		const sections = []
 
@@ -2082,7 +2099,7 @@
 			if (!document?.extractedText) return
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
-				document.extractedText
+				stripTrailingReportBoilerplate(document.extractedText)
 			].join('\n'))
 		})
 
