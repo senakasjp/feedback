@@ -598,6 +598,29 @@ function extractFeedbackTextFromPossibleJson(rawText) {
   }
 }
 
+// Vision content blocks are provider-agnostic here ({ type: 'image', mimeType, data }) - each
+// provider in llmProviders.js adapts them to its own wire format (OpenAI image_url vs Anthropic source).
+function collectSubmissionImages(documents = []) {
+  return (Array.isArray(documents) ? documents : [])
+    .flatMap(document => (Array.isArray(document?.images) ? document.images : []).map(image => ({ ...image, documentName: document?.name })))
+}
+
+function buildStudentSubmissionImageMessages(images = []) {
+  if (!Array.isArray(images) || images.length === 0) {
+    return []
+  }
+
+  return [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: `Student submission images (${images.length}) - visual evidence from uploaded documents (diagrams, screenshots, charts):` },
+        ...images.map(image => ({ type: 'image', mimeType: image.mimeType || 'image/png', data: image.dataUrl }))
+      ]
+    }
+  ]
+}
+
 export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
   const submissionExcerpt = buildRelevantStudentEvidenceExcerpt({
     studentSubmission,
@@ -623,6 +646,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
         content: [
@@ -766,7 +790,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
   }
 }
 
-export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   console.info('Evidence check request started', {
     assessment: assessment?.name || 'Unnamed assessment',
     categoryName: normaliseWhitespace(categoryName || 'General feedback'),
@@ -795,6 +819,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
         content: [
@@ -868,7 +893,7 @@ function extractJson(text) {
   }
 }
 
-export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { criteria, retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
@@ -890,6 +915,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
         content: [

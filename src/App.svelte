@@ -2097,14 +2097,20 @@
 
 		getSafeStudentSubmissionDocuments().forEach(document => {
 			if (!document?.extractedText) return
+			const ocrText = (document.images || [])
+				.map((image, index) => image.ocrText?.trim() ? `[Image ${index + 1} OCR text]: ${image.ocrText.trim()}` : '')
+				.filter(Boolean)
+				.join('\n')
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
-				stripTrailingReportBoilerplate(document.extractedText)
-			].join('\n'))
+				stripTrailingReportBoilerplate(document.extractedText),
+				ocrText
+			].filter(Boolean).join('\n'))
 		})
 
 		return sections.join('\n\n')
 	}
+
 
 	function buildCurrentStudentEvaluationData() {
 		return {
@@ -2157,9 +2163,10 @@
 			let extractionFailures = 0
 			for (const file of files) {
 				let extractedText = ''
+				let images = []
 				let extractionError = ''
 				try {
-					extractedText = await extractTextFromFile(file)
+					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
 					extractionError = String(error?.message || error || 'Unknown extraction error')
@@ -2169,6 +2176,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					images,
 					documentType: selectedAssessmentDocumentType,
 					scope: 'assessment'
 				})
@@ -2222,9 +2230,10 @@
 			let extractionFailures = 0
 			for (const file of files) {
 				let extractedText = ''
+				let images = []
 				let extractionError = ''
 				try {
-					extractedText = await extractTextFromFile(file)
+					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
 					extractionError = String(error?.message || error || 'Unknown extraction error')
@@ -2234,6 +2243,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					images,
 					documentType: selectedStudentDocumentType,
 					scope: 'student'
 				})
@@ -2478,6 +2488,7 @@
 				categoryName,
 				student: getCurrentStudent(),
 				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes,
 				assessmentParagraphs,
 				priorEvaluations,
@@ -2542,6 +2553,7 @@
 				student: getCurrentStudent(),
 				globalSystemInstructions: globalAiSystemInstructions,
 				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes,
 				assessmentParagraphs,
 				priorEvaluations,
