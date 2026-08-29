@@ -2401,7 +2401,7 @@
 			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			promptPreviewMessages = preview.messages
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 2200)
 			const result = await improveFeedbackWithRag({
 				...ragArgs,
 				modelPreference: getCurrentAiModelPreference()
@@ -2651,7 +2651,7 @@
 				})
 
 			promptPreviewMessages = preview.messages
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 2200)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			showPromptPreviewModal = true
 		} catch (error) {

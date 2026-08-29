@@ -563,45 +563,10 @@ function buildRetrievedContextMessages(retrievedContext = [], retrievalMode = ''
       ].join('\n')
     },
     {
-      role: 'assistant',
+      role: 'user',
       content: compactContext
         ? `Retrieved context block:\n\n${compactContext}`
         : 'Retrieved context block:\n\nNo retrieved context was available.'
-    }
-  ]
-}
-
-function buildStudentPortfolioMessages(studentSubmissionDocuments = []) {
-  const compactContext = Array.isArray(studentSubmissionDocuments)
-    ? studentSubmissionDocuments
-      .map((document, index) => {
-        const name = normaliseWhitespace(document?.name || `Document ${index + 1}`)
-        const type = normaliseWhitespace(document?.documentType || 'student-document')
-        const text = normaliseWhitespace(document?.extractedText || '')
-
-        if (!text) {
-          return ''
-        }
-
-        return [
-          `Portfolio document ${index + 1}`,
-          `Name: ${name}`,
-          `Type: ${type}`,
-          `Text: ${text}`
-        ].join('\n')
-      })
-      .filter(Boolean)
-      .join('\n\n')
-    : ''
-
-  if (!compactContext) {
-    return []
-  }
-
-  return [
-    {
-      role: 'assistant',
-      content: `Student portfolio documents:\n\n${compactContext}`
     }
   ]
 }
@@ -658,7 +623,6 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
-      ...buildStudentPortfolioMessages(studentSubmissionDocuments),
       {
         role: 'user',
         content: [
