@@ -2046,12 +2046,19 @@
 	}
 
 	// Merges the assessment-wide common prompt (unless opted out per category) with this category's own instructions.
+	// Labels each part rather than relying on the '\n\n' between them - every consumer of this
+	// (buildPerAnswerSystemMessages, buildImproveEnglishMessages) runs the result through a
+	// whitespace-collapsing normaliser before sending it to the model, which strips blank lines,
+	// so an unlabelled join reads as one run-on paragraph with no boundary between the two instructions.
 	function getCombinedAnswerInstructions(categoryName) {
 		const common = isCommonPromptIncluded(categoryName)
 			? (currentAssessment?.commonParagraphAiInstructions || '').trim()
 			: ''
 		const perCategory = (quickAddAiInstructions[categoryName] || '').trim()
-		return [common, perCategory].filter(Boolean).join('\n\n')
+		const parts = []
+		if (common) parts.push(`Assessment-wide common instructions (applies to every paragraph): ${common}`)
+		if (perCategory) parts.push(`Instructions specific to this paragraph: ${perCategory}`)
+		return parts.join('\n\n')
 	}
 
 	function updateAssessmentReferenceDocuments(nextDocuments) {
