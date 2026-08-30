@@ -44,7 +44,7 @@ After code changes: `build-agent` to verify; `code-reviewer` for risky diffs.
 - **Stop and ask** if a rebuild appears to have altered `FeedbackData` contents unexpectedly (check file size/mtime/record counts before and after)
 
 ## Project Patterns
-- **Branch topology**: `main` is a stale, unrelated early snapshot (different scaffold entirely) — never plan or branch from it. Real development happens on feature branches (e.g. `feature/common-paragraph-prompt-with-llm`). Always check branch recency (commit dates) before starting work.
+- **Branch topology**: `main` is the same project, just far behind (an early ancestor of the active feature line, only 8 commits). Feature work happens on feature branches, but PRs merge back to `main` — treat it as the real trunk, not a dead branch. Always check branch recency (commit dates) before starting work.
 - **Worktrees**: `EnterWorktree`'s default `fresh` mode branches from `origin/<default-branch>` (`main`), which is stale here. Branch worktrees from the actual feature branch instead — create manually (`git worktree add <path> <feature-branch> -b <new-branch>`) then `EnterWorktree({path})`.
 - **Student submission text**: every AI flow (Improve English, Improve with RAG, Evidence Check) sources the combined submission text from one function — `getCombinedStudentSubmissionText()` in `App.svelte`. Fix cross-cutting prompt-input issues there, not per call site.
 - **Common paragraph AI prompt**: `currentAssessment.commonParagraphAiInstructions` is merged with per-category instructions via `getCombinedAnswerInstructions()` in `App.svelte`, with per-category opt-out via `commonPromptEnabledByCategory`.
