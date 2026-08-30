@@ -315,13 +315,18 @@ function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryN
     ...tokenize(evidenceNotes)
   ])
 
+  // Headings and table-of-contents entries (e.g. "1. Executive Summary" or "1. Executive Summary .... 1")
+  // trivially match a category's own name with nothing else - if those are the only matches, they crowd
+  // out the real body paragraph (which usually doesn't repeat the category name verbatim) instead of
+  // falling back to it. Requiring a minimum length keeps them from counting as a "real" match.
+  const MIN_CONTENT_MATCH_LENGTH = 40
   const scored = paragraphs
     .map((paragraph, index) => ({
       paragraph,
       index,
       score: queryTokens.length > 0 ? scoreTextMatch(queryTokens, paragraph, 'submission') : 0
     }))
-    .filter(item => item.score > 0)
+    .filter(item => item.score > 0 && item.paragraph.length >= MIN_CONTENT_MATCH_LENGTH)
     .sort((a, b) => b.score - a.score || a.index - b.index)
 
   const selected = (scored.length > 0 ? scored : paragraphs.slice(0, Math.min(maxParagraphs, paragraphs.length)).map((paragraph, index) => ({
