@@ -1,5 +1,7 @@
 # Changelog
 
+> **Docs (Aug 2026):** Documented a desktop-app deploy gotcha — `/Applications/Feedback.app` can be a stale build missing features present in source. See `TROUBLESHOOTING.md` → "Desktop App Doesn't Reflect Recent Code Changes" and `CLAUDE.md` project patterns for diagnosis/fix (`BULD_DEPLOY.SH`).
+
 > **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
 
 > **New (Mar 2026):** PDF export now suppresses table-covered paragraph content using paragraph-ID coverage filtering, and hides `[N MARKS]` in category headers when that category is already covered by the rubric table.

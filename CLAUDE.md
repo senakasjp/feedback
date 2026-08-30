@@ -11,7 +11,7 @@ You are the primary Claude Code agent for **Feedback Manager** — a Tauri v2 + 
 - **Tests**: `npm run test:e2e` (Playwright).
 - **Install/run a local build**: copy the built `.app` into `/Applications`, backing up the existing one first (this project already uses a `Feedback.app.backup-<timestamp>` convention there — follow it). Local builds are unsigned/ad-hoc — clear the quarantine flag with `xattr -cr` before `open`, otherwise Gatekeeper blocks or translocates it.
 - **AI/LLM**: `src/services/aiMarkingService.js` + `src/services/openaiService.js` — multi-provider abstraction (API keys entered in-app GUI). Prompts are assembled from composable message-builder functions (`buildSystemMessages`, `buildPerAnswerSystemMessages`, `buildRetrievedContextMessages`, etc.), not one big template string.
-- **Document extraction**: `src/services/documentTextExtractor.js` — mammoth for `.docx`, pdfjs-dist for `.pdf`. Text-only; embedded images are currently discarded (not yet sent to vision models).
+- **Document extraction**: `src/services/documentTextExtractor.js` — mammoth for `.docx` (embedded images OCR'd via tesseract.js), pdfjs-dist for `.pdf` (pages also rendered to images). Extracted text plus page/image renders are both sent onward — vision-capable models see diagrams/screenshots/charts directly, not just their captions.
 
 ## Delegation
 Subagents self-describe in the Agent tool list — don't restate their roles here. **Default: work inline.** Delegate only when cheaper or safer.
