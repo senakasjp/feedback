@@ -1022,6 +1022,9 @@
 
 	function shouldUseLandscapeForHtml(html, marginMm = 20) {
 		if (!html) return false
+		// A pasted rubric table almost always reads better in landscape: more width per column
+		// means far less text-wrapping, which keeps rows shorter and lets more of them fit per page.
+		if (/<table[\s>]/i.test(html)) return true
 		const pxPerMm = 96 / 25.4
 		const portraitWidthMm = 210 // A4 portrait width
 		const maxContentWidthMm = portraitWidthMm - (marginMm * 2)
@@ -6109,14 +6112,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		})
 
-		// Normalize spacing inside pasted HTML so tables don't blow up the PDF
-		const styleElement = document.createElement('style')
-		styleElement.textContent = `
-			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: 10pt; color: #000 !important; background: #fff !important; }
+		// Normalize spacing inside pasted HTML so tables don't blow up the PDF.
+		// Font size/padding are parameterized so a very tall table can be shrunk to fit
+		// more rows per page (see the shrink-to-fit loop below) instead of leaving one
+		// oversized row alone on a page.
+		const buildAssessmentHtmlStyleText = (fontSizePt, cellPaddingPx) => `
+			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: ${fontSizePt}pt; color: #000 !important; background: #fff !important; }
 			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
 			.pdf-assessment-html th,
 			.pdf-assessment-html td {
-				padding: 12px 10px !important;
+				padding: ${cellPaddingPx}px ${Math.max(4, Math.round(cellPaddingPx * 0.83))}px !important;
 				line-height: 1.35 !important;
 				vertical-align: top !important;
 				word-break: break-word !important;
@@ -6143,9 +6148,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			.pdf-assessment-html td {
 				border: 1px solid #222 !important;
 			}
-			.pdf-assessment-html p:not([style*="font-size"]) { font-size: 10pt; }
-			.pdf-assessment-html div:not([style*="font-size"]) { font-size: 10pt; }
+			.pdf-assessment-html p:not([style*="font-size"]) { font-size: ${fontSizePt}pt; }
+			.pdf-assessment-html div:not([style*="font-size"]) { font-size: ${fontSizePt}pt; }
 		`
+		const ASSESSMENT_HTML_BASE_FONT_PT = 10
+		const ASSESSMENT_HTML_BASE_PADDING_PX = 12
+		const styleElement = document.createElement('style')
+		styleElement.textContent = buildAssessmentHtmlStyleText(ASSESSMENT_HTML_BASE_FONT_PT, ASSESSMENT_HTML_BASE_PADDING_PX)
 		container.prepend(styleElement)
 
 		// Auto-highlight rubric cells based on category marks and row names
@@ -6306,6 +6315,23 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		let nextY = startY
 		try {
+			// Shrink-to-fit: if any single row is tall enough that two of them couldn't share a
+			// page, step the font size (and padding) down until rows are short enough to pack
+			// multiple per page, rather than leaving one oversized row alone on a page.
+			const maxDrawableHeightMm = pageHeight - (margin * 2)
+			const maxRowShareOfPage = 0.48
+			const minFontSizePt = 7
+			for (let fontSizePt = ASSESSMENT_HTML_BASE_FONT_PT; fontSizePt >= minFontSizePt; fontSizePt--) {
+				const rows = Array.from(container.querySelectorAll('tr'))
+				if (!rows.length) break
+				const tallestRowMm = Math.max(...rows.map(row => row.getBoundingClientRect().height)) / pxPerMm
+				if (tallestRowMm <= maxDrawableHeightMm * maxRowShareOfPage) break
+				if (fontSizePt === minFontSizePt) break
+				const nextFontSizePt = fontSizePt - 1
+				const nextPaddingPx = Math.max(4, Math.round(ASSESSMENT_HTML_BASE_PADDING_PX * (nextFontSizePt / ASSESSMENT_HTML_BASE_FONT_PT)))
+				styleElement.textContent = buildAssessmentHtmlStyleText(nextFontSizePt, nextPaddingPx)
+			}
+
 			const rowBoundariesPx = getRowBoundaryRectsPx(container)
 			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: HTML2CANVAS_RASTER_SCALE, useCORS: true })
 			nextY = sliceCanvasIntoPdfPages(doc, canvas, {
