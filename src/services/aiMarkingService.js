@@ -289,7 +289,7 @@ function buildQueryText({ assessment, studentSubmission = '', evidenceNotes = ''
   ].filter(Boolean).join(' ')
 }
 
-function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', shortFeedback = '', maxParagraphs = 6, maxChars = 2200 }) {
+function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', maxParagraphs = 6, maxChars = 2200 }) {
   const sourceText = String(studentSubmission || '').trim()
   if (!sourceText) {
     return ''
@@ -305,10 +305,14 @@ function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryN
     return ''
   }
 
+  // Deliberately excludes shortFeedback (the assessor's/AI's own draft) from the search query:
+  // "Improve with RAG" writes its result back into that same draft field, so on a re-run the draft
+  // is the tool's own prior (possibly wrong) output rather than a neutral hint - scoring against its
+  // wording creates a feedback loop that drifts the excerpt toward whatever the last wrong answer
+  // happened to mention, instead of the actual category content.
   const queryTokens = unique([
     ...tokenize(categoryName),
-    ...tokenize(evidenceNotes),
-    ...tokenize(shortFeedback)
+    ...tokenize(evidenceNotes)
   ])
 
   const scored = paragraphs
@@ -641,10 +645,9 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
   const submissionExcerpt = buildRelevantStudentEvidenceExcerpt({
     studentSubmission,
     categoryName,
-    evidenceNotes,
-    shortFeedback
+    evidenceNotes
   })
-  const retrievalQuery = [categoryName, answerInstructions, shortFeedback, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
+  const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
