@@ -320,20 +320,38 @@ function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryN
   // out the real body paragraph (which usually doesn't repeat the category name verbatim) instead of
   // falling back to it. Requiring a minimum length keeps them from counting as a "real" match.
   const MIN_CONTENT_MATCH_LENGTH = 40
-  const scored = paragraphs
+  const matches = paragraphs
     .map((paragraph, index) => ({
       paragraph,
       index,
       score: queryTokens.length > 0 ? scoreTextMatch(queryTokens, paragraph, 'submission') : 0
     }))
-    .filter(item => item.score > 0 && item.paragraph.length >= MIN_CONTENT_MATCH_LENGTH)
+    .filter(item => item.score > 0)
+
+  const scored = matches
+    .filter(item => item.paragraph.length >= MIN_CONTENT_MATCH_LENGTH)
     .sort((a, b) => b.score - a.score || a.index - b.index)
 
-  const selected = (scored.length > 0 ? scored : paragraphs.slice(0, Math.min(maxParagraphs, paragraphs.length)).map((paragraph, index) => ({
-    paragraph,
-    index,
-    score: 0
-  })))
+  const headingOnlyMatches = matches.filter(item => item.paragraph.length < MIN_CONTENT_MATCH_LENGTH)
+
+  let candidatePool
+  if (scored.length > 0) {
+    candidatePool = scored
+  } else if (headingOnlyMatches.length > 0) {
+    // No real content matched the category name, only heading/ToC-style lines. A ToC entry always
+    // appears earlier in the document than the section it points to, so anchor on the LAST such
+    // match (the actual section heading) and take what follows it - a section's body normally sits
+    // immediately after its own heading, not at the very start of the document (which is usually a
+    // title page, unrelated to any specific category).
+    const anchorIndex = headingOnlyMatches[headingOnlyMatches.length - 1].index
+    candidatePool = paragraphs
+      .map((paragraph, index) => ({ paragraph, index, score: 0 }))
+      .filter(item => item.index > anchorIndex)
+  } else {
+    candidatePool = paragraphs.map((paragraph, index) => ({ paragraph, index, score: 0 }))
+  }
+
+  const selected = candidatePool
     .slice(0, maxParagraphs)
     .sort((a, b) => a.index - b.index)
 
