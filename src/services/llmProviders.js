@@ -123,6 +123,32 @@ function extractOpenAiMessageText(payload = {}) {
   return collectTextCandidates(payload).join('\n').trim()
 }
 
+// Message builders produce provider-agnostic content parts ({ type: 'text', text } and
+// { type: 'image', mimeType, data }). Adapt image parts to each provider's own wire format here -
+// text parts already match both OpenAI's and Anthropic's shape, so they pass through unchanged.
+function adaptMessageContent(content, providerId) {
+  if (!Array.isArray(content)) {
+    return content
+  }
+
+  return content.map(part => {
+    if (part?.type !== 'image') {
+      return part
+    }
+
+    const raw = String(part.data || '')
+    const base64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw
+    const mimeType = part.mimeType || 'image/png'
+
+    if (providerId === 'anthropic') {
+      return { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } }
+    }
+
+    const dataUrl = raw.startsWith('data:') ? raw : `data:${mimeType};base64,${base64}`
+    return { type: 'image_url', image_url: { url: dataUrl } }
+  })
+}
+
 function splitSystemAndTurns(messages = []) {
   const systemText = messages.filter(m => m.role === 'system').map(m => m.content).filter(Boolean).join('\n\n')
   const turns = messages
@@ -209,10 +235,12 @@ export async function callChatCompletion({ providerId = DEFAULT_PROVIDER_ID, mod
     throw new Error(`${provider.label} API key is not configured. Add it in Settings > API Keys, or in the .env file.`)
   }
 
+  const adaptedMessages = messages.map(message => ({ ...message, content: adaptMessageContent(message.content, providerId) }))
+
   const response = await fetch(provider.chatUrl, {
     method: 'POST',
     headers: provider.headers(apiKey),
-    body: JSON.stringify(provider.buildBody({ model, messages, temperature, maxTokens, reasoningEffort }))
+    body: JSON.stringify(provider.buildBody({ model, messages: adaptedMessages, temperature, maxTokens, reasoningEffort }))
   })
 
   if (!response.ok) {

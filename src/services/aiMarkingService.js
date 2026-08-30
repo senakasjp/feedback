@@ -6,6 +6,22 @@ const EMBEDDING_MODEL = 'text-embedding-3-small'
 const MAX_RETRIEVED_CHUNKS = 8
 const VECTOR_INDEX_VERSION = 1
 
+// Repeats whatever the assessor actually typed (word limits, tone, "no markdown", anything) at the end
+// of the prompt, not just in an earlier system message - models weight instructions closest to
+// generation far more heavily, so a rule stated once near the top of a long prompt gets diluted by the
+// time generation starts. Generic by design: this is a shared template across subjects/assessments, so
+// it must echo back whatever instructions were entered rather than hardcoding a specific rule.
+function buildClosingInstructionsReminder(instructions = '') {
+  const text = normaliseWhitespace(instructions)
+  return text
+    ? [
+      '',
+      'Reminder - the assessor instructions below apply exactly to this output (word/length limits, tone, formatting, anything specified). Follow them precisely:',
+      text
+    ]
+    : []
+}
+
 function normaliseWhitespace(value) {
   return String(value || '')
     .replace(/<[^>]+>/g, ' ')
@@ -273,7 +289,7 @@ function buildQueryText({ assessment, studentSubmission = '', evidenceNotes = ''
   ].filter(Boolean).join(' ')
 }
 
-function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', shortFeedback = '', maxParagraphs = 6, maxChars = 2200 }) {
+function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', maxParagraphs = 6, maxChars = 2200 }) {
   const sourceText = String(studentSubmission || '').trim()
   if (!sourceText) {
     return ''
@@ -289,10 +305,14 @@ function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryN
     return ''
   }
 
+  // Deliberately excludes shortFeedback (the assessor's/AI's own draft) from the search query:
+  // "Improve with RAG" writes its result back into that same draft field, so on a re-run the draft
+  // is the tool's own prior (possibly wrong) output rather than a neutral hint - scoring against its
+  // wording creates a feedback loop that drifts the excerpt toward whatever the last wrong answer
+  // happened to mention, instead of the actual category content.
   const queryTokens = unique([
     ...tokenize(categoryName),
-    ...tokenize(evidenceNotes),
-    ...tokenize(shortFeedback)
+    ...tokenize(evidenceNotes)
   ])
 
   const scored = paragraphs
@@ -563,45 +583,10 @@ function buildRetrievedContextMessages(retrievedContext = [], retrievalMode = ''
       ].join('\n')
     },
     {
-      role: 'assistant',
+      role: 'user',
       content: compactContext
         ? `Retrieved context block:\n\n${compactContext}`
         : 'Retrieved context block:\n\nNo retrieved context was available.'
-    }
-  ]
-}
-
-function buildStudentPortfolioMessages(studentSubmissionDocuments = []) {
-  const compactContext = Array.isArray(studentSubmissionDocuments)
-    ? studentSubmissionDocuments
-      .map((document, index) => {
-        const name = normaliseWhitespace(document?.name || `Document ${index + 1}`)
-        const type = normaliseWhitespace(document?.documentType || 'student-document')
-        const text = normaliseWhitespace(document?.extractedText || '')
-
-        if (!text) {
-          return ''
-        }
-
-        return [
-          `Portfolio document ${index + 1}`,
-          `Name: ${name}`,
-          `Type: ${type}`,
-          `Text: ${text}`
-        ].join('\n')
-      })
-      .filter(Boolean)
-      .join('\n\n')
-    : ''
-
-  if (!compactContext) {
-    return []
-  }
-
-  return [
-    {
-      role: 'assistant',
-      content: `Student portfolio documents:\n\n${compactContext}`
     }
   ]
 }
@@ -633,14 +618,36 @@ function extractFeedbackTextFromPossibleJson(rawText) {
   }
 }
 
+// Vision content blocks are provider-agnostic here ({ type: 'image', mimeType, data }) - each
+// provider in llmProviders.js adapts them to its own wire format (OpenAI image_url vs Anthropic source).
+function collectSubmissionImages(documents = []) {
+  return (Array.isArray(documents) ? documents : [])
+    .flatMap(document => (Array.isArray(document?.images) ? document.images : []).map(image => ({ ...image, documentName: document?.name })))
+}
+
+function buildStudentSubmissionImageMessages(images = []) {
+  if (!Array.isArray(images) || images.length === 0) {
+    return []
+  }
+
+  return [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: `Student submission images (${images.length}) - visual evidence from uploaded documents (diagrams, screenshots, charts):` },
+        ...images.map(image => ({ type: 'image', mimeType: image.mimeType || 'image/png', data: image.dataUrl }))
+      ]
+    }
+  ]
+}
+
 export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
   const submissionExcerpt = buildRelevantStudentEvidenceExcerpt({
     studentSubmission,
     categoryName,
-    evidenceNotes,
-    shortFeedback
+    evidenceNotes
   })
-  const retrievalQuery = [categoryName, answerInstructions, shortFeedback, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
+  const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
@@ -658,7 +665,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
-      ...buildStudentPortfolioMessages(studentSubmissionDocuments),
+      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
         content: [
@@ -680,7 +687,8 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           '- Rewrite and improve the assessor short draft using only the data above.',
           '- Prioritise evidence and references that match the selected criterion/category.',
           '- Keep the assessor intent and judgement aligned with the provided instructions.',
-          '- Return plain feedback text only.'
+          '- Return plain feedback text only.',
+          ...buildClosingInstructionsReminder(answerInstructions)
         ].filter(Boolean).join('\n')
       }
     ]
@@ -802,7 +810,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
   }
 }
 
-export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   console.info('Evidence check request started', {
     assessment: assessment?.name || 'Unnamed assessment',
     categoryName: normaliseWhitespace(categoryName || 'General feedback'),
@@ -831,6 +839,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
         content: [
@@ -854,8 +863,9 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
           '- Mention clear strengths and what evidence is missing or insufficient.',
           '- Keep the tone aligned with assessor instructions.',
           '- Do not invent evidence or claims.',
-          '- Return plain feedback text only.'
-        ].join('\n')
+          '- Return plain feedback text only.',
+          ...buildClosingInstructionsReminder(answerInstructions)
+        ].filter(Boolean).join('\n')
       }
     ]
   })
@@ -904,7 +914,7 @@ function extractJson(text) {
   }
 }
 
-export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { criteria, retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
@@ -926,6 +936,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
         content: [
@@ -968,8 +979,9 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
           '- Base judgements only on the provided submission, notes, and retrieved context.',
           '- Do not invent evidence or achievement claims.',
           '- Keep suggested_feedback ready to paste into the feedback app.',
-          '- Return valid JSON only.'
-        ].join('\n')
+          '- Return valid JSON only.',
+          ...buildClosingInstructionsReminder(assessment?.commonParagraphAiInstructions)
+        ].filter(Boolean).join('\n')
       }
     ]
   })

@@ -2046,12 +2046,19 @@
 	}
 
 	// Merges the assessment-wide common prompt (unless opted out per category) with this category's own instructions.
+	// Labels each part rather than relying on the '\n\n' between them - every consumer of this
+	// (buildPerAnswerSystemMessages, buildImproveEnglishMessages) runs the result through a
+	// whitespace-collapsing normaliser before sending it to the model, which strips blank lines,
+	// so an unlabelled join reads as one run-on paragraph with no boundary between the two instructions.
 	function getCombinedAnswerInstructions(categoryName) {
 		const common = isCommonPromptIncluded(categoryName)
 			? (currentAssessment?.commonParagraphAiInstructions || '').trim()
 			: ''
 		const perCategory = (quickAddAiInstructions[categoryName] || '').trim()
-		return [common, perCategory].filter(Boolean).join('\n\n')
+		const parts = []
+		if (common) parts.push(`Assessment-wide common instructions (applies to every paragraph): ${common}`)
+		if (perCategory) parts.push(`Instructions specific to this paragraph: ${perCategory}`)
+		return parts.join('\n\n')
 	}
 
 	function updateAssessmentReferenceDocuments(nextDocuments) {
@@ -2071,6 +2078,23 @@
 		return Array.isArray(studentSubmissionDocuments) ? studentSubmissionDocuments : []
 	}
 
+	// Drops the tail of a report from its first Table of Contents/References/Appendix heading onward -
+	// these are never evidence for a marking criterion, and are the single biggest source of prompt bloat.
+	// ponytail: heading search is restricted to the back half of the document to avoid matching a stray
+	// in-body mention (e.g. a Table of Contents entry) or a false positive early in the text. Upgrade path:
+	// parse real heading/style boundaries if a report's structure ever breaks this assumption.
+	function stripTrailingReportBoilerplate(text) {
+		const source = String(text || '')
+		if (source.length < 500) {
+			return source
+		}
+
+		const searchStart = Math.floor(source.length * 0.5)
+		const boundary = /\b(table of contents|references|appendix)\b/i.exec(source.slice(searchStart))
+
+		return boundary ? source.slice(0, searchStart + boundary.index).trim() : source
+	}
+
 	function getCombinedStudentSubmissionText() {
 		const sections = []
 
@@ -2080,14 +2104,20 @@
 
 		getSafeStudentSubmissionDocuments().forEach(document => {
 			if (!document?.extractedText) return
+			const ocrText = (document.images || [])
+				.map((image, index) => image.ocrText?.trim() ? `[Image ${index + 1} OCR text]: ${image.ocrText.trim()}` : '')
+				.filter(Boolean)
+				.join('\n')
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
-				document.extractedText
-			].join('\n'))
+				stripTrailingReportBoilerplate(document.extractedText),
+				ocrText
+			].filter(Boolean).join('\n'))
 		})
 
 		return sections.join('\n\n')
 	}
+
 
 	function buildCurrentStudentEvaluationData() {
 		return {
@@ -2140,9 +2170,10 @@
 			let extractionFailures = 0
 			for (const file of files) {
 				let extractedText = ''
+				let images = []
 				let extractionError = ''
 				try {
-					extractedText = await extractTextFromFile(file)
+					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
 					extractionError = String(error?.message || error || 'Unknown extraction error')
@@ -2152,6 +2183,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					images,
 					documentType: selectedAssessmentDocumentType,
 					scope: 'assessment'
 				})
@@ -2205,9 +2237,10 @@
 			let extractionFailures = 0
 			for (const file of files) {
 				let extractedText = ''
+				let images = []
 				let extractionError = ''
 				try {
-					extractedText = await extractTextFromFile(file)
+					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
 					extractionError = String(error?.message || error || 'Unknown extraction error')
@@ -2217,6 +2250,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					images,
 					documentType: selectedStudentDocumentType,
 					scope: 'student'
 				})
@@ -2368,10 +2402,6 @@
 	async function improveTextWithRag(categoryName) {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
-		if (!shortText) {
-			showSuccessNotification('⚠️ Please enter some text first')
-			return
-		}
 
 		if (!isCurrentAiProviderConfigured()) {
 			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
@@ -2401,7 +2431,7 @@
 			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			promptPreviewMessages = preview.messages
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 2200)
 			const result = await improveFeedbackWithRag({
 				...ragArgs,
 				modelPreference: getCurrentAiModelPreference()
@@ -2461,6 +2491,7 @@
 				categoryName,
 				student: getCurrentStudent(),
 				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes,
 				assessmentParagraphs,
 				priorEvaluations,
@@ -2525,6 +2556,7 @@
 				student: getCurrentStudent(),
 				globalSystemInstructions: globalAiSystemInstructions,
 				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes,
 				assessmentParagraphs,
 				priorEvaluations,
@@ -2617,13 +2649,12 @@
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 
-		if (!shortText) {
-			showSuccessNotification('⚠️ Please enter some text first')
-			return
-		}
-
 		try {
 			if (mode === 'ai') {
+				if (!shortText) {
+					showSuccessNotification('⚠️ Please enter some text first')
+					return
+				}
 				const messages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
 				promptPreviewMessages = messages
 				promptPreviewRequestPayload = buildPromptPreviewRequestPayload(messages, 0.3, 1000)
@@ -2651,7 +2682,7 @@
 				})
 
 			promptPreviewMessages = preview.messages
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 2200)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			showPromptPreviewModal = true
 		} catch (error) {
@@ -8933,7 +8964,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class="btn btn-outline-primary btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithAI(group.category)}
-																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category]}
 																title="Improve English with AI"
 															>
 																{#if improvingText[group.category]}
@@ -8947,7 +8978,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class="btn btn-outline-info btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithRag(group.category)}
-																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category]}
 																title="Expand draft using rubric and RAG context"
 															>
 																{#if improvingTextWithRag[group.category]}
@@ -8975,7 +9006,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 										type="button"
 										onclick={() => viewFinalPrompt(group.category, 'ai')}
-										disabled={!quickAddText[group.category]?.trim()}
 										title="View final prompt for Improve with AI"
 									>
 										<i class="bi bi-eye me-1"></i>View Improve Prompt
@@ -8984,7 +9014,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 																type="button"
 																onclick={() => viewFinalPrompt(group.category, 'rag')}
-																disabled={!quickAddText[group.category]?.trim()}
 																title="View final prompt for Improve with RAG"
 															>
 																<i class="bi bi-eye-fill me-1"></i>View RAG Prompt

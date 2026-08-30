@@ -304,6 +304,11 @@ button.btn-outline-danger {
   margin-top: 0 !important;
   vertical-align: middle !important;
   position: relative !important;
+  /* Bootstrap's switch variant draws its knob as a background-image (an SVG circle) that sits on
+     top of background-color - since the width/height above collapse the switch pill into a circle,
+     that knob image fully covers the fill and makes checked look identical to unchecked (a hollow
+     ring). Removing it lets the plain background-color + checkmark below actually show. */
+  background-image: none !important;
 }
 
 .form-check-input:checked {
