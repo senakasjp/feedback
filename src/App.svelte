@@ -2402,10 +2402,6 @@
 	async function improveTextWithRag(categoryName) {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
-		if (!shortText) {
-			showSuccessNotification('⚠️ Please enter some text first')
-			return
-		}
 
 		if (!isCurrentAiProviderConfigured()) {
 			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
@@ -2653,13 +2649,12 @@
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 
-		if (!shortText) {
-			showSuccessNotification('⚠️ Please enter some text first')
-			return
-		}
-
 		try {
 			if (mode === 'ai') {
+				if (!shortText) {
+					showSuccessNotification('⚠️ Please enter some text first')
+					return
+				}
 				const messages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
 				promptPreviewMessages = messages
 				promptPreviewRequestPayload = buildPromptPreviewRequestPayload(messages, 0.3, 1000)
