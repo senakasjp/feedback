@@ -863,6 +863,40 @@
 		await insertTableHtmlSnippet(TABLE_HTML_CROSS_SNIPPET, 'Cross snippet')
 	}
 
+	// Mark-range bands: generates the rubric table's header row (e.g. "Excellent (80-100%)")
+	let rubricBandCount = $state(4)
+	let rubricBands = $state([
+		{ label: 'Excellent', lower: 80, upper: 100 },
+		{ label: 'Good', lower: 65, upper: 79 },
+		{ label: 'Average', lower: 50, upper: 64 },
+		{ label: 'Below Average', lower: 0, upper: 49 }
+	])
+
+	function setRubricBandCount(rawValue) {
+		const count = Math.max(1, Math.min(10, Number(rawValue) || 1))
+		rubricBandCount = count
+		const next = rubricBands.slice(0, count)
+		while (next.length < count) {
+			next.push({ label: `Band ${next.length + 1}`, lower: 0, upper: 0 })
+		}
+		rubricBands = next
+	}
+
+	function updateRubricBand(index, field, value) {
+		rubricBands = rubricBands.map((band, i) => i === index ? { ...band, [field]: value } : band)
+	}
+
+	async function insertRubricBandsHeaderRow() {
+		const sectionWidth = 10
+		const bandWidth = rubricBands.length ? Math.floor((100 - sectionWidth) / rubricBands.length) : 0
+		const cells = [`<td style="width: ${sectionWidth}%;"><strong>Section</strong></td>`]
+		for (const band of rubricBands) {
+			const label = String(band.label || 'Band').trim()
+			cells.push(`<td style="width: ${bandWidth}%;"><strong>${label} (${band.lower}–${band.upper}%)</strong></td>`)
+		}
+		await insertTableHtmlSnippet(`<tr>\n${cells.join('\n')}\n</tr>`, 'Bands header row')
+	}
+
 	async function setLockPdfPortrait(checked) {
 		lockPdfPortrait = Boolean(checked)
 		if (currentAssessment) {
@@ -7684,6 +7718,56 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									</div>
 									{#if showAssessmentHtml}
 										<div class="card-body py-2">
+									<div class="alert alert-light border mb-3">
+										<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+											<span class="fw-bold">Mark ranges for bands</span>
+											<div class="d-flex align-items-center gap-2">
+												<label class="small mb-0" for="rubricBandCountInput">Number of bands</label>
+												<input
+													id="rubricBandCountInput"
+													type="number"
+													min="1"
+													max="10"
+													class="form-control form-control-sm"
+													style="width: 70px;"
+													value={rubricBandCount}
+													onchange={(e) => setRubricBandCount(e.currentTarget.value)}
+												>
+											</div>
+										</div>
+										{#each rubricBands as band, i}
+											<div class="d-flex align-items-center gap-2 mb-2">
+												<input
+													type="text"
+													class="form-control form-control-sm"
+													placeholder="Band label"
+													value={band.label}
+													oninput={(e) => updateRubricBand(i, 'label', e.currentTarget.value)}
+												>
+												<input
+													type="number"
+													class="form-control form-control-sm"
+													style="width: 90px;"
+													placeholder="Lower %"
+													value={band.lower}
+													oninput={(e) => updateRubricBand(i, 'lower', e.currentTarget.value)}
+												>
+												<span class="small text-muted">to</span>
+												<input
+													type="number"
+													class="form-control form-control-sm"
+													style="width: 90px;"
+													placeholder="Upper %"
+													value={band.upper}
+													oninput={(e) => updateRubricBand(i, 'upper', e.currentTarget.value)}
+												>
+												<span class="small text-muted">%</span>
+											</div>
+										{/each}
+										<button type="button" class="btn btn-outline-secondary btn-sm" onclick={insertRubricBandsHeaderRow}>
+											<i class="bi bi-plus-square me-1"></i>Insert bands header row
+										</button>
+									</div>
 									<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
 									<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
 									<div class="alert alert-secondary py-2">
