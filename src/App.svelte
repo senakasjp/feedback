@@ -5923,6 +5923,89 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return finalText
 	}
 
+	const HTML2CANVAS_RASTER_SCALE = 2
+
+	// CSS-px (container-relative) top/bottom of every <tr> in a rendered PDF-export container,
+	// used so the page-slicer below can avoid cutting a table row in half.
+	function getRowBoundaryRectsPx(container) {
+		const containerTop = container.getBoundingClientRect().top
+		return Array.from(container.querySelectorAll('tr')).map(row => {
+			const rect = row.getBoundingClientRect()
+			return { top: rect.top - containerTop, bottom: rect.bottom - containerTop }
+		})
+	}
+
+	// Slices a rasterized HTML canvas across PDF pages. When the natural cut point would land
+	// inside a table row (per rowBoundariesPx), the slice is pulled back to end at that row's
+	// top instead, pushing the whole row onto the next page rather than splitting it visually.
+	function sliceCanvasIntoPdfPages(doc, canvas, { pageHeight, margin, startY, pxPerMm, targetWidthMm, xOffset, rowBoundariesPx = [], gapMm = 2 }) {
+		const naturalWidthMm = canvas.width / pxPerMm
+		const naturalHeightMm = canvas.height / pxPerMm
+		const scale = targetWidthMm / naturalWidthMm
+		const targetHeightMm = naturalHeightMm * scale
+		const pxPerMmAtCanvasScale = pxPerMm / scale
+		const rowBoundariesCanvasPx = rowBoundariesPx.map(r => ({
+			top: r.top * HTML2CANVAS_RASTER_SCALE,
+			bottom: r.bottom * HTML2CANVAS_RASTER_SCALE
+		}))
+
+		let nextY = startY
+		let consumedMm = 0
+
+		while (consumedMm < targetHeightMm - 0.01) {
+			if (nextY > pageHeight - margin - 5) {
+				doc.addPage()
+				nextY = margin
+			}
+
+			const availableMm = pageHeight - margin - nextY
+			if (availableMm <= 0) {
+				doc.addPage()
+				nextY = margin
+				continue
+			}
+
+			const isFreshPage = nextY <= margin + 0.01
+			let drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
+			let slicePxTop = Math.round(consumedMm * pxPerMmAtCanvasScale)
+			let slicePxHeight = Math.round(drawMm * pxPerMmAtCanvasScale)
+
+			const isFinalSlice = consumedMm + drawMm >= targetHeightMm - 0.01
+			if (!isFinalSlice && slicePxHeight > 0) {
+				const sliceBottomPx = slicePxTop + slicePxHeight
+				const splitRow = rowBoundariesCanvasPx.find(r => sliceBottomPx > r.top + 1 && sliceBottomPx < r.bottom - 1)
+				if (splitRow) {
+					const adjustedPxHeight = Math.round(splitRow.top) - slicePxTop
+					if (adjustedPxHeight > 8) {
+						slicePxHeight = adjustedPxHeight
+						drawMm = slicePxHeight / pxPerMmAtCanvasScale
+					} else if (!isFreshPage) {
+						// Nothing useful fits before this row starts — start a fresh page instead of a sliver.
+						doc.addPage()
+						nextY = margin
+						continue
+					}
+					// else: already at the top of a fresh page and the row still doesn't fit on one page —
+					// fall through and let it split; there's no page big enough to avoid it.
+				}
+			}
+
+			const sliceCanvas = document.createElement('canvas')
+			sliceCanvas.width = canvas.width
+			sliceCanvas.height = slicePxHeight
+			const ctx = sliceCanvas.getContext('2d')
+			ctx.drawImage(canvas, 0, -slicePxTop)
+
+			const sliceData = sliceCanvas.toDataURL('image/png')
+			doc.addImage(sliceData, 'PNG', xOffset, nextY, targetWidthMm, drawMm)
+
+			nextY += drawMm + gapMm
+			consumedMm += drawMm
+		}
+
+		return nextY
+	}
+
 	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth, matchedCategories = new Set()) {
 		const normalizeParagraphCategory = (str) => (str || '')
 		const htmlContent = normalizeHtmlQuotes(assessmentHtml || '').trim()
@@ -6223,45 +6306,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		let nextY = startY
 		try {
-			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
-			const naturalWidthMm = canvas.width / pxPerMm
-			const naturalHeightMm = canvas.height / pxPerMm
-			const maxDrawableHeightMm = pageHeight - (margin * 2)
-			const scaleForWidth = maxContentWidthMm / naturalWidthMm
-			const scale = scaleForWidth // fill available text width; slice vertically as needed
-			const targetWidthMm = maxContentWidthMm
-			const targetHeightMm = naturalHeightMm * scale
-			const xOffset = margin
-			let consumedMm = 0
-
-			while (consumedMm < targetHeightMm - 0.01) {
-				if (nextY > pageHeight - margin - 5) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const availableMm = pageHeight - margin - nextY
-				if (availableMm <= 0) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
-				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
-				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
-
-				const sliceCanvas = document.createElement('canvas')
-				sliceCanvas.width = canvas.width
-				sliceCanvas.height = slicePxHeight
-				const ctx = sliceCanvas.getContext('2d')
-				ctx.drawImage(canvas, 0, -slicePxTop)
-
-				const sliceData = sliceCanvas.toDataURL('image/png')
-				doc.addImage(sliceData, 'PNG', xOffset, nextY, targetWidthMm, drawMm)
-
-				nextY += drawMm + 2
-				consumedMm += drawMm
-			}
+			const rowBoundariesPx = getRowBoundaryRectsPx(container)
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: HTML2CANVAS_RASTER_SCALE, useCORS: true })
+			nextY = sliceCanvasIntoPdfPages(doc, canvas, {
+				pageHeight,
+				margin,
+				startY,
+				pxPerMm,
+				targetWidthMm: maxContentWidthMm,
+				xOffset: margin,
+				rowBoundariesPx,
+				gapMm: 2
+			})
 		} catch (error) {
 			console.error('Failed to render assessment HTML into PDF:', error)
 		} finally {
@@ -6308,41 +6364,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		let nextY = startY
 		try {
-			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
-			const naturalWidthMm = canvas.width / pxPerMm
-			const naturalHeightMm = canvas.height / pxPerMm
-			const scale = maxContentWidthMm / naturalWidthMm
-			const targetHeightMm = naturalHeightMm * scale
-			let consumedMm = 0
-
-			while (consumedMm < targetHeightMm - 0.01) {
-				if (nextY > pageHeight - margin - 5) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const availableMm = pageHeight - margin - nextY
-				if (availableMm <= 0) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
-				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
-				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
-
-				const sliceCanvas = document.createElement('canvas')
-				sliceCanvas.width = canvas.width
-				sliceCanvas.height = slicePxHeight
-				const ctx = sliceCanvas.getContext('2d')
-				ctx.drawImage(canvas, 0, -slicePxTop)
-
-				const sliceData = sliceCanvas.toDataURL('image/png')
-				doc.addImage(sliceData, 'PNG', margin, nextY, maxContentWidthMm, drawMm)
-
-				nextY += drawMm + 1.5
-				consumedMm += drawMm
-			}
+			const rowBoundariesPx = getRowBoundaryRectsPx(container)
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: HTML2CANVAS_RASTER_SCALE, useCORS: true })
+			nextY = sliceCanvasIntoPdfPages(doc, canvas, {
+				pageHeight,
+				margin,
+				startY,
+				pxPerMm,
+				targetWidthMm: maxContentWidthMm,
+				xOffset: margin,
+				rowBoundariesPx,
+				gapMm: 1.5
+			})
 		} catch (error) {
 			console.error('Failed to render selected feedback HTML into PDF:', error)
 		} finally {
