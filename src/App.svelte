@@ -8969,7 +8969,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class="btn btn-outline-primary btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithAI(group.category)}
-																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category]}
 																title="Improve English with AI"
 															>
 																{#if improvingText[group.category]}
@@ -8983,7 +8983,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class="btn btn-outline-info btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithRag(group.category)}
-																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category]}
 																title="Expand draft using rubric and RAG context"
 															>
 																{#if improvingTextWithRag[group.category]}
@@ -9011,7 +9011,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 										type="button"
 										onclick={() => viewFinalPrompt(group.category, 'ai')}
-										disabled={!quickAddText[group.category]?.trim()}
 										title="View final prompt for Improve with AI"
 									>
 										<i class="bi bi-eye me-1"></i>View Improve Prompt
@@ -9020,7 +9019,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 																type="button"
 																onclick={() => viewFinalPrompt(group.category, 'rag')}
-																disabled={!quickAddText[group.category]?.trim()}
 																title="View final prompt for Improve with RAG"
 															>
 																<i class="bi bi-eye-fill me-1"></i>View RAG Prompt
