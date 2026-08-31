@@ -9715,6 +9715,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	:global(.quick-action-toolbar .btn-outline-info.quick-toolbar-btn) {
 		color: #0b5ed7 !important;
 		border-color: #0b5ed7 !important;
+		min-width: 11.5rem;
 	}
 
 	:global(.quick-action-toolbar .btn-outline-primary.quick-toolbar-btn) {
@@ -9725,6 +9726,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	:global(.quick-action-toolbar .btn-outline-warning.quick-toolbar-btn) {
 		color: #0b5ed7 !important;
 		border-color: #0b5ed7 !important;
+		min-width: 10.5rem;
 	}
 
 	:global(.quick-action-toolbar .btn-outline-light.quick-toolbar-btn),
