@@ -6647,6 +6647,44 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			.catch(() => showSuccessNotification('❌ Copy failed - unable to access clipboard. Please try again or copy manually.'))
 	}
 
+		// jsPDF's standard fonts (helvetica/times/courier) only render WinAnsi/Latin-1 characters.
+		// AI-generated feedback text often includes minus signs, arrows, math comparisons, primes,
+		// greek letters, or checkmarks that fall outside that range - jsPDF doesn't reject them, it
+		// silently mis-measures and mis-renders the whole line (letter-spaced text that overflows the
+		// page). Map the ones we know about to a safe equivalent; anything else falls back to '?' so
+		// layout stays intact instead of corrupting the line.
+		const PDF_SAFE_EXTRA_CODEPOINTS = new Set([
+			0x2018, 0x2019, 0x201a, 0x201c, 0x201d, 0x201e, // curly quotes
+			0x2013, 0x2014, // en/em dash
+			0x2020, 0x2021, 0x2022, 0x2026, 0x2030, // dagger, bullet, ellipsis, permille
+			0x2039, 0x203a, 0x2122 // guillemets, trademark
+		])
+		const PDF_CHAR_FALLBACK = {
+			0x2010: '-', 0x2011: '-', 0x2012: '-', 0x2015: '-', 0x2212: '-', // hyphen/minus variants
+			0x2192: '->', 0x2190: '<-', 0x2194: '<->', 0x21d2: '=>', 0x21d0: '<=',
+			0x2248: '~', 0x2264: '<=', 0x2265: '>=', 0x2260: '!=',
+			0x2032: '\'', 0x2033: '"',
+			0x2713: 'v', 0x2714: 'v', 0x2715: 'x', 0x2716: 'x', 0x274c: 'x',
+			0x00a0: ' '
+		}
+		function sanitizeTextForPdf(value) {
+			return String(value ?? '').replace(/[-￿]/g, (ch) => {
+				const code = ch.codePointAt(0)
+				if (code <= 0xff || PDF_SAFE_EXTRA_CODEPOINTS.has(code)) return ch
+				return PDF_CHAR_FALLBACK[code] ?? '?'
+			})
+		}
+		function makePdfTextSafe(doc) {
+			const originalText = doc.text.bind(doc)
+			doc.text = (text, ...rest) => {
+				const safeText = Array.isArray(text) ? text.map(sanitizeTextForPdf) : sanitizeTextForPdf(text)
+				return originalText(safeText, ...rest)
+			}
+			const originalSplit = doc.splitTextToSize.bind(doc)
+			doc.splitTextToSize = (text, ...rest) => originalSplit(sanitizeTextForPdf(text), ...rest)
+			return doc
+		}
+
 		async function generatePDF() {
 			console.log('📄 generatePDF called')
 
@@ -6690,7 +6728,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		const defaultMargin = 25 // Slightly larger margin for better breathing room
 		const needsLandscape = !lockPdfPortrait && shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
-		const doc = new jsPDF({ orientation: 'portrait' }) // keep first page portrait; switch later if needed
+		const doc = makePdfTextSafe(new jsPDF({ orientation: 'portrait' })) // keep first page portrait; switch later if needed
 		const headingText = 'Feedback Report'
 		const headingFontSize = 16
 		
