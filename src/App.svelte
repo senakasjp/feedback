@@ -2511,100 +2511,68 @@
 		}
 	}
 
-	// Given an awarded mark for a category, find which color band it falls into - reusing the same
-	// bounds (percentage mode) or stored per-color marks (fixed mode) used everywhere else in the app
-	// (see getParagraphMarkExpectation). "Manual"/none mode has no color-banding concept in this app,
-	// so there's nothing to match - skip it rather than guessing.
-	function getColorForAwardedMark(category, awardedMark) {
+	// Get the color bands that apply to a category's own marking mode - these are assessment/category
+	// properties (allocated marks, percentage bounds, fixed colorMarks), not tied to any student.
+	// "Manual"/none mode has no color-banding concept in this app, so it returns no bands.
+	function getCategoryColorBands(category) {
 		const markingMode = getEffectiveMarkingMode(category.name)
+
+		if (markingMode === 'percentage') {
+			return getCategoryAllocatedMarks(category.name) ? ['green', 'lightgreen', 'yellow', 'orange', 'red'] : []
+		}
 
 		if (markingMode === 'fixed') {
 			const colorMarks = category.colorMarks || {}
-			return Object.keys(colorMarks).find(color => parseNumericMarkValue(colorMarks[color]) === parseNumericMarkValue(awardedMark)) || null
+			return Object.keys(colorMarks).filter(color => parseNumericMarkValue(colorMarks[color]) !== null)
 		}
 
-		if (markingMode !== 'percentage') return null
-
-		const allocatedMarks = getCategoryAllocatedMarks(category.name)
-		if (!allocatedMarks) return null
-
-		for (const color of ['green', 'lightgreen', 'yellow', 'orange', 'red']) {
-			const bounds = getColorPercentageBounds(color)
-			const min = allocatedMarks * bounds.lower
-			const max = allocatedMarks * bounds.upper
-			if (awardedMark >= min && awardedMark <= max) return color
-		}
-		return null
+		return []
 	}
 
-	// Go through every category in this assessment, look up the mark already entered for the current
-	// student, work out which color band that falls into, and add that band's saved master-template
-	// paragraph. Skips categories with no mark entered, no matching template, or that already have a
-	// student paragraph (so re-running this doesn't spam duplicates over work already done).
-	function fillAllParagraphsFromMarks() {
-		if (!currentStudentId) {
-			showSuccessNotification('⚠️ Please select a student first.')
-			return
-		}
+	// Go through every category in this assessment and, for each color band it supports, add a
+	// placeholder paragraph if one doesn't already exist - scaffolding the assessment-level template
+	// table (the color-coded master paragraphs) in one click instead of adding each one by hand.
+	// Assignment-scoped regardless of whether a student happens to be selected - these are templates,
+	// not one student's feedback.
+	function fillAllCategoryColorBandTemplates() {
 		if (!currentAssessment?.categories?.length) {
 			showSuccessNotification('⚠️ This assessment has no categories.')
 			return
 		}
 
 		let addedCount = 0
-		let skippedCount = 0
+		let skippedCategoryCount = 0
 
 		for (const category of currentAssessment.categories) {
-			const alreadyFilled = paragraphs.some(paragraph =>
-				paragraph?._source === 'student' && paragraphMatchesCategory(paragraph?.text, category.name)
-			)
-			if (alreadyFilled) {
-				skippedCount++
+			const colors = getCategoryColorBands(category)
+			if (colors.length === 0) {
+				skippedCategoryCount++
 				continue
 			}
 
-			const awardedMark = parseNumericMarkValue(categoryMarks[category.name])
-			if (awardedMark === null) {
-				skippedCount++
-				continue
-			}
+			for (const color of colors) {
+				const alreadyExists = paragraphs.some(paragraph =>
+					paragraph?._source !== 'student' &&
+					paragraph?.color === color &&
+					paragraphMatchesCategory(paragraph?.text, category.name)
+				)
+				if (alreadyExists) continue
 
-			const matchedColor = getColorForAwardedMark(category, awardedMark)
-			if (!matchedColor) {
-				skippedCount++
-				continue
+				paragraphs.push({
+					id: generateId(),
+					text: `${category.name}: [add feedback for this band]`,
+					color,
+					_source: 'assignment',
+					createdAt: new Date().toISOString(),
+					subjectId: currentSubjectId,
+					assessmentId: currentAssessmentId
+				})
+				addedCount++
 			}
-
-			const template = paragraphs.find(paragraph =>
-				paragraph?._source !== 'student' &&
-				paragraph?.color === matchedColor &&
-				paragraphMatchesCategory(paragraph?.text, category.name)
-			)
-			if (!template) {
-				skippedCount++
-				continue
-			}
-
-			const newPara = {
-				id: generateId(),
-				text: `${category.name}: ${extractMainTextFromParagraph(template.text)}`,
-				color: matchedColor,
-				_source: 'student',
-				createdAt: new Date().toISOString(),
-				subjectId: currentSubjectId,
-				assessmentId: currentAssessmentId
-			}
-			paragraphs.push(newPara)
-			selectedParagraphs.add(newPara.id)
-			addedCount++
 		}
-		selectedParagraphs = new Set(selectedParagraphs)
 
-		if (addedCount > 0) {
-			saveAssessmentData()
-			saveStudentParagraphs()
-		}
-		showSuccessNotification(`✅ Added ${addedCount} paragraph${addedCount === 1 ? '' : 's'} from marks. Skipped ${skippedCount} (no mark, no template, or already filled).`)
+		if (addedCount > 0) saveAssessmentData()
+		showSuccessNotification(`✅ Added ${addedCount} placeholder paragraph${addedCount === 1 ? '' : 's'}. Skipped ${skippedCategoryCount} categor${skippedCategoryCount === 1 ? 'y' : 'ies'} with no color-band marking mode.`)
 	}
 
 	async function runEvidenceCheck(categoryName) {
@@ -8874,14 +8842,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								</div>
 								{#if currentAssessment}
 									<div class="px-3 pt-3">
-										{#if currentStudentId && currentAssessment?.categories?.length > 0}
+										{#if currentAssessment?.categories?.length > 0}
 											<button
 												type="button"
 												class="btn btn-outline-success btn-sm mb-2"
-												onclick={fillAllParagraphsFromMarks}
-												title="For every category, add the color-band template matching the mark already entered for this student"
+												onclick={fillAllCategoryColorBandTemplates}
+												title="For every category, add a placeholder paragraph for each color band it supports (skips bands that already have a template)"
 											>
-												<i class="bi bi-magic me-1"></i>Fill All Paragraphs From Marks
+												<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
 											</button>
 											<br>
 										{/if}
