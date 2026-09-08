@@ -8894,40 +8894,46 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								{#if currentAssessment}
 									<div class="px-3 pt-3">
 										{#if currentAssessment?.categories?.length > 0}
-											<button
-												type="button"
-												class="btn btn-outline-success btn-sm mb-2"
-												onclick={fillAllCategoryColorBandTemplates}
-												title="For every category, add a placeholder paragraph for each color band it supports (skips bands that already have a template)"
-											>
-												<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
-											</button>
-											<br>
-										{/if}
-										<button
-											type="button"
-											class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
-											onclick={() => showCommonPromptBox = !showCommonPromptBox}
-											aria-expanded={showCommonPromptBox}
-											aria-controls="commonParagraphPromptPanel"
-										>
-											<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-1`}></i>
-											Common AI Prompt (all paragraphs){#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
-										</button>
-										{#if showCommonPromptBox}
-											<div id="commonParagraphPromptPanel" class="mt-2">
-												<textarea
-													id="commonParagraphPromptInput"
-													class="form-control form-control-sm"
-													rows="2"
-													placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
-													value={currentAssessment.commonParagraphAiInstructions || ''}
-													oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
-													onchange={persistAssessmentAiSettings}
-												></textarea>
-												<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
+											<div class="border rounded p-3 bg-light mb-3">
+												<button
+													type="button"
+													class="btn btn-outline-success btn-sm"
+													onclick={fillAllCategoryColorBandTemplates}
+												>
+													<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
+												</button>
+												<div class="small text-muted mt-2 mb-0">
+													Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
+												</div>
 											</div>
 										{/if}
+										<div class="border rounded p-3 mb-3">
+											<button
+												type="button"
+												class="btn btn-link btn-sm p-0 text-decoration-none fw-bold d-flex align-items-center w-100"
+												onclick={() => showCommonPromptBox = !showCommonPromptBox}
+												aria-expanded={showCommonPromptBox}
+												aria-controls="commonParagraphPromptPanel"
+											>
+												<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-2`}></i>
+												<span class="flex-grow-1 text-start">Common AI Prompt (all paragraphs)</span>
+												{#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
+											</button>
+											{#if showCommonPromptBox}
+												<div id="commonParagraphPromptPanel" class="mt-3">
+													<textarea
+														id="commonParagraphPromptInput"
+														class="form-control form-control-sm"
+														rows="2"
+														placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
+														value={currentAssessment.commonParagraphAiInstructions || ''}
+														oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
+														onchange={persistAssessmentAiSettings}
+													></textarea>
+													<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
+												</div>
+											{/if}
+										</div>
 									</div>
 								{/if}
 								<div class="card-body p-0">
