@@ -2504,6 +2504,19 @@
 		}
 	}
 
+	// Clear the draft comment box for every category, for the currently selected student -
+	// the undo for "Improve all with RAG" (or any typed/improved draft) before it's saved as a paragraph.
+	function deleteAllStudentRagComments() {
+		const categories = currentAssessment?.categories || []
+		if (!categories.length) return
+		if (!confirm('Delete the draft comment for every category for this student? This cannot be undone.')) return
+
+		categories.forEach(category => {
+			quickAddText = { ...quickAddText, [category.name]: '' }
+			aiImprovedText = { ...aiImprovedText, [category.name]: false }
+		})
+	}
+
 	// Fill the main "New paragraph" box from the existing color-banded master template for this
 	// category (the assignment-level paragraphs shown under each category, one per mark-range color),
 	// instead of typing it out again. Re-filling on a new category/color pick is expected (that's the
@@ -8928,8 +8941,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															<i class="bi bi-diagram-3 me-1"></i>Improve all with RAG
 														{/if}
 													</button>
+													<button
+														type="button"
+														class="btn btn-outline-danger btn-sm ms-2"
+														onclick={deleteAllStudentRagComments}
+													>
+														<i class="bi bi-trash me-1"></i>Delete all student RAG comments
+													</button>
 													<div class="small text-muted mt-2 mb-0">
-														Runs "Improve with RAG" for every category in turn, expanding each category's draft using the rubric and this student's submission.
+														Runs "Improve with RAG" for every category in turn, expanding each category's draft using the rubric and this student's submission. Delete clears every category's draft comment for this student.
 													</div>
 												{:else}
 													<button
