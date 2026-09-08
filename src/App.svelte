@@ -138,6 +138,7 @@
 	let improvingText = $state({}) // Track which category text is being improved by AI
 	let improvingTextWithRag = $state({}) // Track which category text is being expanded with RAG
 	let evidenceCheckingText = $state({}) // Track which category is running evidence check
+	let generatingParagraphWithRag = $state(false) // Track the main "New paragraph" AI draft in progress
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
 	let studentSubmissionDocuments = $state([])
@@ -2487,6 +2488,65 @@
 			showSuccessNotification(`❌ Failed to improve with RAG: ${error.message}`)
 		} finally {
 			improvingTextWithRag = { ...improvingTextWithRag, [categoryName]: false }
+		}
+	}
+
+	// Draft the main "New paragraph" box from the rubric (same RAG pipeline as the per-category "Improve with RAG"),
+	// so a paragraph can be generated straight from the selected category/knowledge area instead of typed by hand.
+	async function generateParagraphWithRag() {
+		if (!selectedCategory) {
+			showSuccessNotification('⚠️ Please select a category first.')
+			return
+		}
+
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
+			return
+		}
+
+		generatingParagraphWithRag = true
+
+		try {
+			const shortText = stripHtmlTags(newParagraph.trim())
+			const answerInstructions = getCombinedAnswerInstructions(selectedCategory)
+			const priorEvaluations = await loadPriorAssessmentEvaluations()
+			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
+			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+			const ragArgs = {
+				assessment: assessmentForAi,
+				categoryName: selectedCategory,
+				shortFeedback: shortText,
+				answerInstructions,
+				student: getCurrentStudent(),
+				studentSubmission: getCombinedStudentSubmissionText(),
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
+				evidenceNotes: getSelectedEvidenceNotes(selectedCategory),
+				assessmentParagraphs,
+				priorEvaluations,
+				vectorIndex,
+				globalSystemInstructions: globalAiSystemInstructions
+			}
+			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
+			promptPreviewTitle = `RAG Prompt - ${selectedCategory}`
+			promptPreviewMessages = preview.messages
+			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 2200)
+			const result = await improveFeedbackWithRag({
+				...ragArgs,
+				modelPreference: getCurrentAiModelPreference()
+			})
+
+			const cleanedText = stripHtmlTags(result.improvedText || '').trim()
+			if (!cleanedText) {
+				throw new Error('No feedback was returned.')
+			}
+
+			newParagraph = cleanedText
+			showSuccessNotification(`✨ Paragraph drafted with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)} / ${result.retrievalMode || 'context'}).`)
+		} catch (error) {
+			console.error('Failed to draft paragraph with RAG:', error)
+			showSuccessNotification(`❌ Failed to draft paragraph: ${error.message}`)
+		} finally {
+			generatingParagraphWithRag = false
 		}
 	}
 
@@ -8250,13 +8310,27 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									<div class="mb-3">
 										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
 										<div class="input-group input-group-sm">
-											<textarea 
-												id="paragraphInput" 
-												class="form-control form-control-sm" 
-												rows="4" 
-												bind:value={newParagraph} 
+											<textarea
+												id="paragraphInput"
+												class="form-control form-control-sm"
+												rows="4"
+												bind:value={newParagraph}
 												placeholder="Comment here..."
 											></textarea>
+											<button
+												class="btn btn-outline-primary btn-sm"
+												type="button"
+												onclick={generateParagraphWithRag}
+												disabled={generatingParagraphWithRag || !selectedCategory}
+												title={selectedCategory ? 'Draft this paragraph with AI from the rubric' : 'Select a category first'}
+												style="min-width: 120px;"
+											>
+												{#if generatingParagraphWithRag}
+													<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Drafting...
+												{:else}
+													<i class="bi bi-magic me-2"></i>Draft with AI
+												{/if}
+											</button>
 											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph} style="min-width: 120px;">
 												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
 											</button>
