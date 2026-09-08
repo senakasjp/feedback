@@ -30,26 +30,27 @@
 	let showMobileSidebar = $state(false)
 
 	// Category selection for Studio 6 PDR assessments
+	// ponytail: defaultText is a starting-point template, edit the wording per category to match real rubric language
 	let selectedCategory = $state('')
 	let pdrCategories = [
-		'Sub Objective 1.1',
-		'Sub Objective 1.2', 
-		'Sub Objective 2.1',
-		'Sub Objective 2.2',
-		'Sub Objective 3.1',
-		'Sub Objective 3.2',
-		'Report',
-		'Decision'
+		{ name: 'Sub Objective 1.1', defaultText: 'Sub Objective 1.1 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Objective 1.2', defaultText: 'Sub Objective 1.2 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Objective 2.1', defaultText: 'Sub Objective 2.1 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Objective 2.2', defaultText: 'Sub Objective 2.2 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Objective 3.1', defaultText: 'Sub Objective 3.1 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Objective 3.2', defaultText: 'Sub Objective 3.2 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Report', defaultText: 'The report has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Decision', defaultText: 'The decision has been addressed appropriately; [add specific feedback here].' }
 	]
 
 	// Category selection for Studio 4 PDR assessments
 	let studio4Categories = [
-		'Sub Learning Objective 1.1',
-		'Sub Learning Objective 1.2',
-		'Sub Learning Objective 2.1',
-		'Sub Learning Objective 2.2',
-		'Report',
-		'Decision'
+		{ name: 'Sub Learning Objective 1.1', defaultText: 'Sub Learning Objective 1.1 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Learning Objective 1.2', defaultText: 'Sub Learning Objective 1.2 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Learning Objective 2.1', defaultText: 'Sub Learning Objective 2.1 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Sub Learning Objective 2.2', defaultText: 'Sub Learning Objective 2.2 has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Report', defaultText: 'The report has been addressed appropriately; [add specific feedback here].' },
+		{ name: 'Decision', defaultText: 'The decision has been addressed appropriately; [add specific feedback here].' }
 	]
 
 	// Generate unique ID
@@ -669,8 +670,8 @@
 					{currentAssessment}
 					{showAddSubject}
 					{showAddAssessment}
-					{newSubjectName}
-					{newAssessmentName}
+					bind:newSubjectName
+					bind:newAssessmentName
 					{showMobileSidebar}
 					onSelectSubject={selectSubject}
 					onSelectAssessment={selectAssessment}
@@ -698,15 +699,15 @@
 						onSelectAssessment={selectAssessment}
 					/>
 				{:else}
-					<FeedbackEditor 
+					<FeedbackEditor
 						{currentSubject}
 						{currentAssessment}
 						{paragraphs}
 						{selectedParagraphs}
-						{studentName}
+						bind:studentName
 						{studentImage}
-						{newParagraph}
-						{selectedCategory}
+						bind:newParagraph
+						bind:selectedCategory
 						needsCategorySelection={needsCategorySelection()}
 						getCurrentCategories={getCurrentCategories()}
 						getOrderedParagraphs={getOrderedParagraphs()}

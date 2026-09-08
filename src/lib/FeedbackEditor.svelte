@@ -18,6 +18,15 @@
 	export let onToggleParagraph
 	export let onDeleteParagraph
 	export let onHandleImageUpload
+
+	// Auto-fill the paragraph textarea with the selected category's default text,
+	// but don't clobber text the user already typed.
+	function handleCategoryChange() {
+		if (!newParagraph.trim() && selectedCategory) {
+			const category = getCurrentCategories.find(c => c.name === selectedCategory)
+			if (category) newParagraph = category.defaultText
+		}
+	}
 </script>
 
 <div class="p-3 border bg-light content-area" style="border-radius: 8px; margin-top: 20px; margin-bottom: 20px;">
@@ -59,27 +68,16 @@
 		</div>
 	</div>
 
-	<!-- Debug info -->
-	<div class="alert alert-warning mb-3">
-		<small>
-			<strong>Debug Info:</strong><br>
-			needsCategorySelection: {needsCategorySelection}<br>
-			getCurrentCategories length: {getCurrentCategories?.length || 0}<br>
-			getOrderedParagraphs length: {getOrderedParagraphs?.length || 0}<br>
-			onAddParagraph function: {typeof onAddParagraph}
-		</small>
-	</div>
-
 	<!-- Add Paragraph Form -->
 	<div class="mb-4" style="background-color: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; border-radius: 8px;">
 		{#if needsCategorySelection}
 			<!-- Category selector for Studio 6 and Studio 4 PDR -->
 			<div class="mb-3">
 				<label for="categorySelect" class="form-label">Select category:</label>
-				<select id="categorySelect" class="form-select form-control" bind:value={selectedCategory}>
+				<select id="categorySelect" class="form-select form-control" bind:value={selectedCategory} onchange={handleCategoryChange}>
 					<option value="">No category (optional)</option>
 					{#each getCurrentCategories as category}
-						<option value={category}>{category}</option>
+						<option value={category.name}>{category.name}</option>
 					{/each}
 				</select>
 				{#if selectedCategory}
