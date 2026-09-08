@@ -2506,14 +2506,18 @@
 
 	// Clear the draft comment box for every category, for the currently selected student -
 	// the undo for "Improve all with RAG" (or any typed/improved draft) before it's saved as a paragraph.
+	// Keys off getGroupedParagraphs()'s own `group.category` (not currentAssessment.categories[].name) -
+	// the textarea reads quickAddText[group.category], and that key can differ from the canonical
+	// category name (e.g. parsed-from-text formatting of an "(LO1)"-style suffix), which silently left
+	// the visible textarea uncleared.
 	function deleteAllStudentRagComments() {
-		const categories = currentAssessment?.categories || []
-		if (!categories.length) return
+		const groups = getGroupedParagraphs()
+		if (!groups.length) return
 		if (!confirm('Delete the draft comment for every category for this student? This cannot be undone.')) return
 
-		categories.forEach(category => {
-			quickAddText = { ...quickAddText, [category.name]: '' }
-			aiImprovedText = { ...aiImprovedText, [category.name]: false }
+		groups.forEach(group => {
+			quickAddText = { ...quickAddText, [group.category]: '' }
+			aiImprovedText = { ...aiImprovedText, [group.category]: false }
 		})
 	}
 
