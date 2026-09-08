@@ -1,5 +1,13 @@
 # Changelog
 
+> **Fix (Sep 2026):** PDF export now correctly highlights the selected rubric cell for categories named with an "(LO1)"-style suffix — fixed a category-name normalization mismatch between the row-matching code and the paragraph-position lookup that silently skipped highlighting.
+
+> **New (Sep 2026):** When a student is selected, the paragraph panel shows an "Improve all with RAG" button (with a progress spinner) in place of "Fill All Category Color Bands", running RAG improvement across every category in one click. A "Delete all student RAG comments" button next to it clears every category's draft comment for that student.
+
+> **Perf (Sep 2026):** Reduced vision-API cost on document uploads by shrinking the embedded-image downscale cap from 1600px to 1024px.
+
+> **New (Sep 2026):** PDF export now adds a 40px gap below every table in the assessment HTML content.
+
 > **Docs (Aug 2026):** Documented a desktop-app deploy gotcha — `/Applications/Feedback.app` can be a stale build missing features present in source. See `TROUBLESHOOTING.md` → "Desktop App Doesn't Reflect Recent Code Changes" and `CLAUDE.md` project patterns for diagnosis/fix (`BULD_DEPLOY.SH`).
 
 > **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
