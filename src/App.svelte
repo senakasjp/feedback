@@ -6333,7 +6333,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// oversized row alone on a page.
 		const buildAssessmentHtmlStyleText = (fontSizePt, cellPaddingPx) => `
 			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: ${fontSizePt}pt; color: #000 !important; background: #fff !important; }
-			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
+			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; margin-bottom: 40px; }
 			.pdf-assessment-html th,
 			.pdf-assessment-html td {
 				padding: ${cellPaddingPx}px ${Math.max(4, Math.round(cellPaddingPx * 0.83))}px !important;
