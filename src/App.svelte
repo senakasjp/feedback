@@ -8894,15 +8894,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								{#if currentAssessment}
 									<div class="px-3 pt-3">
 										{#if currentAssessment?.categories?.length > 0}
-											<button
-												type="button"
-												class="btn btn-outline-success btn-sm mb-2"
-												onclick={fillAllCategoryColorBandTemplates}
-												title="For every category, add a placeholder paragraph for each color band it supports (skips bands that already have a template)"
-											>
-												<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
-											</button>
-											<br>
+											<div class="border rounded p-3 bg-light mb-3">
+												<button
+													type="button"
+													class="btn btn-outline-success btn-sm"
+													onclick={fillAllCategoryColorBandTemplates}
+												>
+													<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
+												</button>
+												<div class="small text-muted mt-2 mb-0">
+													Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
+												</div>
+											</div>
 										{/if}
 										<button
 											type="button"
