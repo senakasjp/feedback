@@ -138,6 +138,7 @@
 	let improvingText = $state({}) // Track which category text is being improved by AI
 	let improvingTextWithRag = $state({}) // Track which category text is being expanded with RAG
 	let evidenceCheckingText = $state({}) // Track which category is running evidence check
+	let improvingAllWithRag = $state(false) // Track bulk "Improve all with RAG" run across every category
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
 	let studentSubmissionDocuments = $state([])
@@ -2487,6 +2488,19 @@
 			showSuccessNotification(`❌ Failed to improve with RAG: ${error.message}`)
 		} finally {
 			improvingTextWithRag = { ...improvingTextWithRag, [categoryName]: false }
+		}
+	}
+
+	// Run improveTextWithRag for every category in turn, for the currently selected student -
+	// same per-category action as the "Improve with RAG" button, just looped across the assessment.
+	async function improveAllCategoriesWithRag() {
+		improvingAllWithRag = true
+		try {
+			for (const category of currentAssessment?.categories || []) {
+				await improveTextWithRag(category.name)
+			}
+		} finally {
+			improvingAllWithRag = false
 		}
 	}
 
@@ -8900,16 +8914,35 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									<div class="px-3 pt-3">
 										{#if currentAssessment?.categories?.length > 0}
 											<div class="border rounded p-3 bg-light mb-3">
-												<button
-													type="button"
-													class="btn btn-outline-success btn-sm"
-													onclick={fillAllCategoryColorBandTemplates}
-												>
-													<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
-												</button>
-												<div class="small text-muted mt-2 mb-0">
-													Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
-												</div>
+												{#if currentStudentId}
+													<button
+														type="button"
+														class="btn btn-outline-info btn-sm"
+														onclick={improveAllCategoriesWithRag}
+														disabled={improvingAllWithRag}
+													>
+														{#if improvingAllWithRag}
+															<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+															Improving all with RAG...
+														{:else}
+															<i class="bi bi-diagram-3 me-1"></i>Improve all with RAG
+														{/if}
+													</button>
+													<div class="small text-muted mt-2 mb-0">
+														Runs "Improve with RAG" for every category in turn, expanding each category's draft using the rubric and this student's submission.
+													</div>
+												{:else}
+													<button
+														type="button"
+														class="btn btn-outline-success btn-sm"
+														onclick={fillAllCategoryColorBandTemplates}
+													>
+														<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
+													</button>
+													<div class="small text-muted mt-2 mb-0">
+														Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
+													</div>
+												{/if}
 											</div>
 										{/if}
 										<div class="border rounded p-3 mb-3">
