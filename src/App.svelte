@@ -2511,36 +2511,82 @@
 		}
 	}
 
-	// Get the color bands that apply to a category's own marking mode - these are assessment/category
-	// properties (allocated marks, percentage bounds, fixed colorMarks), not tied to any student.
-	// "Manual"/none mode has no color-banding concept in this app, so it returns no bands.
+	// Canonical band order used throughout this app (paragraph position 1..5 in the "Map paragraph
+	// position to table columns" settings, and the fixed highlight order green=high..red=low).
+	const CATEGORY_COLOR_BAND_ORDER = ['green', 'lightgreen', 'yellow', 'orange', 'red']
+
+	// Get the color bands that apply to a category's own marking mode, in canonical high-to-low order -
+	// these are assessment/category properties (allocated marks, percentage bounds, fixed colorMarks),
+	// not tied to any student. "Manual"/none mode has no color-banding concept in this app, so it
+	// returns no bands.
 	function getCategoryColorBands(category) {
 		const markingMode = getEffectiveMarkingMode(category.name)
 
 		if (markingMode === 'percentage') {
-			return getCategoryAllocatedMarks(category.name) ? ['green', 'lightgreen', 'yellow', 'orange', 'red'] : []
+			return getCategoryAllocatedMarks(category.name) ? [...CATEGORY_COLOR_BAND_ORDER] : []
 		}
 
 		if (markingMode === 'fixed') {
 			const colorMarks = category.colorMarks || {}
-			return Object.keys(colorMarks).filter(color => parseNumericMarkValue(colorMarks[color]) !== null)
+			return CATEGORY_COLOR_BAND_ORDER.filter(color => parseNumericMarkValue(colorMarks[color]) !== null)
 		}
 
 		return []
 	}
 
+	// Find the pasted rubric table's row for this category: manual override via tableRowCategoryMap
+	// first (same lookup the "Match table rows to categories" settings UI writes to), then fall back to
+	// fuzzy name matching (same normalizeCategoryLabel() used to build that UI - strips "(LO1)" etc.).
+	// Returns the row's cells (td/th elements) or null if no rubric table / no matching row.
+	function findRubricRowCellsForCategory(category) {
+		const html = currentAssessment?.rubricHtml
+		if (!html) return null
+
+		const temp = document.createElement('div')
+		temp.innerHTML = html
+		const rows = Array.from(temp.querySelectorAll('table tr'))
+
+		for (const row of rows) {
+			const firstCell = row.cells?.[0]
+			if (!firstCell) continue
+			const label = (firstCell.textContent || '').replace(/ /g, ' ').trim()
+			if (!label) continue
+			const normalizedLabel = normalizeCategoryLabel(label)
+			const mappedCategoryName = tableRowCategoryMap[normalizedLabel]
+			const isMatch = mappedCategoryName ? mappedCategoryName === category.name : normalizedLabel === normalizeCategoryLabel(category.name)
+			if (isMatch) return Array.from(row.cells)
+		}
+		return null
+	}
+
+	// Look up the real rubric text for one color band from the matched row, using the existing
+	// "Map paragraph position to table columns" mapping (position 1 = green .. 5 = red). Returns null
+	// if there's no rubric table, no matching row, no column mapped for this band, or the cell is empty.
+	function getRubricBandText(category, color, rowCells) {
+		if (!rowCells) return null
+		const position = CATEGORY_COLOR_BAND_ORDER.indexOf(color) + 1
+		const columnIndex = tableColumnMarkMap[position]
+		if (columnIndex === undefined || columnIndex === '') return null
+		const cell = rowCells[Number(columnIndex)]
+		if (!cell) return null
+		const text = (cell.textContent || '').replace(/ /g, ' ').trim()
+		return text || null
+	}
+
 	// Go through every category in this assessment and, for each color band it supports, add a
-	// placeholder paragraph if one doesn't already exist - scaffolding the assessment-level template
-	// table (the color-coded master paragraphs) in one click instead of adding each one by hand.
-	// Assignment-scoped regardless of whether a student happens to be selected - these are templates,
-	// not one student's feedback.
+	// paragraph if one doesn't already exist - pulling the real descriptor text from the matching cell
+	// of the pasted rubric table when a row/column mapping is available, otherwise a placeholder to fill
+	// in by hand. Scaffolds the assessment-level template table in one click instead of adding each one
+	// by hand. Assignment-scoped regardless of whether a student happens to be selected - these are
+	// templates, not one student's feedback.
 	function fillAllCategoryColorBandTemplates() {
 		if (!currentAssessment?.categories?.length) {
 			showSuccessNotification('⚠️ This assessment has no categories.')
 			return
 		}
 
-		let addedCount = 0
+		let addedFromRubricCount = 0
+		let addedPlaceholderCount = 0
 		let skippedCategoryCount = 0
 
 		for (const category of currentAssessment.categories) {
@@ -2550,6 +2596,8 @@
 				continue
 			}
 
+			const rowCells = findRubricRowCellsForCategory(category)
+
 			for (const color of colors) {
 				const alreadyExists = paragraphs.some(paragraph =>
 					paragraph?._source !== 'student' &&
@@ -2558,21 +2606,24 @@
 				)
 				if (alreadyExists) continue
 
+				const rubricText = getRubricBandText(category, color, rowCells)
 				paragraphs.push({
 					id: generateId(),
-					text: `${category.name}: [add feedback for this band]`,
+					text: `${category.name}: ${rubricText || '[add feedback for this band]'}`,
 					color,
 					_source: 'assignment',
 					createdAt: new Date().toISOString(),
 					subjectId: currentSubjectId,
 					assessmentId: currentAssessmentId
 				})
-				addedCount++
+				if (rubricText) addedFromRubricCount++
+				else addedPlaceholderCount++
 			}
 		}
 
+		const addedCount = addedFromRubricCount + addedPlaceholderCount
 		if (addedCount > 0) saveAssessmentData()
-		showSuccessNotification(`✅ Added ${addedCount} placeholder paragraph${addedCount === 1 ? '' : 's'}. Skipped ${skippedCategoryCount} categor${skippedCategoryCount === 1 ? 'y' : 'ies'} with no color-band marking mode.`)
+		showSuccessNotification(`✅ Added ${addedCount} paragraph${addedCount === 1 ? '' : 's'} (${addedFromRubricCount} from the rubric table, ${addedPlaceholderCount} placeholder). Skipped ${skippedCategoryCount} categor${skippedCategoryCount === 1 ? 'y' : 'ies'} with no color-band marking mode.`)
 	}
 
 	async function runEvidenceCheck(categoryName) {
