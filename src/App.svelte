@@ -8907,30 +8907,33 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												</div>
 											</div>
 										{/if}
-										<button
-											type="button"
-											class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
-											onclick={() => showCommonPromptBox = !showCommonPromptBox}
-											aria-expanded={showCommonPromptBox}
-											aria-controls="commonParagraphPromptPanel"
-										>
-											<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-1`}></i>
-											Common AI Prompt (all paragraphs){#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
-										</button>
-										{#if showCommonPromptBox}
-											<div id="commonParagraphPromptPanel" class="mt-2">
-												<textarea
-													id="commonParagraphPromptInput"
-													class="form-control form-control-sm"
-													rows="2"
-													placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
-													value={currentAssessment.commonParagraphAiInstructions || ''}
-													oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
-													onchange={persistAssessmentAiSettings}
-												></textarea>
-												<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
-											</div>
-										{/if}
+										<div class="border rounded p-3 mb-3">
+											<button
+												type="button"
+												class="btn btn-link btn-sm p-0 text-decoration-none fw-bold d-flex align-items-center w-100"
+												onclick={() => showCommonPromptBox = !showCommonPromptBox}
+												aria-expanded={showCommonPromptBox}
+												aria-controls="commonParagraphPromptPanel"
+											>
+												<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-2`}></i>
+												<span class="flex-grow-1 text-start">Common AI Prompt (all paragraphs)</span>
+												{#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
+											</button>
+											{#if showCommonPromptBox}
+												<div id="commonParagraphPromptPanel" class="mt-3">
+													<textarea
+														id="commonParagraphPromptInput"
+														class="form-control form-control-sm"
+														rows="2"
+														placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
+														value={currentAssessment.commonParagraphAiInstructions || ''}
+														oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
+														onchange={persistAssessmentAiSettings}
+													></textarea>
+													<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
+												</div>
+											{/if}
+										</div>
 									</div>
 								{/if}
 								<div class="card-body p-0">
