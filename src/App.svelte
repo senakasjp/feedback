@@ -6414,9 +6414,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				}
 			})
 
-			// Build UI-order paragraph cache by category for position lookup
+			// Build UI-order paragraph cache by category for position lookup.
+			// Keyed with the same paren-stripping `normalize` as rowKey/effectiveKey above -
+			// groupedParagraphCaches.categoryParagraphsByNormalized uses normalizeCategoryName
+			// instead, which keeps "(LO1)"-style suffixes and never matches, so the highlight
+			// silently never applies for any category named that way.
 			const getCategoryParagraphsInOrder = (catKey) => {
-				return groupedParagraphCaches.categoryParagraphsByNormalized[catKey] || []
+				const group = groupedParagraphs.find(g => normalize(g.category) === catKey)
+				return group ? Object.values(group.knowledgeAreas || {}).flat() : []
 			}
 
 			const tables = Array.from(container.querySelectorAll('table'))
