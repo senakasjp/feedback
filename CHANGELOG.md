@@ -1,5 +1,7 @@
 # Changelog
 
+> **Fix (Sep 2026):** "Delete all student RAG comments" now actually clears the visible draft textareas — it was keying off the canonical category name instead of the paragraph-derived key the textarea itself reads, so the clear silently missed categories where the two differ (e.g. an "(LO1)"-style suffix).
+
 > **Fix (Sep 2026):** PDF export now correctly highlights the selected rubric cell for categories named with an "(LO1)"-style suffix — fixed a category-name normalization mismatch between the row-matching code and the paragraph-position lookup that silently skipped highlighting.
 
 > **New (Sep 2026):** When a student is selected, the paragraph panel shows an "Improve all with RAG" button (with a progress spinner) in place of "Fill All Category Color Bands", running RAG improvement across every category in one click. A "Delete all student RAG comments" button next to it clears every category's draft comment for that student.

@@ -1,6 +1,6 @@
 # User Guide
 
-> **New (Sep 2026):** PDF rubric highlighting now works correctly for categories named with an "(LO1)"-style suffix. When a student is selected, the paragraph panel offers "Improve all with RAG" (runs RAG improvement across every category at once) and "Delete all student RAG comments" (clears every category's draft comment for that student). PDF tables now get a 40px gap below them.
+> **New (Sep 2026):** PDF rubric highlighting now works correctly for categories named with an "(LO1)"-style suffix. When a student is selected, the paragraph panel offers "Improve all with RAG" (runs RAG improvement across every category at once) and "Delete all student RAG comments" (clears every category's draft comment for that student — fixed to actually clear every visible textarea). PDF tables now get a 40px gap below them.
 
 > **New:** PDF rubric export honors manual row → category mapping for marks and highlighting, matching UI selections without `undefined` cells.
 

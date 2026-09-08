@@ -1,6 +1,6 @@
 # Feature Implementation Summary - Version 3.2.9
 
-> **New (Sep 2026):** Fixed PDF rubric highlighting for categories named with an "(LO1)"-style suffix (a category-name normalization mismatch). Added "Improve all with RAG" (runs RAG improvement across every category for the selected student) and "Delete all student RAG comments" (clears every category's draft comment) to the paragraph panel. Reduced embedded-image size cap (1600px → 1024px) to cut vision-API cost. PDF tables now get a 40px gap below them.
+> **New (Sep 2026):** Fixed PDF rubric highlighting for categories named with an "(LO1)"-style suffix (a category-name normalization mismatch). Added "Improve all with RAG" (runs RAG improvement across every category for the selected student) and "Delete all student RAG comments" (clears every category's draft comment — fixed a key mismatch that left the textareas uncleared) to the paragraph panel. Reduced embedded-image size cap (1600px → 1024px) to cut vision-API cost. PDF tables now get a 40px gap below them.
 
 > **New:** PDF rubric export honors manual row → category mapping for marks/highlighting so mapped rows never show `undefined` and highlight the correct column.
 
