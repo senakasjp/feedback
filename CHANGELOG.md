@@ -1,5 +1,9 @@
 # Changelog
 
+> **Fix (Sep 2026):** "Evidence Check" no longer strips the student's reference list/appendix before looking for evidence — it was running submissions through the same boilerplate-stripping step used to cut prompt bloat elsewhere, which silently deleted everything from a References/Appendix heading onward and produced false "no reference list" verdicts on submissions that do have one.
+
+> **New (Sep 2026):** Added a "Check Citations" button (global, per-student) that reads the student's full uploaded documents — reference list included — and asks the AI to flag reference entries with no matching in-text citation, and in-text citations with no matching reference entry.
+
 > **Fix (Sep 2026):** "Delete all student RAG comments" now actually clears the visible draft textareas — it was keying off the canonical category name instead of the paragraph-derived key the textarea itself reads, so the clear silently missed categories where the two differ (e.g. an "(LO1)"-style suffix).
 
 > **Fix (Sep 2026):** PDF export now correctly highlights the selected rubric cell for categories named with an "(LO1)"-style suffix — fixed a category-name normalization mismatch between the row-matching code and the paragraph-position lookup that silently skipped highlighting.
