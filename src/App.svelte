@@ -2669,7 +2669,10 @@
 		}
 
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
-		const studentSubmission = getCombinedStudentSubmissionText()
+		// Evidence Check verifies evidence is present - stripping the reference list/appendix
+		// before it looks would defeat that purpose (e.g. a "no reference list" false negative
+		// when one exists but was cut for being past the References heading).
+		const studentSubmission = getCombinedStudentSubmissionText({ includeBoilerplate: true })
 		const evidenceNotes = getSelectedEvidenceNotes(categoryName)
 
 		if (!studentSubmission && !evidenceNotes) {
