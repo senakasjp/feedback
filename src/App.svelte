@@ -158,7 +158,6 @@
 	let showPromptPreviewModal = $state(false)
 	let promptPreviewTitle = $state('')
 	let promptPreviewMessages = $state([])
-	let promptPreviewRequestPayload = $state(null)
 	let showAppLogModal = $state(false)
 	let appLogEntries = $state([])
 	let activeFeedbackTab = $state('enter-data')
@@ -1927,7 +1926,6 @@
 		try {
 			promptPreviewTitle = `Improve Prompt - ${categoryName}`
 			promptPreviewMessages = buildImproveEnglishPromptPreview(text, answerInstructions)
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(promptPreviewMessages, 0.3, 1000)
 			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference())
 			// Strip any HTML tags that might have been introduced
 			const cleanedText = stripHtmlTags(result.improvedText || '')
@@ -2469,7 +2467,6 @@
 			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			promptPreviewMessages = preview.messages
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 2200)
 			const result = await improveFeedbackWithRag({
 				...ragArgs,
 				modelPreference: getCurrentAiModelPreference()
@@ -2832,23 +2829,6 @@
 		showPromptPreviewModal = true
 	}
 
-	function buildPromptPreviewRequestPayload(messages = [], temperature = 0.3, maxTokens = 1000) {
-		const modelPreference = getCurrentAiModelPreference()
-		const provider = getLlmProvider(modelPreference.provider)
-		const isOpenAiProvider = modelPreference.provider === 'openai'
-		const normalizedTemperature = isOpenAiProvider && String(modelPreference.selectedModel || '').trim().toLowerCase().startsWith('gpt-5')
-			? 1
-			: temperature
-		return {
-			endpoint: provider.chatUrl,
-			model: modelPreference.selectedModel,
-			...(isOpenAiProvider ? { reasoning_effort: modelPreference.reasoningEffort } : {}),
-			temperature: normalizedTemperature,
-			[isOpenAiProvider ? 'max_completion_tokens' : 'max_tokens']: maxTokens,
-			messages
-		}
-	}
-
 	async function viewFinalPrompt(categoryName, mode = 'ai') {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
@@ -2861,7 +2841,6 @@
 				}
 				const messages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
 				promptPreviewMessages = messages
-				promptPreviewRequestPayload = buildPromptPreviewRequestPayload(messages, 0.3, 1000)
 				promptPreviewTitle = `Improve Prompt - ${categoryName}`
 				showPromptPreviewModal = true
 				return
@@ -2886,7 +2865,6 @@
 				})
 
 			promptPreviewMessages = preview.messages
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 2200)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			showPromptPreviewModal = true
 		} catch (error) {
@@ -10315,13 +10293,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					<button type="button" class="btn-close btn-close-white" onclick={closePromptPreviewModal} aria-label="Close prompt preview"></button>
 				</div>
 				<div class="modal-body">
-					<div class="small text-muted mb-3">This is the final prompt payload prepared to send to the OpenAI API.</div>
-					{#if promptPreviewRequestPayload}
-						<div class="border rounded p-3 bg-light mb-3">
-							<div class="fw-bold text-uppercase small mb-2">Request Payload</div>
-							<pre class="mb-0 prompt-preview-pre">{JSON.stringify(promptPreviewRequestPayload, null, 2)}</pre>
-						</div>
-					{/if}
+					<div class="small text-muted mb-3">This is the final prompt sent to the API.</div>
 					<div class="d-flex flex-column gap-3">
 						{#each promptPreviewMessages as message, index (index)}
 							<div class="border rounded p-3 bg-light">
