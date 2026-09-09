@@ -920,6 +920,66 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
   }
 }
 
+export async function checkCitationConsistency({ assessment, student = null, studentSubmission = '', studentSubmissionDocuments = [], globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+  console.info('Citation check request started', {
+    assessment: assessment?.name || 'Unnamed assessment',
+    student: student?.displayName || student?.id || 'Not specified',
+    submissionLength: String(studentSubmission || '').length
+  })
+
+  const { model, reasoningEffort, rawText, finishReason } = await runChatCompletion({
+    modelPreference,
+    temperature: 0.1,
+    maxTokens: 1600,
+    reasoningEffortOverride: 'low',
+    messages: [
+      ...buildSystemMessages(globalSystemInstructions, ''),
+      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
+      {
+        role: 'user',
+        content: [
+          'Task: Check citation consistency across the WHOLE student document below, including its reference list/bibliography.',
+          `Assessment: ${assessment?.name || 'Unnamed assessment'}`,
+          `Student: ${student?.displayName || student?.id || 'Not specified'}`,
+          '',
+          'Full student submission (includes reference list, if present):',
+          studentSubmission || 'Not provided.',
+          '',
+          'Output instructions:',
+          '- List every entry in the reference list/bibliography that has NO matching in-text citation anywhere in the document.',
+          '- List every in-text citation that has NO matching entry in the reference list/bibliography.',
+          '- If no reference list is present in the text above, say so explicitly instead of guessing.',
+          '- Do not invent references or citations that are not actually present in the text.',
+          '- Return plain feedback text only, organised under short headings.'
+        ].filter(Boolean).join('\n')
+      }
+    ]
+  })
+
+  const reportText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
+
+  console.info('Citation check response parsed', {
+    finishReason,
+    rawTextLength: rawText.length,
+    reportTextLength: reportText.length,
+    rawTextPreview: rawText.slice(0, 500)
+  })
+
+  if (!reportText) {
+    console.error('Citation check returned no usable text', { rawText, finishReason })
+    if (finishReason === 'length') {
+      throw new Error('The AI provider stopped before producing visible citation-check text. The response hit the token limit.')
+    }
+    throw new Error('No citation-check report was returned from the AI provider')
+  }
+
+  return {
+    reportText,
+    usedModel: model,
+    usedReasoningEffort: reasoningEffort
+  }
+}
+
 function extractJson(text) {
   const trimmed = String(text || '').trim()
   if (!trimmed) {

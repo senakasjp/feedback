@@ -23,7 +23,7 @@
 	// Import data services
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
-	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, checkCitationConsistency, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
 	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
 	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
@@ -139,6 +139,9 @@
 	let improvingTextWithRag = $state({}) // Track which category text is being expanded with RAG
 	let evidenceCheckingText = $state({}) // Track which category is running evidence check
 	let improvingAllWithRag = $state(false) // Track bulk "Improve all with RAG" run across every category
+	let checkingCitations = $state(false) // Whole-document citation consistency check in progress
+	let citationCheckReport = $state('')
+	let showCitationCheckModal = $state(false)
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
 	let studentSubmissionDocuments = $state([])
@@ -2131,7 +2134,7 @@
 		return boundary ? source.slice(0, searchStart + boundary.index).trim() : source
 	}
 
-	function getCombinedStudentSubmissionText() {
+	function getCombinedStudentSubmissionText({ includeBoilerplate = false } = {}) {
 		const sections = []
 
 		if (studentSubmissionText.trim()) {
@@ -2146,7 +2149,7 @@
 				.join('\n')
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
-				stripTrailingReportBoilerplate(document.extractedText),
+				includeBoilerplate ? document.extractedText : stripTrailingReportBoilerplate(document.extractedText),
 				ocrText
 			].filter(Boolean).join('\n'))
 		})
@@ -2717,6 +2720,52 @@
 			console.info('UI evidence check completed', { categoryName })
 			evidenceCheckingText = { ...evidenceCheckingText, [categoryName]: false }
 		}
+	}
+
+	async function runCitationCheck() {
+		if (!currentStudentId) {
+			showSuccessNotification('⚠️ Please select a student first.')
+			return
+		}
+
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
+			return
+		}
+
+		// Include boilerplate here: the citation check needs the reference list that
+		// getCombinedStudentSubmissionText() normally strips out for rubric-evidence checks.
+		const studentSubmission = getCombinedStudentSubmissionText({ includeBoilerplate: true })
+
+		if (!studentSubmission) {
+			showSuccessNotification('⚠️ Upload student submission documents first.')
+			return
+		}
+
+		checkingCitations = true
+		try {
+			const result = await checkCitationConsistency({
+				assessment: currentAssessment,
+				student: getCurrentStudent(),
+				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
+				globalSystemInstructions: globalAiSystemInstructions,
+				modelPreference: getCurrentAiModelPreference()
+			})
+
+			citationCheckReport = result.reportText
+			showCitationCheckModal = true
+			showSuccessNotification(`✅ Citation check generated with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)}).`)
+		} catch (error) {
+			console.error('Failed to run citation check:', error)
+			showSuccessNotification(`❌ Citation check failed: ${error.message}`)
+		} finally {
+			checkingCitations = false
+		}
+	}
+
+	function closeCitationCheckModal() {
+		showCitationCheckModal = false
 	}
 
 	async function draftFeedbackWithAI() {
@@ -7551,6 +7600,21 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				<li class="nav-item">
 					<button
 						class="btn btn-outline-light btn-sm ms-2"
+						onclick={runCitationCheck}
+						title="Check that every reference has an in-text citation (whole document)"
+						aria-label="Check citations"
+						disabled={checkingCitations || !currentStudentId}
+					>
+						{#if checkingCitations}
+							<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Checking...
+						{:else}
+							<i class="bi bi-journal-check me-1"></i>Check Citations
+						{/if}
+					</button>
+				</li>
+				<li class="nav-item">
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
 						onclick={() => showCheckboxDebug = !showCheckboxDebug}
 						title="Toggle Checkbox Debug"
 						aria-label="Toggle Checkbox Debug"
@@ -10305,6 +10369,26 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn btn-secondary" onclick={closePromptPreviewModal}>Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Citation Check Modal -->
+{#if showCitationCheckModal}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-lg modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header bg-dark text-white">
+					<h5 class="modal-title"><i class="bi bi-journal-check me-2"></i>Citation Check</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={closeCitationCheckModal} aria-label="Close citation check"></button>
+				</div>
+				<div class="modal-body">
+					<pre class="mb-0 prompt-preview-pre">{citationCheckReport}</pre>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={closeCitationCheckModal}>Close</button>
 				</div>
 			</div>
 		</div>
