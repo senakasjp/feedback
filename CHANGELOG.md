@@ -1,5 +1,7 @@
 # Changelog
 
+> **Fix (Sep 2026):** PDF exports now render macrons correctly (Māori, Ngāti, Tūhoe, etc.) — jsPDF's built-in fonts only support WinAnsi/Latin-1, so macron vowels fell outside the character sanitizer's safe range and were silently replaced with `?`. PDFs now embed NotoSans, which covers Latin Extended-A.
+
 > **Fix (Sep 2026):** "Evidence Check" no longer strips the student's reference list/appendix before looking for evidence — it was running submissions through the same boilerplate-stripping step used to cut prompt bloat elsewhere, which silently deleted everything from a References/Appendix heading onward and produced false "no reference list" verdicts on submissions that do have one.
 
 > **New (Sep 2026):** Added a "Check Citations" button (global, per-student) that reads the student's full uploaded documents — reference list included — and asks the AI to flag reference entries with no matching in-text citation, and in-text citations with no matching reference entry.
