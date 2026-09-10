@@ -1,5 +1,7 @@
 # User Guide
 
+> **Improved (Sep 2026):** "Improve with RAG" now picks supporting evidence from the student's submission by meaning, not just matching words — so a relevant paragraph phrased differently than the category name is no longer skipped. Student submissions no longer accept PDF uploads (use DOCX, TXT, MD, HTML, CSV, or JSON) — PDF text extraction had no OCR fallback and could silently miss content in scanned files.
+
 > **Fix (Sep 2026):** PDF exports now correctly print macrons (Māori, Ngāti, Tūhoe, etc.) instead of showing `?` in their place.
 
 > **New (Sep 2026):** A "Check Citations" button in the header checks the currently-selected student's full uploaded documents for reference entries with no matching in-text citation (and vice versa). "Evidence Check" was also fixed so it no longer skips the student's reference list/appendix when looking for evidence — it previously could wrongly say a reference list was missing when one was present.

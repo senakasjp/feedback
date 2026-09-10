@@ -1,5 +1,7 @@
 # Feature Implementation Summary - Version 3.2.9
 
+> **Improved (Sep 2026):** Added a per-student embedding index over the submission's paragraphs (mirrors the existing per-assessment vector index) so "Improve with RAG"/"View RAG Prompt" rank evidence by semantic similarity to the category instead of literal keyword overlap, with a lexical-only fallback if embeddings are unavailable. Student submission uploads no longer accept PDF (no OCR fallback for scanned files); assessment reference documents still do.
+
 > **Fix (Sep 2026):** PDF exports now embed the NotoSans font so macrons render correctly (Māori, Ngāti, Tūhoe, etc.) instead of being replaced with `?` — jsPDF's built-in fonts only support WinAnsi/Latin-1, which excludes Latin Extended-A.
 
 > **New (Sep 2026):** Added a whole-document "Check Citations" check (reference entries with no in-text citation, and vice versa). Fixed "Evidence Check" reading a version of the submission with everything past the References/Appendix heading deleted — it now sees the full document, so it no longer falsely reports a missing reference list.

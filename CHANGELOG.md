@@ -1,5 +1,7 @@
 # Changelog
 
+> **Improved (Sep 2026):** "Improve with RAG" and "View RAG Prompt" now rank the student's submission evidence by semantic similarity (embedding-based, cached per student) instead of literal keyword overlap with the category name — a relevant paragraph phrased differently than the category no longer scores 0 and gets dropped. Falls back to the previous keyword scoring if embeddings are unavailable. Also removed PDF as an accepted upload format for student submissions (no OCR fallback, so scanned PDFs silently contributed nothing) — DOCX/TXT/MD/HTML/CSV/JSON only; assessment reference documents still accept PDF.
+
 > **Fix (Sep 2026):** PDF exports now render macrons correctly (Māori, Ngāti, Tūhoe, etc.) — jsPDF's built-in fonts only support WinAnsi/Latin-1, so macron vowels fell outside the character sanitizer's safe range and were silently replaced with `?`. PDFs now embed NotoSans, which covers Latin Extended-A.
 
 > **Fix (Sep 2026):** "Evidence Check" no longer strips the student's reference list/appendix before looking for evidence — it was running submissions through the same boilerplate-stripping step used to cut prompt bloat elsewhere, which silently deleted everything from a References/Appendix heading onward and produced false "no reference list" verdicts on submissions that do have one.
