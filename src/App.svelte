@@ -6872,7 +6872,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		function sanitizeTextForPdf(value) {
 			return String(value ?? '').replace(/[-￿]/g, (ch) => {
 				const code = ch.codePointAt(0)
-				if (code <= 0xff || PDF_SAFE_EXTRA_CODEPOINTS.has(code)) return ch
+				if (code <= 0x17f || PDF_SAFE_EXTRA_CODEPOINTS.has(code)) return ch // Latin-1 + Latin Extended-A (macrons)
 				return PDF_CHAR_FALLBACK[code] ?? '?'
 			})
 		}
@@ -6885,6 +6885,37 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const originalSplit = doc.splitTextToSize.bind(doc)
 			doc.splitTextToSize = (text, ...rest) => originalSplit(sanitizeTextForPdf(text), ...rest)
 			return doc
+		}
+
+		// jsPDF's standard fonts can't render macrons at all (see above), so PDFs need a real
+		// Unicode font embedded. NotoSans (SIL OFL, public/fonts/) covers Latin Extended-A. Base64
+		// payloads are cached at module scope since the font bytes never change across exports;
+		// only the per-document addFont registration needs repeating for each new jsPDF instance.
+		let notoSansRegularBase64 = null
+		let notoSansBoldBase64 = null
+
+		async function fetchFontAsBase64(url) {
+			const buffer = await (await fetch(url)).arrayBuffer()
+			const bytes = new Uint8Array(buffer)
+			let binary = ''
+			const chunkSize = 0x8000
+			for (let i = 0; i < bytes.length; i += chunkSize) {
+				binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize))
+			}
+			return btoa(binary)
+		}
+
+		async function registerPdfFonts(doc) {
+			if (!notoSansRegularBase64) {
+				notoSansRegularBase64 = await fetchFontAsBase64('/fonts/NotoSans-Regular.ttf')
+			}
+			if (!notoSansBoldBase64) {
+				notoSansBoldBase64 = await fetchFontAsBase64('/fonts/NotoSans-Bold.ttf')
+			}
+			doc.addFileToVFS('NotoSans-Regular.ttf', notoSansRegularBase64)
+			doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal')
+			doc.addFileToVFS('NotoSans-Bold.ttf', notoSansBoldBase64)
+			doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold')
 		}
 
 		async function generatePDF() {
@@ -6931,6 +6962,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const defaultMargin = 25 // Slightly larger margin for better breathing room
 		const needsLandscape = !lockPdfPortrait && shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
 		const doc = makePdfTextSafe(new jsPDF({ orientation: 'portrait' })) // keep first page portrait; switch later if needed
+		await registerPdfFonts(doc)
 		const headingText = 'Feedback Report'
 		const headingFontSize = 16
 		
@@ -6940,7 +6972,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const maxLineWidth = pageWidth - (margin * 2)
 
 		// Prepare heading metrics up-front so spacing is consistent
-		doc.setFont('helvetica', 'bold')
+		doc.setFont('NotoSans', 'bold')
 		doc.setFontSize(headingFontSize)
 		const headingMetrics = doc.getTextDimensions
 			? doc.getTextDimensions(headingText)
@@ -6948,7 +6980,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const headingHeight = headingMetrics?.h || /** @type {any} */ (doc.internal).getLineHeight?.() || 10
 
 		const drawHeading = () => {
-			doc.setFont('helvetica', 'bold')
+			doc.setFont('NotoSans', 'bold')
 			doc.setFontSize(headingFontSize)
 			doc.text(headingText, pageWidth / 2, margin, { align: 'center' })
 		}
@@ -6977,7 +7009,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						
 						// Draw heading beneath the image
 						const headingY = yPosition + imageHeight + headingHeight + 2
-						doc.setFont('helvetica', 'bold')
+						doc.setFont('NotoSans', 'bold')
 						doc.setFontSize(headingFontSize)
 						doc.text(headingText, pageWidth / 2, headingY, { align: 'center' })
 						
@@ -7007,7 +7039,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	async function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName, useLandscapeForContent = false) {
 		// Try to set a font that's closer to Oxygen (Arial or Helvetica)
 		try {
-			doc.setFont('helvetica', 'normal')
+			doc.setFont('NotoSans', 'normal')
 		} catch (e) {
 		// Fallback to default font if helvetica is not available
 			console.log('Helvetica not available, using default font')
@@ -7028,7 +7060,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const lineSpacing = 10
 		const headerHeight = headerLines.length * lineSpacing
 		let headerY = pageHeight - margin - headerHeight
-		doc.setFont('helvetica', 'bold')
+		doc.setFont('NotoSans', 'bold')
 		doc.setFontSize(10)
 		headerLines.forEach(({ text, color }) => {
 			doc.setTextColor(...color)
@@ -7057,7 +7089,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			: doc.internal.getNumberOfPages()
 		
 		// Reset font to normal for content
-		doc.setFont('helvetica', 'normal')
+		doc.setFont('NotoSans', 'normal')
 		
 		// Render assessment HTML (as-is) into the PDF before content
 		const matchedCategoriesFromTable = new Set()
@@ -7296,14 +7328,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				skipCurrentCategory = false
 
 				// Bold font for ALL category headers (any line ending with ':')
-				doc.setFont('helvetica', 'bold')
+				doc.setFont('NotoSans', 'bold')
 				doc.setFontSize(currentBodyFontSize) // Same size as other content
 
 				const headerText = categoryCoveredByTable ? `${categoryName}:` : headerInfo.display
 				doc.text(headerText, margin, yPosition)
 
 				// Reset font to normal for content
-				doc.setFont('helvetica', 'normal')
+				doc.setFont('NotoSans', 'normal')
 				doc.setFontSize(currentBodyFontSize) // Back to regular size
 				yPosition += headerGap() // Controlled gap after headers
 			} else {
