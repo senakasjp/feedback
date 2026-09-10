@@ -2270,11 +2270,24 @@
 		const files = Array.from(input?.files || [])
 		if (files.length === 0) return
 
+		// PDF text extraction is text-layer-only (no OCR fallback for scanned pages) and was the
+		// least reliable path for getting a student's full submission into AI analysis - require
+		// DOCX/TXT/etc instead, where extraction is exhaustive.
+		const pdfFiles = files.filter(file => file.name?.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf')
+		if (pdfFiles.length > 0) {
+			showSuccessNotification(`⚠️ PDF uploads are not supported for student submissions - please use DOCX, TXT, MD, HTML, CSV, or JSON instead. Skipped: ${pdfFiles.map(file => file.name).join(', ')}`)
+		}
+		const nonPdfFiles = files.filter(file => !pdfFiles.includes(file))
+		if (nonPdfFiles.length === 0) {
+			if (input) input.value = ''
+			return
+		}
+
 		uploadingStudentDocument = true
 		try {
 			const uploadedDocuments = []
 			let extractionFailures = 0
-			for (const file of files) {
+			for (const file of nonPdfFiles) {
 				let extractedText = ''
 				let images = []
 				let extractionError = ''
@@ -8908,7 +8921,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																id="studentDocumentUpload"
 																type="file"
 																class="form-control form-control-sm"
-																accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.json"
+																accept=".docx,.txt,.md,.html,.htm,.csv,.json"
 														multiple
 														onchange={handleStudentSubmissionUpload}
 														disabled={!currentStudentId || uploadingStudentDocument}
