@@ -23,7 +23,7 @@
 	// Import data services
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
-	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, checkCitationConsistency, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, buildStudentSubmissionVectorIndex, checkCitationConsistency, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent, isStudentSubmissionVectorIndexCurrent } from './services/aiMarkingService.js'
 	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
 	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
@@ -145,6 +145,7 @@
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
 	let studentSubmissionDocuments = $state([])
+	let studentSubmissionVectorIndex = $state(null) // Embedding index over the current student's submission paragraphs, cached until the submission changes
 	let assessmentReferenceDocuments = $state([])
 	let selectedAssessmentDocumentType = $state('assignment-brief')
 	let selectedStudentDocumentType = $state('submission')
@@ -773,6 +774,7 @@
 			studentName = ''
 			studentSubmissionText = ''
 			studentSubmissionDocuments = []
+			studentSubmissionVectorIndex = null
 			studentPhoto = ''
 			// No studentImage - only header photo for assessment
 			selectedParagraphs = new Set()
@@ -1294,6 +1296,7 @@
 						}
 					}
 					studentSubmissionDocuments = []
+			studentSubmissionVectorIndex = null
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
@@ -1429,6 +1432,7 @@
 						}
 					}
 					studentSubmissionDocuments = []
+			studentSubmissionVectorIndex = null
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
@@ -1465,6 +1469,7 @@
 		studentName = ''
 		studentSubmissionText = ''
 		studentSubmissionDocuments = []
+			studentSubmissionVectorIndex = null
 		// No studentImage - only header photo for assessment
 		assessmentHtml = ''
 		lockPdfPortrait = false
@@ -1724,6 +1729,7 @@
 		studentName = ''
 		studentSubmissionText = ''
 		studentSubmissionDocuments = []
+			studentSubmissionVectorIndex = null
 		assessmentReferenceDocuments = []
 		// No studentImage - only header photo for assessment
 	}
@@ -1757,6 +1763,7 @@
 				studentName = ''
 				studentSubmissionText = ''
 				studentSubmissionDocuments = []
+			studentSubmissionVectorIndex = null
 				assessmentReferenceDocuments = []
 				// No studentImage - only header photo for assessment
 			}
@@ -2166,6 +2173,7 @@
 			studentName: studentName,
 			studentSubmissionText: studentSubmissionText.trim(),
 			studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
+			studentSubmissionVectorIndex: studentSubmissionVectorIndex,
 			studentImage: studentPhoto || '',
 			categoryMarks: { ...categoryMarks },
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
@@ -2451,6 +2459,30 @@
 		return { assessmentForAi, vectorIndex }
 	}
 
+	// Embeds the student's own submission (paragraph-per-chunk) so "Improve with RAG" can rank
+	// evidence by semantic similarity to a category instead of literal keyword overlap. Cached per
+	// student/submission-content like the assessment vector index; falls back to lexical scoring in
+	// aiMarkingService if embedding fails (no API key, network error, etc) rather than blocking.
+	async function ensureStudentSubmissionVectorIndex(studentSubmission) {
+		if (!studentSubmission?.trim()) {
+			return null
+		}
+
+		if (isStudentSubmissionVectorIndexCurrent(studentSubmissionVectorIndex, studentSubmission)) {
+			return studentSubmissionVectorIndex
+		}
+
+		try {
+			const vectorIndex = await buildStudentSubmissionVectorIndex({ studentSubmission })
+			studentSubmissionVectorIndex = vectorIndex
+			await persistCurrentStudentEvaluationData()
+			return vectorIndex
+		} catch (error) {
+			console.error('Failed to build student submission vector index, falling back to lexical scoring:', error)
+			return null
+		}
+	}
+
 	async function improveTextWithRag(categoryName) {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
@@ -2466,18 +2498,21 @@
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+			const studentSubmission = getCombinedStudentSubmissionText()
+			const studentVectorIndex = await ensureStudentSubmissionVectorIndex(studentSubmission)
 			const ragArgs = {
 				assessment: assessmentForAi,
 				categoryName,
 				shortFeedback: shortText,
 				answerInstructions,
 				student: getCurrentStudent(),
-				studentSubmission: getCombinedStudentSubmissionText(),
+				studentSubmission,
 				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes: getSelectedEvidenceNotes(categoryName),
 				assessmentParagraphs,
 				priorEvaluations,
 				vectorIndex,
+				studentVectorIndex,
 				globalSystemInstructions: globalAiSystemInstructions
 			}
 			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
@@ -2914,18 +2949,21 @@
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 				const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+				const studentSubmission = getCombinedStudentSubmissionText()
+				const studentVectorIndex = await ensureStudentSubmissionVectorIndex(studentSubmission)
 				const preview = await buildImproveFeedbackWithRagPromptPreview({
 					assessment: assessmentForAi,
 					categoryName,
 					shortFeedback: shortText,
 					answerInstructions,
 					student: getCurrentStudent(),
-					studentSubmission: getCombinedStudentSubmissionText(),
+					studentSubmission,
 					studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 					evidenceNotes: getSelectedEvidenceNotes(categoryName),
 					assessmentParagraphs,
 					priorEvaluations,
 					vectorIndex,
+					studentVectorIndex,
 					globalSystemInstructions: globalAiSystemInstructions
 				})
 
@@ -4477,6 +4515,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				studentName = ''
 				studentSubmissionText = ''
 				studentSubmissionDocuments = []
+			studentSubmissionVectorIndex = null
 				studentPhoto = ''
 				// No studentImage - only header photo for assessment
 				selectedParagraphs.clear()
@@ -5027,6 +5066,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		let savedStudentSubmissionText = ''
 		let savedStudentImage = ''
 		let savedStudentSubmissionDocuments = []
+		let savedStudentSubmissionVectorIndex = null
 		let savedCategoryMarks = {}
 		let savedManualTotalMarks = ''
 		let savedQuickAddText = {}
@@ -5066,6 +5106,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			savedStudentName = evaluationData.studentName || ''
 			savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
 			savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
+			savedStudentSubmissionVectorIndex = evaluationData.studentSubmissionVectorIndex || null
 			savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
 			savedCategoryMarks = evaluationData.categoryMarks || {}
 			savedManualTotalMarks = evaluationData.manualTotalMarks || ''
@@ -5111,6 +5152,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		studentSubmissionText = savedStudentSubmissionText
 		studentSubmissionDocuments = Array.isArray(savedStudentSubmissionDocuments) ? savedStudentSubmissionDocuments : []
+	studentSubmissionVectorIndex = savedStudentSubmissionVectorIndex || null
 		studentPhoto = savedStudentImage || getStudentPhoto(getCurrentStudent()) || ''
 		if (savedStudentImage && requestedStudentId) {
 			students = students.map(student => (

@@ -289,17 +289,80 @@ function buildQueryText({ assessment, studentSubmission = '', evidenceNotes = ''
   ].filter(Boolean).join(' ')
 }
 
-function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', maxParagraphs = 6, maxChars = 2200 }) {
+const STUDENT_VECTOR_INDEX_VERSION = 1
+
+function splitSubmissionIntoParagraphs(studentSubmission = '') {
+  return String(studentSubmission || '')
+    .trim()
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.replace(/[ \t\f\v]+/g, ' ').trim())
+    .filter(Boolean)
+}
+
+function buildStudentSubmissionChunks(studentSubmission = '') {
+  return splitSubmissionIntoParagraphs(studentSubmission).map((text, index) => ({
+    id: `submission-${index + 1}`,
+    type: 'submission',
+    label: `Submission paragraph ${index + 1}`,
+    text
+  }))
+}
+
+export async function buildStudentSubmissionVectorIndex({ studentSubmission = '' }) {
+  const chunks = buildStudentSubmissionChunks(studentSubmission)
+  const embeddings = await createEmbeddings(chunks.map(chunk => chunk.text))
+
+  return {
+    version: STUDENT_VECTOR_INDEX_VERSION,
+    embeddingModel: EMBEDDING_MODEL,
+    createdAt: new Date().toISOString(),
+    sourceHash: normaliseWhitespace(studentSubmission),
+    chunks: chunks.map((chunk, index) => ({ ...chunk, embedding: embeddings[index] || null }))
+  }
+}
+
+export function isStudentSubmissionVectorIndexCurrent(vectorIndex, studentSubmission = '') {
+  return Boolean(
+    vectorIndex &&
+    vectorIndex.version === STUDENT_VECTOR_INDEX_VERSION &&
+    Array.isArray(vectorIndex.chunks) &&
+    vectorIndex.sourceHash === normaliseWhitespace(studentSubmission)
+  )
+}
+
+// Ranks submission paragraphs by combined lexical + semantic similarity to the category/evidence
+// query when a current embedding index is available (same lexicalScore + semanticScore*20 formula
+// as buildAssessmentRagContext), falling back to lexical-only scoring - matching the same paragraphs
+// 1:1 by index since both come from splitSubmissionIntoParagraphs on the same source text.
+async function scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, vectorIndex }) {
+  const lexicalOnly = () => paragraphs.map(paragraph => scoreTextMatch(queryTokens, paragraph, 'submission'))
+
+  const indexUsable = isStudentSubmissionVectorIndexCurrent(vectorIndex, paragraphs.join('\n\n'))
+    && vectorIndex.chunks.length === paragraphs.length
+  if (!indexUsable || !queryText.trim()) {
+    return lexicalOnly()
+  }
+
+  try {
+    const [queryEmbedding] = await createEmbeddings([queryText])
+    return paragraphs.map((paragraph, index) => {
+      const lexicalScore = scoreTextMatch(queryTokens, paragraph, 'submission')
+      const semanticScore = cosineSimilarity(queryEmbedding, vectorIndex.chunks[index]?.embedding) ?? 0
+      return lexicalScore + (semanticScore * 20)
+    })
+  } catch {
+    return lexicalOnly()
+  }
+}
+
+async function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', vectorIndex = null, maxParagraphs = 6, maxChars = 2200 }) {
   const sourceText = String(studentSubmission || '').trim()
   if (!sourceText) {
     return ''
   }
 
-  const paragraphs = sourceText
-    .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)
-    .map(paragraph => paragraph.replace(/[ \t\f\v]+/g, ' ').trim())
-    .filter(Boolean)
+  const paragraphs = splitSubmissionIntoParagraphs(sourceText)
 
   if (paragraphs.length === 0) {
     return ''
@@ -310,10 +373,15 @@ function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryN
   // is the tool's own prior (possibly wrong) output rather than a neutral hint - scoring against its
   // wording creates a feedback loop that drifts the excerpt toward whatever the last wrong answer
   // happened to mention, instead of the actual category content.
+  const queryText = [categoryName, evidenceNotes].filter(Boolean).join('\n\n')
   const queryTokens = unique([
     ...tokenize(categoryName),
     ...tokenize(evidenceNotes)
   ])
+
+  const paragraphScores = queryTokens.length > 0
+    ? await scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, vectorIndex })
+    : paragraphs.map(() => 0)
 
   // Headings and table-of-contents entries (e.g. "1. Executive Summary" or "1. Executive Summary .... 1")
   // trivially match a category's own name with nothing else - if those are the only matches, they crowd
@@ -324,7 +392,7 @@ function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryN
     .map((paragraph, index) => ({
       paragraph,
       index,
-      score: queryTokens.length > 0 ? scoreTextMatch(queryTokens, paragraph, 'submission') : 0
+      score: paragraphScores[index] || 0
     }))
     .filter(item => item.score > 0)
 
@@ -664,11 +732,12 @@ function buildStudentSubmissionImageMessages(images = []) {
   ]
 }
 
-export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
-  const submissionExcerpt = buildRelevantStudentEvidenceExcerpt({
+export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentVectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+  const submissionExcerpt = await buildRelevantStudentEvidenceExcerpt({
     studentSubmission,
     categoryName,
-    evidenceNotes
+    evidenceNotes,
+    vectorIndex: studentVectorIndex
   })
   const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
@@ -782,7 +851,7 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
   }
 }
 
-export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentVectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { messages, retrievedContext, retrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
     assessment,
     categoryName,
@@ -794,6 +863,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     assessmentParagraphs,
     priorEvaluations,
     vectorIndex,
+    studentVectorIndex,
     globalSystemInstructions,
     answerInstructions
   })
