@@ -2124,24 +2124,7 @@
 		return Array.isArray(studentSubmissionDocuments) ? studentSubmissionDocuments : []
 	}
 
-	// Drops the tail of a report from its first Table of Contents/References/Appendix heading onward -
-	// these are never evidence for a marking criterion, and are the single biggest source of prompt bloat.
-	// ponytail: heading search is restricted to the back half of the document to avoid matching a stray
-	// in-body mention (e.g. a Table of Contents entry) or a false positive early in the text. Upgrade path:
-	// parse real heading/style boundaries if a report's structure ever breaks this assumption.
-	function stripTrailingReportBoilerplate(text) {
-		const source = String(text || '')
-		if (source.length < 500) {
-			return source
-		}
-
-		const searchStart = Math.floor(source.length * 0.5)
-		const boundary = /\b(table of contents|references|appendix)\b/i.exec(source.slice(searchStart))
-
-		return boundary ? source.slice(0, searchStart + boundary.index).trim() : source
-	}
-
-	function getCombinedStudentSubmissionText({ includeBoilerplate = false } = {}) {
+	function getCombinedStudentSubmissionText() {
 		const sections = []
 
 		if (studentSubmissionText.trim()) {
@@ -2156,7 +2139,7 @@
 				.join('\n')
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
-				includeBoilerplate ? document.extractedText : stripTrailingReportBoilerplate(document.extractedText),
+				document.extractedText,
 				ocrText
 			].filter(Boolean).join('\n'))
 		})
@@ -2723,10 +2706,7 @@
 		}
 
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
-		// Evidence Check verifies evidence is present - stripping the reference list/appendix
-		// before it looks would defeat that purpose (e.g. a "no reference list" false negative
-		// when one exists but was cut for being past the References heading).
-		const studentSubmission = getCombinedStudentSubmissionText({ includeBoilerplate: true })
+		const studentSubmission = getCombinedStudentSubmissionText()
 		const evidenceNotes = getSelectedEvidenceNotes(categoryName)
 
 		if (!studentSubmission && !evidenceNotes) {
@@ -2790,9 +2770,7 @@
 			return
 		}
 
-		// Include boilerplate here: the citation check needs the reference list that
-		// getCombinedStudentSubmissionText() normally strips out for rubric-evidence checks.
-		const studentSubmission = getCombinedStudentSubmissionText({ includeBoilerplate: true })
+		const studentSubmission = getCombinedStudentSubmissionText()
 
 		if (!studentSubmission) {
 			showSuccessNotification('⚠️ Upload student submission documents first.')

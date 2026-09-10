@@ -68,6 +68,42 @@ try {
   assert.equal(withoutIndex.submissionRetrievalMode, 'lexical', 'should fall back to lexical mode with no student index')
 
   console.log('OK: submissionRetrievalMode propagates through buildImproveFeedbackWithRagPromptPreview')
+
+  // Reproduces the real bug report: a document with a genuine reference list, evaluated against a
+  // referencing-focused category, where the reference list content doesn't rank highly by lexical
+  // OR semantic similarity (it's bibliographic data, not prose about citations) - more filler
+  // paragraphs than maxParagraphs(6) so normal top-K ranking alone would exclude it.
+  const submissionWithReferences = [
+    'Introduction paragraph one about the overall project scope and objectives for this report.',
+    'Body paragraph discussing the technical architecture and system design decisions made here.',
+    'Body paragraph about data collection methodology used throughout this research project.',
+    'Body paragraph analysing the results and findings from the conducted experiments in depth.',
+    'Body paragraph covering ethical considerations around privacy and consent in this study.',
+    'Body paragraph discussing limitations of the current approach and study design overall.',
+    'Closing paragraph summarising conclusions and recommendations arising from this report.',
+    'References',
+    'Kūkūtai, T., Campbell-Kamariera, K., Mead, A., et al. (2023). Māori data sovereignty and privacy. Journal of Indigenous Studies, 12(1), 1-20.'
+  ].join('\n\n')
+
+  const referencingPreview = await buildImproveFeedbackWithRagPromptPreview({
+    assessment: minimalAssessment,
+    categoryName: 'APA Referencing and Citations',
+    studentSubmission: submissionWithReferences,
+    studentVectorIndex: null
+  })
+  const referencingPromptText = referencingPreview.messages.map(m => JSON.stringify(m.content)).join('\n')
+  assert.ok(referencingPromptText.includes('Kūkūtai'), 'reference list should reach the prompt for a referencing-focused category, even when it would not rank in the top paragraphs')
+
+  const unrelatedPreview = await buildImproveFeedbackWithRagPromptPreview({
+    assessment: minimalAssessment,
+    categoryName: 'Technical Architecture',
+    studentSubmission: submissionWithReferences,
+    studentVectorIndex: null
+  })
+  const unrelatedPromptText = unrelatedPreview.messages.map(m => JSON.stringify(m.content)).join('\n')
+  assert.ok(!unrelatedPromptText.includes('Kūkūtai'), 'reference list should NOT be force-included for a category unrelated to referencing')
+
+  console.log('OK: reference list is guaranteed in the excerpt for referencing-focused categories, not force-included elsewhere')
 } finally {
   await server.close()
 }

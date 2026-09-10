@@ -432,6 +432,21 @@ async function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', cat
     excerpt = `${excerpt.slice(0, maxChars).trim()}...`
   }
 
+  // A bibliography reads as citation data (author names, years, titles), not prose "about"
+  // citations - it rarely ranks highly by lexical OR semantic similarity to a referencing-focused
+  // category, even though it's exactly the evidence that category needs. Continuous semantic
+  // scores also mean `scored` above is almost never empty, so the heading-anchor fallback that
+  // used to catch this for pure keyword scoring rarely fires anymore. Guarantee inclusion here
+  // instead, only when the category/evidence notes are clearly about referencing.
+  if (/\b(referenc|citation|bibliograph|apa)\w*\b/i.test(`${categoryName} ${evidenceNotes}`)) {
+    const referenceHeadingIndex = paragraphs.findIndex(paragraph => /^(references|reference list|bibliography|works cited)\s*$/i.test(paragraph.trim()))
+    const alreadyIncluded = referenceHeadingIndex !== -1 && selected.some(item => item.index === referenceHeadingIndex)
+    if (referenceHeadingIndex !== -1 && !alreadyIncluded) {
+      const referenceExcerpt = paragraphs.slice(referenceHeadingIndex, referenceHeadingIndex + maxParagraphs).join('\n\n').slice(0, maxChars)
+      excerpt = excerpt ? `${excerpt}\n\n${referenceExcerpt}` : referenceExcerpt
+    }
+  }
+
   return { excerpt, mode: submissionRetrievalMode }
 }
 
