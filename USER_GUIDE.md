@@ -1,5 +1,7 @@
 # User Guide
 
+> **Fix (Sep 2026):** "Improve with RAG", "View RAG Prompt", and "AI Draft" now see a student's full submission including the reference list — a referencing/APA category could previously be marked down for a "missing" reference list that was actually just cut before the AI saw it.
+
 > **Improved (Sep 2026):** "Improve with RAG" now picks supporting evidence from the student's submission by meaning, not just matching words — so a relevant paragraph phrased differently than the category name is no longer skipped. Student submissions no longer accept PDF uploads (use DOCX, TXT, MD, HTML, CSV, or JSON) — PDF text extraction had no OCR fallback and could silently miss content in scanned files.
 
 > **Fix (Sep 2026):** PDF exports now correctly print macrons (Māori, Ngāti, Tūhoe, etc.) instead of showing `?` in their place.

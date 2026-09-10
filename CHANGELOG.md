@@ -1,5 +1,7 @@
 # Changelog
 
+> **Fix (Sep 2026):** "Improve with RAG", "View RAG Prompt", and "AI Draft" no longer delete a student's reference list before evaluating a referencing/APA/citations category — they were still calling the boilerplate-stripping default (already fixed for Evidence Check and Check Citations, but missed here), so those categories could be marked down for a "missing" reference list that was actually just cut before the AI ever saw it. The reference list is now also guaranteed to reach the prompt for referencing-focused categories specifically, since bibliographic text rarely ranks highly by keyword or semantic similarity on its own.
+
 > **Improved (Sep 2026):** "Improve with RAG" and "View RAG Prompt" now rank the student's submission evidence by semantic similarity (embedding-based, cached per student) instead of literal keyword overlap with the category name — a relevant paragraph phrased differently than the category no longer scores 0 and gets dropped. Falls back to the previous keyword scoring if embeddings are unavailable. Also removed PDF as an accepted upload format for student submissions (no OCR fallback, so scanned PDFs silently contributed nothing) — DOCX/TXT/MD/HTML/CSV/JSON only; assessment reference documents still accept PDF.
 
 > **Fix (Sep 2026):** PDF exports now render macrons correctly (Māori, Ngāti, Tūhoe, etc.) — jsPDF's built-in fonts only support WinAnsi/Latin-1, so macron vowels fell outside the character sanitizer's safe range and were silently replaced with `?`. PDFs now embed NotoSans, which covers Latin Extended-A.
