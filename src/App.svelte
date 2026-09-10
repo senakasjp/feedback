@@ -2459,6 +2459,12 @@
 		return { assessmentForAi, vectorIndex }
 	}
 
+	function getSubmissionRetrievalSuffix(submissionRetrievalMode) {
+		if (submissionRetrievalMode === 'vector') return ', evidence: semantic match'
+		if (submissionRetrievalMode === 'lexical') return ', evidence: keyword match'
+		return ''
+	}
+
 	// Embeds the student's own submission (paragraph-per-chunk) so "Improve with RAG" can rank
 	// evidence by semantic similarity to a category instead of literal keyword overlap. Cached per
 	// student/submission-content like the assessment vector index; falls back to lexical scoring in
@@ -2530,7 +2536,7 @@
 
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
-			showSuccessNotification(`✨ Feedback expanded with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)} / ${result.retrievalMode || 'context'}).`)
+			showSuccessNotification(`✨ Feedback expanded with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)} / ${result.retrievalMode || 'context'}${getSubmissionRetrievalSuffix(result.submissionRetrievalMode)}).`)
 		} catch (error) {
 			console.error('Failed to improve text with RAG:', error)
 			showSuccessNotification(`❌ Failed to improve with RAG: ${error.message}`)
@@ -2968,7 +2974,7 @@
 				})
 
 			promptPreviewMessages = preview.messages
-			promptPreviewTitle = `RAG Prompt - ${categoryName}`
+			promptPreviewTitle = `RAG Prompt - ${categoryName}${getSubmissionRetrievalSuffix(preview.submissionRetrievalMode)}`
 			showPromptPreviewModal = true
 		} catch (error) {
 			console.error('Failed to build prompt preview:', error)

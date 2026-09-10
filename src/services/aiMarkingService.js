@@ -336,7 +336,10 @@ export function isStudentSubmissionVectorIndexCurrent(vectorIndex, studentSubmis
 // as buildAssessmentRagContext), falling back to lexical-only scoring - matching the same paragraphs
 // 1:1 by index since both come from splitSubmissionIntoParagraphs on the same source text.
 async function scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, vectorIndex }) {
-  const lexicalOnly = () => paragraphs.map(paragraph => scoreTextMatch(queryTokens, paragraph, 'submission'))
+  const lexicalOnly = () => ({
+    scores: paragraphs.map(paragraph => scoreTextMatch(queryTokens, paragraph, 'submission')),
+    mode: 'lexical'
+  })
 
   const indexUsable = isStudentSubmissionVectorIndexCurrent(vectorIndex, paragraphs.join('\n\n'))
     && vectorIndex.chunks.length === paragraphs.length
@@ -346,11 +349,12 @@ async function scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, v
 
   try {
     const [queryEmbedding] = await createEmbeddings([queryText])
-    return paragraphs.map((paragraph, index) => {
+    const scores = paragraphs.map((paragraph, index) => {
       const lexicalScore = scoreTextMatch(queryTokens, paragraph, 'submission')
       const semanticScore = cosineSimilarity(queryEmbedding, vectorIndex.chunks[index]?.embedding) ?? 0
       return lexicalScore + (semanticScore * 20)
     })
+    return { scores, mode: 'vector' }
   } catch {
     return lexicalOnly()
   }
@@ -359,13 +363,13 @@ async function scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, v
 async function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', vectorIndex = null, maxParagraphs = 6, maxChars = 2200 }) {
   const sourceText = String(studentSubmission || '').trim()
   if (!sourceText) {
-    return ''
+    return { excerpt: '', mode: 'none' }
   }
 
   const paragraphs = splitSubmissionIntoParagraphs(sourceText)
 
   if (paragraphs.length === 0) {
-    return ''
+    return { excerpt: '', mode: 'none' }
   }
 
   // Deliberately excludes shortFeedback (the assessor's/AI's own draft) from the search query:
@@ -379,9 +383,9 @@ async function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', cat
     ...tokenize(evidenceNotes)
   ])
 
-  const paragraphScores = queryTokens.length > 0
+  const { scores: paragraphScores, mode: submissionRetrievalMode } = queryTokens.length > 0
     ? await scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, vectorIndex })
-    : paragraphs.map(() => 0)
+    : { scores: paragraphs.map(() => 0), mode: 'none' }
 
   // Headings and table-of-contents entries (e.g. "1. Executive Summary" or "1. Executive Summary .... 1")
   // trivially match a category's own name with nothing else - if those are the only matches, they crowd
@@ -428,7 +432,7 @@ async function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', cat
     excerpt = `${excerpt.slice(0, maxChars).trim()}...`
   }
 
-  return excerpt
+  return { excerpt, mode: submissionRetrievalMode }
 }
 
 function hashChunkSource({ assessment, candidateChunks = [], priorEvaluations = [] }) {
@@ -733,7 +737,7 @@ function buildStudentSubmissionImageMessages(images = []) {
 }
 
 export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentVectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
-  const submissionExcerpt = await buildRelevantStudentEvidenceExcerpt({
+  const { excerpt: submissionExcerpt, mode: submissionRetrievalMode } = await buildRelevantStudentEvidenceExcerpt({
     studentSubmission,
     categoryName,
     evidenceNotes,
@@ -752,6 +756,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
 
   return {
     retrievalMode,
+    submissionRetrievalMode,
     retrievedContext,
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
@@ -852,7 +857,7 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
 }
 
 export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentVectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
-  const { messages, retrievedContext, retrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
+  const { messages, retrievedContext, retrievalMode, submissionRetrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
     assessment,
     categoryName,
     shortFeedback,
@@ -898,6 +903,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     improvedText,
     retrievedContext,
     retrievalMode,
+    submissionRetrievalMode,
     usedModel: model,
     usedReasoningEffort: reasoningEffort
   }

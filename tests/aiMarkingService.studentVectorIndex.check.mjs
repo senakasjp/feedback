@@ -24,7 +24,8 @@ const server = await createServer({ server: { middlewareMode: true }, optimizeDe
 try {
   const {
     buildStudentSubmissionVectorIndex,
-    isStudentSubmissionVectorIndexCurrent
+    isStudentSubmissionVectorIndexCurrent,
+    buildImproveFeedbackWithRagPromptPreview
   } = await server.ssrLoadModule('/src/services/aiMarkingService.js')
 
   const submission = [
@@ -45,6 +46,28 @@ try {
   assert.equal(isStudentSubmissionVectorIndexCurrent({ ...index, version: 999 }, submission), false, 'version mismatch is never current')
 
   console.log('OK: student submission vector index builds, hashes, and invalidates correctly')
+
+  // The notification/preview-title "evidence: semantic match" vs "keyword match" depends on this
+  // mode value making it all the way back out of buildImproveFeedbackWithRagPromptPreview - assert
+  // the plumbing, not just the index itself.
+  const minimalAssessment = { name: 'Test assessment', categories: [] }
+  const withIndex = await buildImproveFeedbackWithRagPromptPreview({
+    assessment: minimalAssessment,
+    categoryName: 'Ethical Considerations',
+    studentSubmission: submission,
+    studentVectorIndex: index
+  })
+  assert.equal(withIndex.submissionRetrievalMode, 'vector', 'should report vector mode when a current student index is supplied')
+
+  const withoutIndex = await buildImproveFeedbackWithRagPromptPreview({
+    assessment: minimalAssessment,
+    categoryName: 'Ethical Considerations',
+    studentSubmission: submission,
+    studentVectorIndex: null
+  })
+  assert.equal(withoutIndex.submissionRetrievalMode, 'lexical', 'should fall back to lexical mode with no student index')
+
+  console.log('OK: submissionRetrievalMode propagates through buildImproveFeedbackWithRagPromptPreview')
 } finally {
   await server.close()
 }
