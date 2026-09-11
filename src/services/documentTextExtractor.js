@@ -131,7 +131,9 @@ function loadImageElement(dataUrl) {
 // Caps embedded-image size sent to the AI - full coverage, every image still sent, just no larger
 // than a vision model can meaningfully use. Falls back to the original on any error rather than
 // dropping the image.
-async function downscaleImageIfNeeded(dataUrl, maxDimension = 1600) {
+// ponytail: 1024px cut vision token cost ~2-3x vs the old 1600px cap; bump back up if diagrams with
+// small text/labels start getting misread.
+async function downscaleImageIfNeeded(dataUrl, maxDimension = 1024) {
   try {
     const img = await loadImageElement(dataUrl)
     const scale = maxDimension / Math.max(img.width, img.height)

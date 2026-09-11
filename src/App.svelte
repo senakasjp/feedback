@@ -23,7 +23,7 @@
 	// Import data services
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
-	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, checkCitationConsistency, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
 	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
 	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
@@ -138,9 +138,7 @@
 	let improvingText = $state({}) // Track which category text is being improved by AI
 	let improvingTextWithRag = $state({}) // Track which category text is being expanded with RAG
 	let evidenceCheckingText = $state({}) // Track which category is running evidence check
-	let checkingCitations = $state(false) // Whole-document citation consistency check in progress
-	let citationCheckReport = $state('')
-	let showCitationCheckModal = $state(false)
+	let improvingAllWithRag = $state(false) // Track bulk "Improve all with RAG" run across every category
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
 	let studentSubmissionDocuments = $state([])
@@ -2116,24 +2114,7 @@
 		return Array.isArray(studentSubmissionDocuments) ? studentSubmissionDocuments : []
 	}
 
-	// Drops the tail of a report from its first Table of Contents/References/Appendix heading onward -
-	// these are never evidence for a marking criterion, and are the single biggest source of prompt bloat.
-	// ponytail: heading search is restricted to the back half of the document to avoid matching a stray
-	// in-body mention (e.g. a Table of Contents entry) or a false positive early in the text. Upgrade path:
-	// parse real heading/style boundaries if a report's structure ever breaks this assumption.
-	function stripTrailingReportBoilerplate(text) {
-		const source = String(text || '')
-		if (source.length < 500) {
-			return source
-		}
-
-		const searchStart = Math.floor(source.length * 0.5)
-		const boundary = /\b(table of contents|references|appendix)\b/i.exec(source.slice(searchStart))
-
-		return boundary ? source.slice(0, searchStart + boundary.index).trim() : source
-	}
-
-	function getCombinedStudentSubmissionText({ includeBoilerplate = false } = {}) {
+	function getCombinedStudentSubmissionText() {
 		const sections = []
 
 		if (studentSubmissionText.trim()) {
@@ -2148,7 +2129,7 @@
 				.join('\n')
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
-				includeBoilerplate ? document.extractedText : stripTrailingReportBoilerplate(document.extractedText),
+				document.extractedText,
 				ocrText
 			].filter(Boolean).join('\n'))
 		})
@@ -2269,11 +2250,24 @@
 		const files = Array.from(input?.files || [])
 		if (files.length === 0) return
 
+		// PDF text extraction is text-layer-only (no OCR fallback for scanned pages) and was the
+		// least reliable path for getting a student's full submission into AI analysis - require
+		// DOCX/TXT/etc instead, where extraction is exhaustive.
+		const pdfFiles = files.filter(file => file.name?.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf')
+		if (pdfFiles.length > 0) {
+			showSuccessNotification(`⚠️ PDF uploads are not supported for student submissions - please use DOCX, TXT, MD, HTML, CSV, or JSON instead. Skipped: ${pdfFiles.map(file => file.name).join(', ')}`)
+		}
+		const nonPdfFiles = files.filter(file => !pdfFiles.includes(file))
+		if (nonPdfFiles.length === 0) {
+			if (input) input.value = ''
+			return
+		}
+
 		uploadingStudentDocument = true
 		try {
 			const uploadedDocuments = []
 			let extractionFailures = 0
-			for (const file of files) {
+			for (const file of nonPdfFiles) {
 				let extractedText = ''
 				let images = []
 				let extractionError = ''
@@ -2452,13 +2446,14 @@
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+			const studentSubmission = getCombinedStudentSubmissionText()
 			const ragArgs = {
 				assessment: assessmentForAi,
 				categoryName,
 				shortFeedback: shortText,
 				answerInstructions,
 				student: getCurrentStudent(),
-				studentSubmission: getCombinedStudentSubmissionText(),
+				studentSubmission,
 				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes: getSelectedEvidenceNotes(categoryName),
 				assessmentParagraphs,
@@ -2488,6 +2483,36 @@
 		} finally {
 			improvingTextWithRag = { ...improvingTextWithRag, [categoryName]: false }
 		}
+	}
+
+	// Run improveTextWithRag for every category in turn, for the currently selected student -
+	// same per-category action as the "Improve with RAG" button, just looped across the assessment.
+	async function improveAllCategoriesWithRag() {
+		improvingAllWithRag = true
+		try {
+			for (const category of currentAssessment?.categories || []) {
+				await improveTextWithRag(category.name)
+			}
+		} finally {
+			improvingAllWithRag = false
+		}
+	}
+
+	// Clear the draft comment box for every category, for the currently selected student -
+	// the undo for "Improve all with RAG" (or any typed/improved draft) before it's saved as a paragraph.
+	// Keys off getGroupedParagraphs()'s own `group.category` (not currentAssessment.categories[].name) -
+	// the textarea reads quickAddText[group.category], and that key can differ from the canonical
+	// category name (e.g. parsed-from-text formatting of an "(LO1)"-style suffix), which silently left
+	// the visible textarea uncleared.
+	function deleteAllStudentRagComments() {
+		const groups = getGroupedParagraphs()
+		if (!groups.length) return
+		if (!confirm('Delete the draft comment for every category for this student? This cannot be undone.')) return
+
+		groups.forEach(group => {
+			quickAddText = { ...quickAddText, [group.category]: '' }
+			aiImprovedText = { ...aiImprovedText, [group.category]: false }
+		})
 	}
 
 	// Fill the main "New paragraph" box from the existing color-banded master template for this
@@ -2691,52 +2716,6 @@
 		}
 	}
 
-	async function runCitationCheck() {
-		if (!currentStudentId) {
-			showSuccessNotification('⚠️ Please select a student first.')
-			return
-		}
-
-		if (!isCurrentAiProviderConfigured()) {
-			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
-			return
-		}
-
-		// Include boilerplate here: the citation check needs the reference list that
-		// getCombinedStudentSubmissionText() normally strips out for rubric-evidence checks.
-		const studentSubmission = getCombinedStudentSubmissionText({ includeBoilerplate: true })
-
-		if (!studentSubmission) {
-			showSuccessNotification('⚠️ Upload student submission documents first.')
-			return
-		}
-
-		checkingCitations = true
-		try {
-			const result = await checkCitationConsistency({
-				assessment: currentAssessment,
-				student: getCurrentStudent(),
-				studentSubmission,
-				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
-				globalSystemInstructions: globalAiSystemInstructions,
-				modelPreference: getCurrentAiModelPreference()
-			})
-
-			citationCheckReport = result.reportText
-			showCitationCheckModal = true
-			showSuccessNotification(`✅ Citation check generated with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)}).`)
-		} catch (error) {
-			console.error('Failed to run citation check:', error)
-			showSuccessNotification(`❌ Citation check failed: ${error.message}`)
-		} finally {
-			checkingCitations = false
-		}
-	}
-
-	function closeCitationCheckModal() {
-		showCitationCheckModal = false
-	}
-
 	async function draftFeedbackWithAI() {
 		if (!currentStudentId) {
 			showSuccessNotification('⚠️ Please select a student first.')
@@ -2867,13 +2846,14 @@
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 				const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+				const studentSubmission = getCombinedStudentSubmissionText()
 				const preview = await buildImproveFeedbackWithRagPromptPreview({
 					assessment: assessmentForAi,
 					categoryName,
 					shortFeedback: shortText,
 					answerInstructions,
 					student: getCurrentStudent(),
-					studentSubmission: getCombinedStudentSubmissionText(),
+					studentSubmission,
 					studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 					evidenceNotes: getSelectedEvidenceNotes(categoryName),
 					assessmentParagraphs,
@@ -6346,7 +6326,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// oversized row alone on a page.
 		const buildAssessmentHtmlStyleText = (fontSizePt, cellPaddingPx) => `
 			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: ${fontSizePt}pt; color: #000 !important; background: #fff !important; }
-			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
+			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; margin-bottom: 40px; }
 			.pdf-assessment-html th,
 			.pdf-assessment-html td {
 				padding: ${cellPaddingPx}px ${Math.max(4, Math.round(cellPaddingPx * 0.83))}px !important;
@@ -6441,9 +6421,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				}
 			})
 
-			// Build UI-order paragraph cache by category for position lookup
+			// Build UI-order paragraph cache by category for position lookup.
+			// Keyed with the same paren-stripping `normalize` as rowKey/effectiveKey above -
+			// groupedParagraphCaches.categoryParagraphsByNormalized uses normalizeCategoryName
+			// instead, which keeps "(LO1)"-style suffixes and never matches, so the highlight
+			// silently never applies for any category named that way.
 			const getCategoryParagraphsInOrder = (catKey) => {
-				return groupedParagraphCaches.categoryParagraphsByNormalized[catKey] || []
+				const group = groupedParagraphs.find(g => normalize(g.category) === catKey)
+				return group ? Object.values(group.knowledgeAreas || {}).flat() : []
 			}
 
 			const tables = Array.from(container.querySelectorAll('table'))
@@ -6833,7 +6818,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		function sanitizeTextForPdf(value) {
 			return String(value ?? '').replace(/[-￿]/g, (ch) => {
 				const code = ch.codePointAt(0)
-				if (code <= 0xff || PDF_SAFE_EXTRA_CODEPOINTS.has(code)) return ch
+				if (code <= 0x17f || PDF_SAFE_EXTRA_CODEPOINTS.has(code)) return ch // Latin-1 + Latin Extended-A (macrons)
 				return PDF_CHAR_FALLBACK[code] ?? '?'
 			})
 		}
@@ -6846,6 +6831,37 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const originalSplit = doc.splitTextToSize.bind(doc)
 			doc.splitTextToSize = (text, ...rest) => originalSplit(sanitizeTextForPdf(text), ...rest)
 			return doc
+		}
+
+		// jsPDF's standard fonts can't render macrons at all (see above), so PDFs need a real
+		// Unicode font embedded. NotoSans (SIL OFL, public/fonts/) covers Latin Extended-A. Base64
+		// payloads are cached at module scope since the font bytes never change across exports;
+		// only the per-document addFont registration needs repeating for each new jsPDF instance.
+		let notoSansRegularBase64 = null
+		let notoSansBoldBase64 = null
+
+		async function fetchFontAsBase64(url) {
+			const buffer = await (await fetch(url)).arrayBuffer()
+			const bytes = new Uint8Array(buffer)
+			let binary = ''
+			const chunkSize = 0x8000
+			for (let i = 0; i < bytes.length; i += chunkSize) {
+				binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize))
+			}
+			return btoa(binary)
+		}
+
+		async function registerPdfFonts(doc) {
+			if (!notoSansRegularBase64) {
+				notoSansRegularBase64 = await fetchFontAsBase64('/fonts/NotoSans-Regular.ttf')
+			}
+			if (!notoSansBoldBase64) {
+				notoSansBoldBase64 = await fetchFontAsBase64('/fonts/NotoSans-Bold.ttf')
+			}
+			doc.addFileToVFS('NotoSans-Regular.ttf', notoSansRegularBase64)
+			doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal')
+			doc.addFileToVFS('NotoSans-Bold.ttf', notoSansBoldBase64)
+			doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold')
 		}
 
 		async function generatePDF() {
@@ -6892,6 +6908,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const defaultMargin = 25 // Slightly larger margin for better breathing room
 		const needsLandscape = !lockPdfPortrait && shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
 		const doc = makePdfTextSafe(new jsPDF({ orientation: 'portrait' })) // keep first page portrait; switch later if needed
+		await registerPdfFonts(doc)
 		const headingText = 'Feedback Report'
 		const headingFontSize = 16
 		
@@ -6901,7 +6918,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const maxLineWidth = pageWidth - (margin * 2)
 
 		// Prepare heading metrics up-front so spacing is consistent
-		doc.setFont('helvetica', 'bold')
+		doc.setFont('NotoSans', 'bold')
 		doc.setFontSize(headingFontSize)
 		const headingMetrics = doc.getTextDimensions
 			? doc.getTextDimensions(headingText)
@@ -6909,7 +6926,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const headingHeight = headingMetrics?.h || /** @type {any} */ (doc.internal).getLineHeight?.() || 10
 
 		const drawHeading = () => {
-			doc.setFont('helvetica', 'bold')
+			doc.setFont('NotoSans', 'bold')
 			doc.setFontSize(headingFontSize)
 			doc.text(headingText, pageWidth / 2, margin, { align: 'center' })
 		}
@@ -6938,7 +6955,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						
 						// Draw heading beneath the image
 						const headingY = yPosition + imageHeight + headingHeight + 2
-						doc.setFont('helvetica', 'bold')
+						doc.setFont('NotoSans', 'bold')
 						doc.setFontSize(headingFontSize)
 						doc.text(headingText, pageWidth / 2, headingY, { align: 'center' })
 						
@@ -6968,7 +6985,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	async function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName, useLandscapeForContent = false) {
 		// Try to set a font that's closer to Oxygen (Arial or Helvetica)
 		try {
-			doc.setFont('helvetica', 'normal')
+			doc.setFont('NotoSans', 'normal')
 		} catch (e) {
 		// Fallback to default font if helvetica is not available
 			console.log('Helvetica not available, using default font')
@@ -6989,7 +7006,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const lineSpacing = 10
 		const headerHeight = headerLines.length * lineSpacing
 		let headerY = pageHeight - margin - headerHeight
-		doc.setFont('helvetica', 'bold')
+		doc.setFont('NotoSans', 'bold')
 		doc.setFontSize(10)
 		headerLines.forEach(({ text, color }) => {
 			doc.setTextColor(...color)
@@ -7018,7 +7035,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			: doc.internal.getNumberOfPages()
 		
 		// Reset font to normal for content
-		doc.setFont('helvetica', 'normal')
+		doc.setFont('NotoSans', 'normal')
 		
 		// Render assessment HTML (as-is) into the PDF before content
 		const matchedCategoriesFromTable = new Set()
@@ -7257,14 +7274,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				skipCurrentCategory = false
 
 				// Bold font for ALL category headers (any line ending with ':')
-				doc.setFont('helvetica', 'bold')
+				doc.setFont('NotoSans', 'bold')
 				doc.setFontSize(currentBodyFontSize) // Same size as other content
 
 				const headerText = categoryCoveredByTable ? `${categoryName}:` : headerInfo.display
 				doc.text(headerText, margin, yPosition)
 
 				// Reset font to normal for content
-				doc.setFont('helvetica', 'normal')
+				doc.setFont('NotoSans', 'normal')
 				doc.setFontSize(currentBodyFontSize) // Back to regular size
 				yPosition += headerGap() // Controlled gap after headers
 			} else {
@@ -7559,21 +7576,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						disabled={promptPreviewMessages.length === 0}
 					>
 						<i class="bi bi-chat-left-text me-1"></i>Last Prompt
-					</button>
-				</li>
-				<li class="nav-item">
-					<button
-						class="btn btn-outline-light btn-sm ms-2"
-						onclick={runCitationCheck}
-						title="Check that every reference has an in-text citation (whole document)"
-						aria-label="Check citations"
-						disabled={checkingCitations || !currentStudentId}
-					>
-						{#if checkingCitations}
-							<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Checking...
-						{:else}
-							<i class="bi bi-journal-check me-1"></i>Check Citations
-						{/if}
 					</button>
 				</li>
 				<li class="nav-item">
@@ -8837,7 +8839,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																id="studentDocumentUpload"
 																type="file"
 																class="form-control form-control-sm"
-																accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.json"
+																accept=".docx,.txt,.md,.html,.htm,.csv,.json"
 														multiple
 														onchange={handleStudentSubmissionUpload}
 														disabled={!currentStudentId || uploadingStudentDocument}
@@ -8937,16 +8939,42 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									<div class="px-3 pt-3">
 										{#if currentAssessment?.categories?.length > 0}
 											<div class="border rounded p-3 bg-light mb-3">
-												<button
-													type="button"
-													class="btn btn-outline-success btn-sm"
-													onclick={fillAllCategoryColorBandTemplates}
-												>
-													<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
-												</button>
-												<div class="small text-muted mt-2 mb-0">
-													Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
-												</div>
+												{#if currentStudentId}
+													<button
+														type="button"
+														class="btn btn-outline-info btn-sm"
+														onclick={improveAllCategoriesWithRag}
+														disabled={improvingAllWithRag}
+													>
+														{#if improvingAllWithRag}
+															<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+															Improving all with RAG...
+														{:else}
+															<i class="bi bi-diagram-3 me-1"></i>Improve all with RAG
+														{/if}
+													</button>
+													<button
+														type="button"
+														class="btn btn-outline-danger btn-sm ms-2"
+														onclick={deleteAllStudentRagComments}
+													>
+														<i class="bi bi-trash me-1"></i>Delete all student RAG comments
+													</button>
+													<div class="small text-muted mt-2 mb-0">
+														Runs "Improve with RAG" for every category in turn, expanding each category's draft using the rubric and this student's submission. Delete clears every category's draft comment for this student.
+													</div>
+												{:else}
+													<button
+														type="button"
+														class="btn btn-outline-success btn-sm"
+														onclick={fillAllCategoryColorBandTemplates}
+													>
+														<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
+													</button>
+													<div class="small text-muted mt-2 mb-0">
+														Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
+													</div>
+												{/if}
 											</div>
 										{/if}
 										<div class="border rounded p-3 mb-3">
@@ -10307,26 +10335,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn btn-secondary" onclick={closePromptPreviewModal}>Close</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- Citation Check Modal -->
-{#if showCitationCheckModal}
-	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
-		<div class="modal-dialog modal-lg modal-dialog-scrollable">
-			<div class="modal-content">
-				<div class="modal-header bg-dark text-white">
-					<h5 class="modal-title"><i class="bi bi-journal-check me-2"></i>Citation Check</h5>
-					<button type="button" class="btn-close btn-close-white" onclick={closeCitationCheckModal} aria-label="Close citation check"></button>
-				</div>
-				<div class="modal-body">
-					<pre class="mb-0 prompt-preview-pre">{citationCheckReport}</pre>
-				</div>
-				<div class="modal-footer">
-					<button type="button" class="btn btn-secondary" onclick={closeCitationCheckModal}>Close</button>
 				</div>
 			</div>
 		</div>

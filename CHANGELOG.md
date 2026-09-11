@@ -1,5 +1,27 @@
 # Changelog
 
+> **Simplified (Sep 2026):** Removed "Check Citations" and the per-student excerpting/embedding logic for "Improve with RAG" — both were point-fixes for the same underlying gap (narrowing the student's submission drops anything that doesn't score well by keyword/semantic similarity to a category, e.g. a bibliography or a contradicting claim in another chapter). "Improve with RAG" now sends the student's full submission text for every category, the same way "Evidence Check" and "AI Draft" already did — no excerpting, no special cases.
+
+> **Fix (Sep 2026):** "Improve with RAG", "View RAG Prompt", and "AI Draft" no longer delete a student's reference list before evaluating a referencing/APA/citations category — they were still calling the boilerplate-stripping default (already fixed for Evidence Check and Check Citations, but missed here), so those categories could be marked down for a "missing" reference list that was actually just cut before the AI ever saw it. The reference list is now also guaranteed to reach the prompt for referencing-focused categories specifically, since bibliographic text rarely ranks highly by keyword or semantic similarity on its own.
+
+> **Improved (Sep 2026):** "Improve with RAG" and "View RAG Prompt" now rank the student's submission evidence by semantic similarity (embedding-based, cached per student) instead of literal keyword overlap with the category name — a relevant paragraph phrased differently than the category no longer scores 0 and gets dropped. Falls back to the previous keyword scoring if embeddings are unavailable. Also removed PDF as an accepted upload format for student submissions (no OCR fallback, so scanned PDFs silently contributed nothing) — DOCX/TXT/MD/HTML/CSV/JSON only; assessment reference documents still accept PDF.
+
+> **Fix (Sep 2026):** PDF exports now render macrons correctly (Māori, Ngāti, Tūhoe, etc.) — jsPDF's built-in fonts only support WinAnsi/Latin-1, so macron vowels fell outside the character sanitizer's safe range and were silently replaced with `?`. PDFs now embed NotoSans, which covers Latin Extended-A.
+
+> **Fix (Sep 2026):** "Evidence Check" no longer strips the student's reference list/appendix before looking for evidence — it was running submissions through the same boilerplate-stripping step used to cut prompt bloat elsewhere, which silently deleted everything from a References/Appendix heading onward and produced false "no reference list" verdicts on submissions that do have one.
+
+> **New (Sep 2026):** Added a "Check Citations" button (global, per-student) that reads the student's full uploaded documents — reference list included — and asks the AI to flag reference entries with no matching in-text citation, and in-text citations with no matching reference entry.
+
+> **Fix (Sep 2026):** "Delete all student RAG comments" now actually clears the visible draft textareas — it was keying off the canonical category name instead of the paragraph-derived key the textarea itself reads, so the clear silently missed categories where the two differ (e.g. an "(LO1)"-style suffix).
+
+> **Fix (Sep 2026):** PDF export now correctly highlights the selected rubric cell for categories named with an "(LO1)"-style suffix — fixed a category-name normalization mismatch between the row-matching code and the paragraph-position lookup that silently skipped highlighting.
+
+> **New (Sep 2026):** When a student is selected, the paragraph panel shows an "Improve all with RAG" button (with a progress spinner) in place of "Fill All Category Color Bands", running RAG improvement across every category in one click. A "Delete all student RAG comments" button next to it clears every category's draft comment for that student.
+
+> **Perf (Sep 2026):** Reduced vision-API cost on document uploads by shrinking the embedded-image downscale cap from 1600px to 1024px.
+
+> **New (Sep 2026):** PDF export now adds a 40px gap below every table in the assessment HTML content.
+
 > **Docs (Aug 2026):** Documented a desktop-app deploy gotcha — `/Applications/Feedback.app` can be a stale build missing features present in source. See `TROUBLESHOOTING.md` → "Desktop App Doesn't Reflect Recent Code Changes" and `CLAUDE.md` project patterns for diagnosis/fix (`BULD_DEPLOY.SH`).
 
 > **New:** Saving a student evaluation now automatically deselects the student and resets the dropdown to 'Select a student...' to prevent accidental edits.
