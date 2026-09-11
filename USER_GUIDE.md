@@ -2,11 +2,9 @@
 
 > **Fix (Sep 2026):** "Improve with RAG", "View RAG Prompt", and "AI Draft" now see a student's full submission including the reference list — a referencing/APA category could previously be marked down for a "missing" reference list that was actually just cut before the AI saw it.
 
-> **Improved (Sep 2026):** "Improve with RAG" now picks supporting evidence from the student's submission by meaning, not just matching words — so a relevant paragraph phrased differently than the category name is no longer skipped. Student submissions no longer accept PDF uploads (use DOCX, TXT, MD, HTML, CSV, or JSON) — PDF text extraction had no OCR fallback and could silently miss content in scanned files.
+> **Simplified (Sep 2026):** "Improve with RAG" now sends the student's full submission text for every category — no excerpting, so nothing (a bibliography, a claim in another chapter) can be silently left out because it didn't match the category's wording. Student submissions no longer accept PDF uploads (use DOCX, TXT, MD, HTML, CSV, or JSON) — PDF text extraction had no OCR fallback and could silently miss content in scanned files.
 
 > **Fix (Sep 2026):** PDF exports now correctly print macrons (Māori, Ngāti, Tūhoe, etc.) instead of showing `?` in their place.
-
-> **New (Sep 2026):** A "Check Citations" button in the header checks the currently-selected student's full uploaded documents for reference entries with no matching in-text citation (and vice versa). "Evidence Check" was also fixed so it no longer skips the student's reference list/appendix when looking for evidence — it previously could wrongly say a reference list was missing when one was present.
 
 > **New (Sep 2026):** PDF rubric highlighting now works correctly for categories named with an "(LO1)"-style suffix. When a student is selected, the paragraph panel offers "Improve all with RAG" (runs RAG improvement across every category at once) and "Delete all student RAG comments" (clears every category's draft comment for that student — fixed to actually clear every visible textarea). PDF tables now get a 40px gap below them.
 
