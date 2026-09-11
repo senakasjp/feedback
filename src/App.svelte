@@ -23,7 +23,7 @@
 	// Import data services
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
-	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, buildStudentSubmissionVectorIndex, checkCitationConsistency, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent, isStudentSubmissionVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
 	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
 	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
@@ -139,13 +139,9 @@
 	let improvingTextWithRag = $state({}) // Track which category text is being expanded with RAG
 	let evidenceCheckingText = $state({}) // Track which category is running evidence check
 	let improvingAllWithRag = $state(false) // Track bulk "Improve all with RAG" run across every category
-	let checkingCitations = $state(false) // Whole-document citation consistency check in progress
-	let citationCheckReport = $state('')
-	let showCitationCheckModal = $state(false)
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
 	let studentSubmissionDocuments = $state([])
-	let studentSubmissionVectorIndex = $state(null) // Embedding index over the current student's submission paragraphs, cached until the submission changes
 	let assessmentReferenceDocuments = $state([])
 	let selectedAssessmentDocumentType = $state('assignment-brief')
 	let selectedStudentDocumentType = $state('submission')
@@ -774,7 +770,6 @@
 			studentName = ''
 			studentSubmissionText = ''
 			studentSubmissionDocuments = []
-			studentSubmissionVectorIndex = null
 			studentPhoto = ''
 			// No studentImage - only header photo for assessment
 			selectedParagraphs = new Set()
@@ -1296,7 +1291,6 @@
 						}
 					}
 					studentSubmissionDocuments = []
-			studentSubmissionVectorIndex = null
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
@@ -1432,7 +1426,6 @@
 						}
 					}
 					studentSubmissionDocuments = []
-			studentSubmissionVectorIndex = null
 					assessmentHtml = currentAssessment?.rubricHtml || ''
 					lockPdfPortrait = Boolean(currentAssessment?.lockPdfPortrait)
 					tableRowCategoryMap = currentAssessment?.tableRowCategoryMap || {}
@@ -1469,7 +1462,6 @@
 		studentName = ''
 		studentSubmissionText = ''
 		studentSubmissionDocuments = []
-			studentSubmissionVectorIndex = null
 		// No studentImage - only header photo for assessment
 		assessmentHtml = ''
 		lockPdfPortrait = false
@@ -1729,7 +1721,6 @@
 		studentName = ''
 		studentSubmissionText = ''
 		studentSubmissionDocuments = []
-			studentSubmissionVectorIndex = null
 		assessmentReferenceDocuments = []
 		// No studentImage - only header photo for assessment
 	}
@@ -1763,7 +1754,6 @@
 				studentName = ''
 				studentSubmissionText = ''
 				studentSubmissionDocuments = []
-			studentSubmissionVectorIndex = null
 				assessmentReferenceDocuments = []
 				// No studentImage - only header photo for assessment
 			}
@@ -2156,7 +2146,6 @@
 			studentName: studentName,
 			studentSubmissionText: studentSubmissionText.trim(),
 			studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
-			studentSubmissionVectorIndex: studentSubmissionVectorIndex,
 			studentImage: studentPhoto || '',
 			categoryMarks: { ...categoryMarks },
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
@@ -2442,36 +2431,6 @@
 		return { assessmentForAi, vectorIndex }
 	}
 
-	function getSubmissionRetrievalSuffix(submissionRetrievalMode) {
-		if (submissionRetrievalMode === 'vector') return ', evidence: semantic match'
-		if (submissionRetrievalMode === 'lexical') return ', evidence: keyword match'
-		return ''
-	}
-
-	// Embeds the student's own submission (paragraph-per-chunk) so "Improve with RAG" can rank
-	// evidence by semantic similarity to a category instead of literal keyword overlap. Cached per
-	// student/submission-content like the assessment vector index; falls back to lexical scoring in
-	// aiMarkingService if embedding fails (no API key, network error, etc) rather than blocking.
-	async function ensureStudentSubmissionVectorIndex(studentSubmission) {
-		if (!studentSubmission?.trim()) {
-			return null
-		}
-
-		if (isStudentSubmissionVectorIndexCurrent(studentSubmissionVectorIndex, studentSubmission)) {
-			return studentSubmissionVectorIndex
-		}
-
-		try {
-			const vectorIndex = await buildStudentSubmissionVectorIndex({ studentSubmission })
-			studentSubmissionVectorIndex = vectorIndex
-			await persistCurrentStudentEvaluationData()
-			return vectorIndex
-		} catch (error) {
-			console.error('Failed to build student submission vector index, falling back to lexical scoring:', error)
-			return null
-		}
-	}
-
 	async function improveTextWithRag(categoryName) {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
@@ -2488,7 +2447,6 @@
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
 			const studentSubmission = getCombinedStudentSubmissionText()
-			const studentVectorIndex = await ensureStudentSubmissionVectorIndex(studentSubmission)
 			const ragArgs = {
 				assessment: assessmentForAi,
 				categoryName,
@@ -2501,7 +2459,6 @@
 				assessmentParagraphs,
 				priorEvaluations,
 				vectorIndex,
-				studentVectorIndex,
 				globalSystemInstructions: globalAiSystemInstructions
 			}
 			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
@@ -2519,7 +2476,7 @@
 
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
-			showSuccessNotification(`✨ Feedback expanded with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)} / ${result.retrievalMode || 'context'}${getSubmissionRetrievalSuffix(result.submissionRetrievalMode)}).`)
+			showSuccessNotification(`✨ Feedback expanded with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)} / ${result.retrievalMode || 'context'}).`)
 		} catch (error) {
 			console.error('Failed to improve text with RAG:', error)
 			showSuccessNotification(`❌ Failed to improve with RAG: ${error.message}`)
@@ -2759,50 +2716,6 @@
 		}
 	}
 
-	async function runCitationCheck() {
-		if (!currentStudentId) {
-			showSuccessNotification('⚠️ Please select a student first.')
-			return
-		}
-
-		if (!isCurrentAiProviderConfigured()) {
-			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
-			return
-		}
-
-		const studentSubmission = getCombinedStudentSubmissionText()
-
-		if (!studentSubmission) {
-			showSuccessNotification('⚠️ Upload student submission documents first.')
-			return
-		}
-
-		checkingCitations = true
-		try {
-			const result = await checkCitationConsistency({
-				assessment: currentAssessment,
-				student: getCurrentStudent(),
-				studentSubmission,
-				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
-				globalSystemInstructions: globalAiSystemInstructions,
-				modelPreference: getCurrentAiModelPreference()
-			})
-
-			citationCheckReport = result.reportText
-			showCitationCheckModal = true
-			showSuccessNotification(`✅ Citation check generated with ${getAiModelLabel(result.usedModel)} (${getReasoningEffortLabel(result.usedReasoningEffort)}).`)
-		} catch (error) {
-			console.error('Failed to run citation check:', error)
-			showSuccessNotification(`❌ Citation check failed: ${error.message}`)
-		} finally {
-			checkingCitations = false
-		}
-	}
-
-	function closeCitationCheckModal() {
-		showCitationCheckModal = false
-	}
-
 	async function draftFeedbackWithAI() {
 		if (!currentStudentId) {
 			showSuccessNotification('⚠️ Please select a student first.')
@@ -2934,7 +2847,6 @@
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 				const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
 				const studentSubmission = getCombinedStudentSubmissionText()
-				const studentVectorIndex = await ensureStudentSubmissionVectorIndex(studentSubmission)
 				const preview = await buildImproveFeedbackWithRagPromptPreview({
 					assessment: assessmentForAi,
 					categoryName,
@@ -2947,12 +2859,11 @@
 					assessmentParagraphs,
 					priorEvaluations,
 					vectorIndex,
-					studentVectorIndex,
 					globalSystemInstructions: globalAiSystemInstructions
 				})
 
 			promptPreviewMessages = preview.messages
-			promptPreviewTitle = `RAG Prompt - ${categoryName}${getSubmissionRetrievalSuffix(preview.submissionRetrievalMode)}`
+			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			showPromptPreviewModal = true
 		} catch (error) {
 			console.error('Failed to build prompt preview:', error)
@@ -4499,7 +4410,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				studentName = ''
 				studentSubmissionText = ''
 				studentSubmissionDocuments = []
-			studentSubmissionVectorIndex = null
 				studentPhoto = ''
 				// No studentImage - only header photo for assessment
 				selectedParagraphs.clear()
@@ -5050,7 +4960,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		let savedStudentSubmissionText = ''
 		let savedStudentImage = ''
 		let savedStudentSubmissionDocuments = []
-		let savedStudentSubmissionVectorIndex = null
 		let savedCategoryMarks = {}
 		let savedManualTotalMarks = ''
 		let savedQuickAddText = {}
@@ -5090,7 +4999,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			savedStudentName = evaluationData.studentName || ''
 			savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
 			savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
-			savedStudentSubmissionVectorIndex = evaluationData.studentSubmissionVectorIndex || null
 			savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
 			savedCategoryMarks = evaluationData.categoryMarks || {}
 			savedManualTotalMarks = evaluationData.manualTotalMarks || ''
@@ -5136,7 +5044,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		studentName = savedStudentName || getCurrentStudent()?.displayName || ''
 		studentSubmissionText = savedStudentSubmissionText
 		studentSubmissionDocuments = Array.isArray(savedStudentSubmissionDocuments) ? savedStudentSubmissionDocuments : []
-	studentSubmissionVectorIndex = savedStudentSubmissionVectorIndex || null
 		studentPhoto = savedStudentImage || getStudentPhoto(getCurrentStudent()) || ''
 		if (savedStudentImage && requestedStudentId) {
 			students = students.map(student => (
@@ -7669,21 +7576,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						disabled={promptPreviewMessages.length === 0}
 					>
 						<i class="bi bi-chat-left-text me-1"></i>Last Prompt
-					</button>
-				</li>
-				<li class="nav-item">
-					<button
-						class="btn btn-outline-light btn-sm ms-2"
-						onclick={runCitationCheck}
-						title="Check that every reference has an in-text citation (whole document)"
-						aria-label="Check citations"
-						disabled={checkingCitations || !currentStudentId}
-					>
-						{#if checkingCitations}
-							<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Checking...
-						{:else}
-							<i class="bi bi-journal-check me-1"></i>Check Citations
-						{/if}
 					</button>
 				</li>
 				<li class="nav-item">
@@ -10443,26 +10335,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn btn-secondary" onclick={closePromptPreviewModal}>Close</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- Citation Check Modal -->
-{#if showCitationCheckModal}
-	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
-		<div class="modal-dialog modal-lg modal-dialog-scrollable">
-			<div class="modal-content">
-				<div class="modal-header bg-dark text-white">
-					<h5 class="modal-title"><i class="bi bi-journal-check me-2"></i>Citation Check</h5>
-					<button type="button" class="btn-close btn-close-white" onclick={closeCitationCheckModal} aria-label="Close citation check"></button>
-				</div>
-				<div class="modal-body">
-					<pre class="mb-0 prompt-preview-pre">{citationCheckReport}</pre>
-				</div>
-				<div class="modal-footer">
-					<button type="button" class="btn btn-secondary" onclick={closeCitationCheckModal}>Close</button>
 				</div>
 			</div>
 		</div>

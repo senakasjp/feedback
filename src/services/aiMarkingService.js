@@ -75,10 +75,6 @@ function tokenize(value) {
   return Array.from(new Set(normaliseKey(value).split(' ').filter(token => token.length > 2)))
 }
 
-function unique(items = []) {
-  return Array.from(new Set(items.filter(Boolean)))
-}
-
 function scoreTextMatch(queryTokens, candidateText, sourceType = '') {
   const candidateTokens = new Set(tokenize(candidateText))
   let score = 0
@@ -287,167 +283,6 @@ function buildQueryText({ assessment, studentSubmission = '', evidenceNotes = ''
     evidenceNotes,
     criteria.map(criterion => criterion.criterion_name).join(' ')
   ].filter(Boolean).join(' ')
-}
-
-const STUDENT_VECTOR_INDEX_VERSION = 1
-
-function splitSubmissionIntoParagraphs(studentSubmission = '') {
-  return String(studentSubmission || '')
-    .trim()
-    .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)
-    .map(paragraph => paragraph.replace(/[ \t\f\v]+/g, ' ').trim())
-    .filter(Boolean)
-}
-
-function buildStudentSubmissionChunks(studentSubmission = '') {
-  return splitSubmissionIntoParagraphs(studentSubmission).map((text, index) => ({
-    id: `submission-${index + 1}`,
-    type: 'submission',
-    label: `Submission paragraph ${index + 1}`,
-    text
-  }))
-}
-
-export async function buildStudentSubmissionVectorIndex({ studentSubmission = '' }) {
-  const chunks = buildStudentSubmissionChunks(studentSubmission)
-  const embeddings = await createEmbeddings(chunks.map(chunk => chunk.text))
-
-  return {
-    version: STUDENT_VECTOR_INDEX_VERSION,
-    embeddingModel: EMBEDDING_MODEL,
-    createdAt: new Date().toISOString(),
-    sourceHash: normaliseWhitespace(studentSubmission),
-    chunks: chunks.map((chunk, index) => ({ ...chunk, embedding: embeddings[index] || null }))
-  }
-}
-
-export function isStudentSubmissionVectorIndexCurrent(vectorIndex, studentSubmission = '') {
-  return Boolean(
-    vectorIndex &&
-    vectorIndex.version === STUDENT_VECTOR_INDEX_VERSION &&
-    Array.isArray(vectorIndex.chunks) &&
-    vectorIndex.sourceHash === normaliseWhitespace(studentSubmission)
-  )
-}
-
-// Ranks submission paragraphs by combined lexical + semantic similarity to the category/evidence
-// query when a current embedding index is available (same lexicalScore + semanticScore*20 formula
-// as buildAssessmentRagContext), falling back to lexical-only scoring - matching the same paragraphs
-// 1:1 by index since both come from splitSubmissionIntoParagraphs on the same source text.
-async function scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, vectorIndex }) {
-  const lexicalOnly = () => ({
-    scores: paragraphs.map(paragraph => scoreTextMatch(queryTokens, paragraph, 'submission')),
-    mode: 'lexical'
-  })
-
-  const indexUsable = isStudentSubmissionVectorIndexCurrent(vectorIndex, paragraphs.join('\n\n'))
-    && vectorIndex.chunks.length === paragraphs.length
-  if (!indexUsable || !queryText.trim()) {
-    return lexicalOnly()
-  }
-
-  try {
-    const [queryEmbedding] = await createEmbeddings([queryText])
-    const scores = paragraphs.map((paragraph, index) => {
-      const lexicalScore = scoreTextMatch(queryTokens, paragraph, 'submission')
-      const semanticScore = cosineSimilarity(queryEmbedding, vectorIndex.chunks[index]?.embedding) ?? 0
-      return lexicalScore + (semanticScore * 20)
-    })
-    return { scores, mode: 'vector' }
-  } catch {
-    return lexicalOnly()
-  }
-}
-
-async function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', vectorIndex = null, maxParagraphs = 6, maxChars = 2200 }) {
-  const sourceText = String(studentSubmission || '').trim()
-  if (!sourceText) {
-    return { excerpt: '', mode: 'none' }
-  }
-
-  const paragraphs = splitSubmissionIntoParagraphs(sourceText)
-
-  if (paragraphs.length === 0) {
-    return { excerpt: '', mode: 'none' }
-  }
-
-  // Deliberately excludes shortFeedback (the assessor's/AI's own draft) from the search query:
-  // "Improve with RAG" writes its result back into that same draft field, so on a re-run the draft
-  // is the tool's own prior (possibly wrong) output rather than a neutral hint - scoring against its
-  // wording creates a feedback loop that drifts the excerpt toward whatever the last wrong answer
-  // happened to mention, instead of the actual category content.
-  const queryText = [categoryName, evidenceNotes].filter(Boolean).join('\n\n')
-  const queryTokens = unique([
-    ...tokenize(categoryName),
-    ...tokenize(evidenceNotes)
-  ])
-
-  const { scores: paragraphScores, mode: submissionRetrievalMode } = queryTokens.length > 0
-    ? await scoreSubmissionParagraphs({ paragraphs, queryTokens, queryText, vectorIndex })
-    : { scores: paragraphs.map(() => 0), mode: 'none' }
-
-  // Headings and table-of-contents entries (e.g. "1. Executive Summary" or "1. Executive Summary .... 1")
-  // trivially match a category's own name with nothing else - if those are the only matches, they crowd
-  // out the real body paragraph (which usually doesn't repeat the category name verbatim) instead of
-  // falling back to it. Requiring a minimum length keeps them from counting as a "real" match.
-  const MIN_CONTENT_MATCH_LENGTH = 40
-  const matches = paragraphs
-    .map((paragraph, index) => ({
-      paragraph,
-      index,
-      score: paragraphScores[index] || 0
-    }))
-    .filter(item => item.score > 0)
-
-  const scored = matches
-    .filter(item => item.paragraph.length >= MIN_CONTENT_MATCH_LENGTH)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-
-  const headingOnlyMatches = matches.filter(item => item.paragraph.length < MIN_CONTENT_MATCH_LENGTH)
-
-  let candidatePool
-  if (scored.length > 0) {
-    candidatePool = scored
-  } else if (headingOnlyMatches.length > 0) {
-    // No real content matched the category name, only heading/ToC-style lines. A ToC entry always
-    // appears earlier in the document than the section it points to, so anchor on the LAST such
-    // match (the actual section heading) and take what follows it - a section's body normally sits
-    // immediately after its own heading, not at the very start of the document (which is usually a
-    // title page, unrelated to any specific category).
-    const anchorIndex = headingOnlyMatches[headingOnlyMatches.length - 1].index
-    candidatePool = paragraphs
-      .map((paragraph, index) => ({ paragraph, index, score: 0 }))
-      .filter(item => item.index > anchorIndex)
-  } else {
-    candidatePool = paragraphs.map((paragraph, index) => ({ paragraph, index, score: 0 }))
-  }
-
-  const selected = candidatePool
-    .slice(0, maxParagraphs)
-    .sort((a, b) => a.index - b.index)
-
-  let excerpt = selected.map(item => item.paragraph).join('\n\n').trim()
-  if (excerpt.length > maxChars) {
-    excerpt = `${excerpt.slice(0, maxChars).trim()}...`
-  }
-
-  // A bibliography reads as citation data (author names, years, titles), not prose "about"
-  // citations - it rarely ranks highly by lexical OR semantic similarity to a referencing-focused
-  // category, even though it's exactly the evidence that category needs. Continuous semantic
-  // scores also mean `scored` above is almost never empty, so the heading-anchor fallback that
-  // used to catch this for pure keyword scoring rarely fires anymore. Guarantee inclusion here
-  // instead, only when the category/evidence notes are clearly about referencing.
-  if (/\b(referenc|citation|bibliograph|apa)\w*\b/i.test(`${categoryName} ${evidenceNotes}`)) {
-    const referenceHeadingIndex = paragraphs.findIndex(paragraph => /^(references|reference list|bibliography|works cited)\s*$/i.test(paragraph.trim()))
-    const alreadyIncluded = referenceHeadingIndex !== -1 && selected.some(item => item.index === referenceHeadingIndex)
-    if (referenceHeadingIndex !== -1 && !alreadyIncluded) {
-      const referenceExcerpt = paragraphs.slice(referenceHeadingIndex, referenceHeadingIndex + maxParagraphs).join('\n\n').slice(0, maxChars)
-      excerpt = excerpt ? `${excerpt}\n\n${referenceExcerpt}` : referenceExcerpt
-    }
-  }
-
-  return { excerpt, mode: submissionRetrievalMode }
 }
 
 function hashChunkSource({ assessment, candidateChunks = [], priorEvaluations = [] }) {
@@ -751,14 +586,8 @@ function buildStudentSubmissionImageMessages(images = []) {
   ]
 }
 
-export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentVectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
-  const { excerpt: submissionExcerpt, mode: submissionRetrievalMode } = await buildRelevantStudentEvidenceExcerpt({
-    studentSubmission,
-    categoryName,
-    evidenceNotes,
-    vectorIndex: studentVectorIndex
-  })
-  const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
+export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+  const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, studentSubmission].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
@@ -771,7 +600,6 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
 
   return {
     retrievalMode,
-    submissionRetrievalMode,
     retrievedContext,
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
@@ -789,8 +617,8 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           'Assessor short draft:',
           shortFeedback || 'Not provided.',
           '',
-          'Relevant student evidence excerpt:',
-          submissionExcerpt || 'Not provided.',
+          'Student submission:',
+          studentSubmission || 'Not provided.',
           '',
           'Assessor evidence notes:',
           evidenceNotes || 'Not provided.',
@@ -871,8 +699,8 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
   }
 }
 
-export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentVectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
-  const { messages, retrievedContext, retrievalMode, submissionRetrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
+export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+  const { messages, retrievedContext, retrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
     assessment,
     categoryName,
     shortFeedback,
@@ -883,7 +711,6 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     assessmentParagraphs,
     priorEvaluations,
     vectorIndex,
-    studentVectorIndex,
     globalSystemInstructions,
     answerInstructions
   })
@@ -918,7 +745,6 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     improvedText,
     retrievedContext,
     retrievalMode,
-    submissionRetrievalMode,
     usedModel: model,
     usedReasoningEffort: reasoningEffort
   }
@@ -1006,66 +832,6 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     reportText,
     retrievedContext,
     retrievalMode,
-    usedModel: model,
-    usedReasoningEffort: reasoningEffort
-  }
-}
-
-export async function checkCitationConsistency({ assessment, student = null, studentSubmission = '', studentSubmissionDocuments = [], globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
-  console.info('Citation check request started', {
-    assessment: assessment?.name || 'Unnamed assessment',
-    student: student?.displayName || student?.id || 'Not specified',
-    submissionLength: String(studentSubmission || '').length
-  })
-
-  const { model, reasoningEffort, rawText, finishReason } = await runChatCompletion({
-    modelPreference,
-    temperature: 0.1,
-    maxTokens: 1600,
-    reasoningEffortOverride: 'low',
-    messages: [
-      ...buildSystemMessages(globalSystemInstructions, ''),
-      ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
-      {
-        role: 'user',
-        content: [
-          'Task: Check citation consistency across the WHOLE student document below, including its reference list/bibliography.',
-          `Assessment: ${assessment?.name || 'Unnamed assessment'}`,
-          `Student: ${student?.displayName || student?.id || 'Not specified'}`,
-          '',
-          'Full student submission (includes reference list, if present):',
-          studentSubmission || 'Not provided.',
-          '',
-          'Output instructions:',
-          '- List every entry in the reference list/bibliography that has NO matching in-text citation anywhere in the document.',
-          '- List every in-text citation that has NO matching entry in the reference list/bibliography.',
-          '- If no reference list is present in the text above, say so explicitly instead of guessing.',
-          '- Do not invent references or citations that are not actually present in the text.',
-          '- Return plain feedback text only, organised under short headings.'
-        ].filter(Boolean).join('\n')
-      }
-    ]
-  })
-
-  const reportText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
-
-  console.info('Citation check response parsed', {
-    finishReason,
-    rawTextLength: rawText.length,
-    reportTextLength: reportText.length,
-    rawTextPreview: rawText.slice(0, 500)
-  })
-
-  if (!reportText) {
-    console.error('Citation check returned no usable text', { rawText, finishReason })
-    if (finishReason === 'length') {
-      throw new Error('The AI provider stopped before producing visible citation-check text. The response hit the token limit.')
-    }
-    throw new Error('No citation-check report was returned from the AI provider')
-  }
-
-  return {
-    reportText,
     usedModel: model,
     usedReasoningEffort: reasoningEffort
   }
