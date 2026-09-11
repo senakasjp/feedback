@@ -865,6 +865,40 @@
 		await insertTableHtmlSnippet(TABLE_HTML_CROSS_SNIPPET, 'Cross snippet')
 	}
 
+	// Mark-range bands: generates the rubric table's header row (e.g. "Excellent (80-100%)")
+	let rubricBandCount = $state(4)
+	let rubricBands = $state([
+		{ label: 'Excellent', lower: 80, upper: 100 },
+		{ label: 'Good', lower: 65, upper: 79 },
+		{ label: 'Average', lower: 50, upper: 64 },
+		{ label: 'Below Average', lower: 0, upper: 49 }
+	])
+
+	function setRubricBandCount(rawValue) {
+		const count = Math.max(1, Math.min(10, Number(rawValue) || 1))
+		rubricBandCount = count
+		const next = rubricBands.slice(0, count)
+		while (next.length < count) {
+			next.push({ label: `Band ${next.length + 1}`, lower: 0, upper: 0 })
+		}
+		rubricBands = next
+	}
+
+	function updateRubricBand(index, field, value) {
+		rubricBands = rubricBands.map((band, i) => i === index ? { ...band, [field]: value } : band)
+	}
+
+	async function insertRubricBandsHeaderRow() {
+		const sectionWidth = 10
+		const bandWidth = rubricBands.length ? Math.floor((100 - sectionWidth) / rubricBands.length) : 0
+		const cells = [`<td style="width: ${sectionWidth}%;"><strong>Section</strong></td>`]
+		for (const band of rubricBands) {
+			const label = String(band.label || 'Band').trim()
+			cells.push(`<td style="width: ${bandWidth}%;"><strong>${label} (${band.lower}–${band.upper}%)</strong></td>`)
+		}
+		await insertTableHtmlSnippet(`<tr>\n${cells.join('\n')}\n</tr>`, 'Bands header row')
+	}
+
 	async function setLockPdfPortrait(checked) {
 		lockPdfPortrait = Boolean(checked)
 		if (currentAssessment) {
@@ -1024,6 +1058,9 @@
 
 	function shouldUseLandscapeForHtml(html, marginMm = 20) {
 		if (!html) return false
+		// A pasted rubric table almost always reads better in landscape: more width per column
+		// means far less text-wrapping, which keeps rows shorter and lets more of them fit per page.
+		if (/<table[\s>]/i.test(html)) return true
 		const pxPerMm = 96 / 25.4
 		const portraitWidthMm = 210 // A4 portrait width
 		const maxContentWidthMm = portraitWidthMm - (marginMm * 2)
@@ -2451,6 +2488,142 @@
 		} finally {
 			improvingTextWithRag = { ...improvingTextWithRag, [categoryName]: false }
 		}
+	}
+
+	// Fill the main "New paragraph" box from the existing color-banded master template for this
+	// category (the assignment-level paragraphs shown under each category, one per mark-range color),
+	// instead of typing it out again. Re-filling on a new category/color pick is expected (that's the
+	// point of picking), but text the user typed themselves is left alone.
+	let lastAutoFilledParagraph = ''
+	function fillParagraphFromColorTemplate() {
+		if (!selectedCategory || !selectedColor) return
+		if (newParagraph.trim() && newParagraph !== lastAutoFilledParagraph) return
+
+		const template = paragraphs.find(paragraph =>
+			paragraph?._source !== 'student' &&
+			paragraph?.color === selectedColor &&
+			paragraphMatchesCategory(paragraph?.text, selectedCategory)
+		)
+
+		if (template) {
+			newParagraph = extractMainTextFromParagraph(template.text)
+			lastAutoFilledParagraph = newParagraph
+		}
+	}
+
+	// Canonical band order used throughout this app (paragraph position 1..5 in the "Map paragraph
+	// position to table columns" settings, and the fixed highlight order green=high..red=low).
+	const CATEGORY_COLOR_BAND_ORDER = ['green', 'lightgreen', 'yellow', 'orange', 'red']
+
+	// Get the color bands that apply to a category's own marking mode, in canonical high-to-low order -
+	// these are assessment/category properties (allocated marks, percentage bounds, fixed colorMarks),
+	// not tied to any student. "Manual"/none mode has no color-banding concept in this app, so it
+	// returns no bands.
+	function getCategoryColorBands(category) {
+		const markingMode = getEffectiveMarkingMode(category.name)
+
+		if (markingMode === 'percentage') {
+			return getCategoryAllocatedMarks(category.name) ? [...CATEGORY_COLOR_BAND_ORDER] : []
+		}
+
+		if (markingMode === 'fixed') {
+			const colorMarks = category.colorMarks || {}
+			return CATEGORY_COLOR_BAND_ORDER.filter(color => parseNumericMarkValue(colorMarks[color]) !== null)
+		}
+
+		return []
+	}
+
+	// Find the pasted rubric table's row for this category: manual override via tableRowCategoryMap
+	// first (same lookup the "Match table rows to categories" settings UI writes to), then fall back to
+	// fuzzy name matching (same normalizeCategoryLabel() used to build that UI - strips "(LO1)" etc.).
+	// Returns the row's cells (td/th elements) or null if no rubric table / no matching row.
+	function findRubricRowCellsForCategory(category) {
+		const html = currentAssessment?.rubricHtml
+		if (!html) return null
+
+		const temp = document.createElement('div')
+		temp.innerHTML = html
+		const rows = Array.from(temp.querySelectorAll('table tr'))
+
+		for (const row of rows) {
+			const firstCell = row.cells?.[0]
+			if (!firstCell) continue
+			const label = (firstCell.textContent || '').replace(/ /g, ' ').trim()
+			if (!label) continue
+			const normalizedLabel = normalizeCategoryLabel(label)
+			const mappedCategoryName = tableRowCategoryMap[normalizedLabel]
+			const isMatch = mappedCategoryName ? mappedCategoryName === category.name : normalizedLabel === normalizeCategoryLabel(category.name)
+			if (isMatch) return Array.from(row.cells)
+		}
+		return null
+	}
+
+	// Look up the real rubric text for one color band from the matched row, using the existing
+	// "Map paragraph position to table columns" mapping (position 1 = green .. 5 = red). Returns null
+	// if there's no rubric table, no matching row, no column mapped for this band, or the cell is empty.
+	function getRubricBandText(category, color, rowCells) {
+		if (!rowCells) return null
+		const position = CATEGORY_COLOR_BAND_ORDER.indexOf(color) + 1
+		const columnIndex = tableColumnMarkMap[position]
+		if (columnIndex === undefined || columnIndex === '') return null
+		const cell = rowCells[Number(columnIndex)]
+		if (!cell) return null
+		const text = (cell.textContent || '').replace(/ /g, ' ').trim()
+		return text || null
+	}
+
+	// Go through every category in this assessment and, for each color band it supports, add a
+	// paragraph if one doesn't already exist - pulling the real descriptor text from the matching cell
+	// of the pasted rubric table when a row/column mapping is available, otherwise a placeholder to fill
+	// in by hand. Scaffolds the assessment-level template table in one click instead of adding each one
+	// by hand. Assignment-scoped regardless of whether a student happens to be selected - these are
+	// templates, not one student's feedback.
+	function fillAllCategoryColorBandTemplates() {
+		if (!currentAssessment?.categories?.length) {
+			showSuccessNotification('⚠️ This assessment has no categories.')
+			return
+		}
+
+		let addedFromRubricCount = 0
+		let addedPlaceholderCount = 0
+		let skippedCategoryCount = 0
+
+		for (const category of currentAssessment.categories) {
+			const colors = getCategoryColorBands(category)
+			if (colors.length === 0) {
+				skippedCategoryCount++
+				continue
+			}
+
+			const rowCells = findRubricRowCellsForCategory(category)
+
+			for (const color of colors) {
+				const alreadyExists = paragraphs.some(paragraph =>
+					paragraph?._source !== 'student' &&
+					paragraph?.color === color &&
+					paragraphMatchesCategory(paragraph?.text, category.name)
+				)
+				if (alreadyExists) continue
+
+				const rubricText = getRubricBandText(category, color, rowCells)
+				paragraphs.push({
+					id: generateId(),
+					text: `${category.name}: ${rubricText || '[add feedback for this band]'}`,
+					color,
+					_source: 'assignment',
+					createdAt: new Date().toISOString(),
+					subjectId: currentSubjectId,
+					assessmentId: currentAssessmentId
+				})
+				if (rubricText) addedFromRubricCount++
+				else addedPlaceholderCount++
+			}
+		}
+
+		const addedCount = addedFromRubricCount + addedPlaceholderCount
+		if (addedCount > 0) saveAssessmentData()
+		showSuccessNotification(`✅ Added ${addedCount} paragraph${addedCount === 1 ? '' : 's'} (${addedFromRubricCount} from the rubric table, ${addedPlaceholderCount} placeholder). Skipped ${skippedCategoryCount} categor${skippedCategoryCount === 1 ? 'y' : 'ies'} with no color-band marking mode.`)
 	}
 
 	async function runEvidenceCheck(categoryName) {
@@ -5981,6 +6154,89 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return finalText
 	}
 
+	const HTML2CANVAS_RASTER_SCALE = 2
+
+	// CSS-px (container-relative) top/bottom of every <tr> in a rendered PDF-export container,
+	// used so the page-slicer below can avoid cutting a table row in half.
+	function getRowBoundaryRectsPx(container) {
+		const containerTop = container.getBoundingClientRect().top
+		return Array.from(container.querySelectorAll('tr')).map(row => {
+			const rect = row.getBoundingClientRect()
+			return { top: rect.top - containerTop, bottom: rect.bottom - containerTop }
+		})
+	}
+
+	// Slices a rasterized HTML canvas across PDF pages. When the natural cut point would land
+	// inside a table row (per rowBoundariesPx), the slice is pulled back to end at that row's
+	// top instead, pushing the whole row onto the next page rather than splitting it visually.
+	function sliceCanvasIntoPdfPages(doc, canvas, { pageHeight, margin, startY, pxPerMm, targetWidthMm, xOffset, rowBoundariesPx = [], gapMm = 2 }) {
+		const naturalWidthMm = canvas.width / pxPerMm
+		const naturalHeightMm = canvas.height / pxPerMm
+		const scale = targetWidthMm / naturalWidthMm
+		const targetHeightMm = naturalHeightMm * scale
+		const pxPerMmAtCanvasScale = pxPerMm / scale
+		const rowBoundariesCanvasPx = rowBoundariesPx.map(r => ({
+			top: r.top * HTML2CANVAS_RASTER_SCALE,
+			bottom: r.bottom * HTML2CANVAS_RASTER_SCALE
+		}))
+
+		let nextY = startY
+		let consumedMm = 0
+
+		while (consumedMm < targetHeightMm - 0.01) {
+			if (nextY > pageHeight - margin - 5) {
+				doc.addPage()
+				nextY = margin
+			}
+
+			const availableMm = pageHeight - margin - nextY
+			if (availableMm <= 0) {
+				doc.addPage()
+				nextY = margin
+				continue
+			}
+
+			const isFreshPage = nextY <= margin + 0.01
+			let drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
+			let slicePxTop = Math.round(consumedMm * pxPerMmAtCanvasScale)
+			let slicePxHeight = Math.round(drawMm * pxPerMmAtCanvasScale)
+
+			const isFinalSlice = consumedMm + drawMm >= targetHeightMm - 0.01
+			if (!isFinalSlice && slicePxHeight > 0) {
+				const sliceBottomPx = slicePxTop + slicePxHeight
+				const splitRow = rowBoundariesCanvasPx.find(r => sliceBottomPx > r.top + 1 && sliceBottomPx < r.bottom - 1)
+				if (splitRow) {
+					const adjustedPxHeight = Math.round(splitRow.top) - slicePxTop
+					if (adjustedPxHeight > 8) {
+						slicePxHeight = adjustedPxHeight
+						drawMm = slicePxHeight / pxPerMmAtCanvasScale
+					} else if (!isFreshPage) {
+						// Nothing useful fits before this row starts — start a fresh page instead of a sliver.
+						doc.addPage()
+						nextY = margin
+						continue
+					}
+					// else: already at the top of a fresh page and the row still doesn't fit on one page —
+					// fall through and let it split; there's no page big enough to avoid it.
+				}
+			}
+
+			const sliceCanvas = document.createElement('canvas')
+			sliceCanvas.width = canvas.width
+			sliceCanvas.height = slicePxHeight
+			const ctx = sliceCanvas.getContext('2d')
+			ctx.drawImage(canvas, 0, -slicePxTop)
+
+			const sliceData = sliceCanvas.toDataURL('image/png')
+			doc.addImage(sliceData, 'PNG', xOffset, nextY, targetWidthMm, drawMm)
+
+			nextY += drawMm + gapMm
+			consumedMm += drawMm
+		}
+
+		return nextY
+	}
+
 	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth, matchedCategories = new Set()) {
 		const normalizeParagraphCategory = (str) => (str || '')
 		const htmlContent = normalizeHtmlQuotes(assessmentHtml || '').trim()
@@ -6084,14 +6340,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		})
 
-		// Normalize spacing inside pasted HTML so tables don't blow up the PDF
-		const styleElement = document.createElement('style')
-		styleElement.textContent = `
-			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: 10pt; color: #000 !important; background: #fff !important; }
+		// Normalize spacing inside pasted HTML so tables don't blow up the PDF.
+		// Font size/padding are parameterized so a very tall table can be shrunk to fit
+		// more rows per page (see the shrink-to-fit loop below) instead of leaving one
+		// oversized row alone on a page.
+		const buildAssessmentHtmlStyleText = (fontSizePt, cellPaddingPx) => `
+			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: ${fontSizePt}pt; color: #000 !important; background: #fff !important; }
 			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
 			.pdf-assessment-html th,
 			.pdf-assessment-html td {
-				padding: 12px 10px !important;
+				padding: ${cellPaddingPx}px ${Math.max(4, Math.round(cellPaddingPx * 0.83))}px !important;
 				line-height: 1.35 !important;
 				vertical-align: top !important;
 				word-break: break-word !important;
@@ -6118,9 +6376,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			.pdf-assessment-html td {
 				border: 1px solid #222 !important;
 			}
-			.pdf-assessment-html p:not([style*="font-size"]) { font-size: 10pt; }
-			.pdf-assessment-html div:not([style*="font-size"]) { font-size: 10pt; }
+			.pdf-assessment-html p:not([style*="font-size"]) { font-size: ${fontSizePt}pt; }
+			.pdf-assessment-html div:not([style*="font-size"]) { font-size: ${fontSizePt}pt; }
 		`
+		const ASSESSMENT_HTML_BASE_FONT_PT = 10
+		const ASSESSMENT_HTML_BASE_PADDING_PX = 12
+		const styleElement = document.createElement('style')
+		styleElement.textContent = buildAssessmentHtmlStyleText(ASSESSMENT_HTML_BASE_FONT_PT, ASSESSMENT_HTML_BASE_PADDING_PX)
 		container.prepend(styleElement)
 
 		// Auto-highlight rubric cells based on category marks and row names
@@ -6281,45 +6543,35 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		let nextY = startY
 		try {
-			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
-			const naturalWidthMm = canvas.width / pxPerMm
-			const naturalHeightMm = canvas.height / pxPerMm
+			// Shrink-to-fit: if any single row is tall enough that two of them couldn't share a
+			// page, step the font size (and padding) down until rows are short enough to pack
+			// multiple per page, rather than leaving one oversized row alone on a page.
 			const maxDrawableHeightMm = pageHeight - (margin * 2)
-			const scaleForWidth = maxContentWidthMm / naturalWidthMm
-			const scale = scaleForWidth // fill available text width; slice vertically as needed
-			const targetWidthMm = maxContentWidthMm
-			const targetHeightMm = naturalHeightMm * scale
-			const xOffset = margin
-			let consumedMm = 0
-
-			while (consumedMm < targetHeightMm - 0.01) {
-				if (nextY > pageHeight - margin - 5) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const availableMm = pageHeight - margin - nextY
-				if (availableMm <= 0) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
-				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
-				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
-
-				const sliceCanvas = document.createElement('canvas')
-				sliceCanvas.width = canvas.width
-				sliceCanvas.height = slicePxHeight
-				const ctx = sliceCanvas.getContext('2d')
-				ctx.drawImage(canvas, 0, -slicePxTop)
-
-				const sliceData = sliceCanvas.toDataURL('image/png')
-				doc.addImage(sliceData, 'PNG', xOffset, nextY, targetWidthMm, drawMm)
-
-				nextY += drawMm + 2
-				consumedMm += drawMm
+			const maxRowShareOfPage = 0.48
+			const minFontSizePt = 7
+			for (let fontSizePt = ASSESSMENT_HTML_BASE_FONT_PT; fontSizePt >= minFontSizePt; fontSizePt--) {
+				const rows = Array.from(container.querySelectorAll('tr'))
+				if (!rows.length) break
+				const tallestRowMm = Math.max(...rows.map(row => row.getBoundingClientRect().height)) / pxPerMm
+				if (tallestRowMm <= maxDrawableHeightMm * maxRowShareOfPage) break
+				if (fontSizePt === minFontSizePt) break
+				const nextFontSizePt = fontSizePt - 1
+				const nextPaddingPx = Math.max(4, Math.round(ASSESSMENT_HTML_BASE_PADDING_PX * (nextFontSizePt / ASSESSMENT_HTML_BASE_FONT_PT)))
+				styleElement.textContent = buildAssessmentHtmlStyleText(nextFontSizePt, nextPaddingPx)
 			}
+
+			const rowBoundariesPx = getRowBoundaryRectsPx(container)
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: HTML2CANVAS_RASTER_SCALE, useCORS: true })
+			nextY = sliceCanvasIntoPdfPages(doc, canvas, {
+				pageHeight,
+				margin,
+				startY,
+				pxPerMm,
+				targetWidthMm: maxContentWidthMm,
+				xOffset: margin,
+				rowBoundariesPx,
+				gapMm: 2
+			})
 		} catch (error) {
 			console.error('Failed to render assessment HTML into PDF:', error)
 		} finally {
@@ -6366,41 +6618,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		let nextY = startY
 		try {
-			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
-			const naturalWidthMm = canvas.width / pxPerMm
-			const naturalHeightMm = canvas.height / pxPerMm
-			const scale = maxContentWidthMm / naturalWidthMm
-			const targetHeightMm = naturalHeightMm * scale
-			let consumedMm = 0
-
-			while (consumedMm < targetHeightMm - 0.01) {
-				if (nextY > pageHeight - margin - 5) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const availableMm = pageHeight - margin - nextY
-				if (availableMm <= 0) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
-				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
-				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
-
-				const sliceCanvas = document.createElement('canvas')
-				sliceCanvas.width = canvas.width
-				sliceCanvas.height = slicePxHeight
-				const ctx = sliceCanvas.getContext('2d')
-				ctx.drawImage(canvas, 0, -slicePxTop)
-
-				const sliceData = sliceCanvas.toDataURL('image/png')
-				doc.addImage(sliceData, 'PNG', margin, nextY, maxContentWidthMm, drawMm)
-
-				nextY += drawMm + 1.5
-				consumedMm += drawMm
-			}
+			const rowBoundariesPx = getRowBoundaryRectsPx(container)
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: HTML2CANVAS_RASTER_SCALE, useCORS: true })
+			nextY = sliceCanvasIntoPdfPages(doc, canvas, {
+				pageHeight,
+				margin,
+				startY,
+				pxPerMm,
+				targetWidthMm: maxContentWidthMm,
+				xOffset: margin,
+				rowBoundariesPx,
+				gapMm: 1.5
+			})
 		} catch (error) {
 			console.error('Failed to render selected feedback HTML into PDF:', error)
 		} finally {
@@ -6581,6 +6810,44 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			.catch(() => showSuccessNotification('❌ Copy failed - unable to access clipboard. Please try again or copy manually.'))
 	}
 
+		// jsPDF's standard fonts (helvetica/times/courier) only render WinAnsi/Latin-1 characters.
+		// AI-generated feedback text often includes minus signs, arrows, math comparisons, primes,
+		// greek letters, or checkmarks that fall outside that range - jsPDF doesn't reject them, it
+		// silently mis-measures and mis-renders the whole line (letter-spaced text that overflows the
+		// page). Map the ones we know about to a safe equivalent; anything else falls back to '?' so
+		// layout stays intact instead of corrupting the line.
+		const PDF_SAFE_EXTRA_CODEPOINTS = new Set([
+			0x2018, 0x2019, 0x201a, 0x201c, 0x201d, 0x201e, // curly quotes
+			0x2013, 0x2014, // en/em dash
+			0x2020, 0x2021, 0x2022, 0x2026, 0x2030, // dagger, bullet, ellipsis, permille
+			0x2039, 0x203a, 0x2122 // guillemets, trademark
+		])
+		const PDF_CHAR_FALLBACK = {
+			0x2010: '-', 0x2011: '-', 0x2012: '-', 0x2015: '-', 0x2212: '-', // hyphen/minus variants
+			0x2192: '->', 0x2190: '<-', 0x2194: '<->', 0x21d2: '=>', 0x21d0: '<=',
+			0x2248: '~', 0x2264: '<=', 0x2265: '>=', 0x2260: '!=',
+			0x2032: '\'', 0x2033: '"',
+			0x2713: 'v', 0x2714: 'v', 0x2715: 'x', 0x2716: 'x', 0x274c: 'x',
+			0x00a0: ' '
+		}
+		function sanitizeTextForPdf(value) {
+			return String(value ?? '').replace(/[-￿]/g, (ch) => {
+				const code = ch.codePointAt(0)
+				if (code <= 0xff || PDF_SAFE_EXTRA_CODEPOINTS.has(code)) return ch
+				return PDF_CHAR_FALLBACK[code] ?? '?'
+			})
+		}
+		function makePdfTextSafe(doc) {
+			const originalText = doc.text.bind(doc)
+			doc.text = (text, ...rest) => {
+				const safeText = Array.isArray(text) ? text.map(sanitizeTextForPdf) : sanitizeTextForPdf(text)
+				return originalText(safeText, ...rest)
+			}
+			const originalSplit = doc.splitTextToSize.bind(doc)
+			doc.splitTextToSize = (text, ...rest) => originalSplit(sanitizeTextForPdf(text), ...rest)
+			return doc
+		}
+
 		async function generatePDF() {
 			console.log('📄 generatePDF called')
 
@@ -6624,7 +6891,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		const defaultMargin = 25 // Slightly larger margin for better breathing room
 		const needsLandscape = !lockPdfPortrait && shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
-		const doc = new jsPDF({ orientation: 'portrait' }) // keep first page portrait; switch later if needed
+		const doc = makePdfTextSafe(new jsPDF({ orientation: 'portrait' })) // keep first page portrait; switch later if needed
 		const headingText = 'Feedback Report'
 		const headingFontSize = 16
 		
@@ -7667,6 +7934,56 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									</div>
 									{#if showAssessmentHtml}
 										<div class="card-body py-2">
+									<div class="alert alert-light border mb-3">
+										<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+											<span class="fw-bold">Mark ranges for bands</span>
+											<div class="d-flex align-items-center gap-2">
+												<label class="small mb-0" for="rubricBandCountInput">Number of bands</label>
+												<input
+													id="rubricBandCountInput"
+													type="number"
+													min="1"
+													max="10"
+													class="form-control form-control-sm"
+													style="width: 70px;"
+													value={rubricBandCount}
+													onchange={(e) => setRubricBandCount(e.currentTarget.value)}
+												>
+											</div>
+										</div>
+										{#each rubricBands as band, i}
+											<div class="d-flex align-items-center gap-2 mb-2">
+												<input
+													type="text"
+													class="form-control form-control-sm"
+													placeholder="Band label"
+													value={band.label}
+													oninput={(e) => updateRubricBand(i, 'label', e.currentTarget.value)}
+												>
+												<input
+													type="number"
+													class="form-control form-control-sm"
+													style="width: 90px;"
+													placeholder="Lower %"
+													value={band.lower}
+													oninput={(e) => updateRubricBand(i, 'lower', e.currentTarget.value)}
+												>
+												<span class="small text-muted">to</span>
+												<input
+													type="number"
+													class="form-control form-control-sm"
+													style="width: 90px;"
+													placeholder="Upper %"
+													value={band.upper}
+													oninput={(e) => updateRubricBand(i, 'upper', e.currentTarget.value)}
+												>
+												<span class="small text-muted">%</span>
+											</div>
+										{/each}
+										<button type="button" class="btn btn-outline-secondary btn-sm" onclick={insertRubricBandsHeaderRow}>
+											<i class="bi bi-plus-square me-1"></i>Insert bands header row
+										</button>
+									</div>
 									<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
 									<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
 									<div class="alert alert-secondary py-2">
@@ -8050,6 +8367,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													id="categorySelect"
 													class="form-select"
 													bind:value={selectedCategory}
+													onchange={fillParagraphFromColorTemplate}
 												>
 													<option value="">Choose a category...</option>
 													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category (category.id)}
@@ -8076,7 +8394,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										<!-- Color Selection -->
 										<div class="mb-3">
 											<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
-											<select id="colorSelect" class="form-select" bind:value={selectedColor}>
+											<select id="colorSelect" class="form-select" bind:value={selectedColor} onchange={fillParagraphFromColorTemplate}>
 												<option value="">⚪ No Color</option>
 												<option value="red">🔴 Red</option>
 												<option value="orange">🟠 Orange</option>
@@ -8111,11 +8429,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									<div class="mb-3">
 										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
 										<div class="input-group input-group-sm">
-											<textarea 
-												id="paragraphInput" 
-												class="form-control form-control-sm" 
-												rows="4" 
-												bind:value={newParagraph} 
+											<textarea
+												id="paragraphInput"
+												class="form-control form-control-sm"
+												rows="4"
+												bind:value={newParagraph}
 												placeholder="Comment here..."
 											></textarea>
 											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph} style="min-width: 120px;">
@@ -8617,30 +8935,47 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								</div>
 								{#if currentAssessment}
 									<div class="px-3 pt-3">
-										<button
-											type="button"
-											class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
-											onclick={() => showCommonPromptBox = !showCommonPromptBox}
-											aria-expanded={showCommonPromptBox}
-											aria-controls="commonParagraphPromptPanel"
-										>
-											<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-1`}></i>
-											Common AI Prompt (all paragraphs){#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
-										</button>
-										{#if showCommonPromptBox}
-											<div id="commonParagraphPromptPanel" class="mt-2">
-												<textarea
-													id="commonParagraphPromptInput"
-													class="form-control form-control-sm"
-													rows="2"
-													placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
-													value={currentAssessment.commonParagraphAiInstructions || ''}
-													oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
-													onchange={persistAssessmentAiSettings}
-												></textarea>
-												<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
+										{#if currentAssessment?.categories?.length > 0}
+											<div class="border rounded p-3 bg-light mb-3">
+												<button
+													type="button"
+													class="btn btn-outline-success btn-sm"
+													onclick={fillAllCategoryColorBandTemplates}
+												>
+													<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
+												</button>
+												<div class="small text-muted mt-2 mb-0">
+													Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
+												</div>
 											</div>
 										{/if}
+										<div class="border rounded p-3 mb-3">
+											<button
+												type="button"
+												class="btn btn-link btn-sm p-0 text-decoration-none fw-bold d-flex align-items-center w-100"
+												onclick={() => showCommonPromptBox = !showCommonPromptBox}
+												aria-expanded={showCommonPromptBox}
+												aria-controls="commonParagraphPromptPanel"
+											>
+												<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-2`}></i>
+												<span class="flex-grow-1 text-start">Common AI Prompt (all paragraphs)</span>
+												{#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
+											</button>
+											{#if showCommonPromptBox}
+												<div id="commonParagraphPromptPanel" class="mt-3">
+													<textarea
+														id="commonParagraphPromptInput"
+														class="form-control form-control-sm"
+														rows="2"
+														placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
+														value={currentAssessment.commonParagraphAiInstructions || ''}
+														oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
+														onchange={persistAssessmentAiSettings}
+													></textarea>
+													<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
+												</div>
+											{/if}
+										</div>
 									</div>
 								{/if}
 								<div class="card-body p-0">
@@ -9576,6 +9911,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	:global(.quick-action-toolbar .btn-outline-info.quick-toolbar-btn) {
 		color: #0b5ed7 !important;
 		border-color: #0b5ed7 !important;
+		min-width: 11.5rem;
 	}
 
 	:global(.quick-action-toolbar .btn-outline-primary.quick-toolbar-btn) {
@@ -9586,6 +9922,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	:global(.quick-action-toolbar .btn-outline-warning.quick-toolbar-btn) {
 		color: #0b5ed7 !important;
 		border-color: #0b5ed7 !important;
+		min-width: 10.5rem;
 	}
 
 	:global(.quick-action-toolbar .btn-outline-light.quick-toolbar-btn),
