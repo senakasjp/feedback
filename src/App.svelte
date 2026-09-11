@@ -1928,7 +1928,7 @@
 			promptPreviewMessages = buildImproveEnglishPromptPreview(text, answerInstructions)
 			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference())
 			// Strip any HTML tags that might have been introduced
-			const cleanedText = stripHtmlTags(result.improvedText || '')
+			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || ''))
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			// Mark this text as AI-improved for styling
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
@@ -2469,7 +2469,7 @@
 				modelPreference: getCurrentAiModelPreference()
 			})
 
-			const cleanedText = stripHtmlTags(result.improvedText || '').trim()
+			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || '').trim())
 			if (!cleanedText) {
 				throw new Error('No improved feedback was returned.')
 			}
@@ -2699,7 +2699,7 @@
 				modelPreference: getCurrentAiModelPreference()
 			})
 
-			const cleanedText = stripHtmlTags(result.reportText || '').trim()
+			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.reportText || '').trim())
 			if (!cleanedText) {
 				throw new Error('No evidence-check report was returned.')
 			}
@@ -4046,6 +4046,50 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		})
 
 		categoryWarnings = nextWarnings
+	}
+
+	// AI feedback text (Improve with AI/RAG, Reports Check) sometimes ends with an assessor-requested
+	// "Marks: X/Y" line instead of leaving it out of the paragraph - pull that into the marks input and
+	// auto-check the matching rubric-band paragraph instead of leaving it as prose in the feedback box.
+	const TRAILING_MARKS_LINE_REGEX = /\n{0,2}\s*Marks?\s*:\s*(-?\d+(?:\.\d+)?)\s*\/\s*-?\d+(?:\.\d+)?\s*\.?\s*$/i
+
+	function extractTrailingMarksLine(text) {
+		const source = String(text || '')
+		const match = source.match(TRAILING_MARKS_LINE_REGEX)
+		if (!match) return null
+		const awarded = parseFloat(match[1])
+		if (!Number.isFinite(awarded)) return null
+		return { awarded, strippedText: source.slice(0, match.index).trim() }
+	}
+
+	function paragraphMarkMatches(markValue, expectation) {
+		if (!expectation || !Number.isFinite(markValue)) return false
+		const tolerance = 0.01
+		if (expectation.type === 'fixed') return Math.abs(markValue - expectation.value) <= tolerance
+		return markValue >= (expectation.min - tolerance) && markValue <= (expectation.max + tolerance)
+	}
+
+	// Returns the feedback text with the "Marks:" line removed, having applied the mark as a side effect.
+	function applyTrailingMarksLine(categoryName, text) {
+		const extracted = extractTrailingMarksLine(text)
+		if (!extracted) return text
+
+		const candidateParagraphs = paragraphs.filter(p => paragraphMatchesCategory(p?.text, categoryName))
+		const matchingParagraph = candidateParagraphs.find(p => paragraphMarkMatches(extracted.awarded, getParagraphMarkExpectation(p, categoryName)))
+
+		updateCategoryMarks(categoryName, extracted.awarded)
+
+		if (matchingParagraph) {
+			const candidateIds = new Set(candidateParagraphs.map(p => p.id))
+			const nextSelected = new Set(selectedParagraphs)
+			candidateIds.forEach(id => nextSelected.delete(id))
+			nextSelected.add(matchingParagraph.id)
+			selectedParagraphs = nextSelected
+			refreshCategoryWarnings()
+			saveAssessmentData()
+		}
+
+		return extracted.strippedText
 	}
 
 	function updateCategoryMarks(category, marks) {
