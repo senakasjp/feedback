@@ -6,6 +6,18 @@ const EMBEDDING_MODEL = 'text-embedding-3-small'
 const MAX_RETRIEVED_CHUNKS = 8
 const VECTOR_INDEX_VERSION = 1
 
+// Same threshold a heading/ToC line must clear to count as real evidence body text
+// (see buildStudentSubmissionChunks / scoreAndRankSubmissionChunks below).
+const MIN_CONTENT_MATCH_LENGTH = 40
+const SUBMISSION_CHUNK_TARGET_LENGTH = 900
+const SUBMISSION_CHUNK_OVERLAP_CHARS = 150
+const MAX_SUBMISSION_CONTEXT_CHUNKS = 12
+// Thresholds below which retrieved evidence for a criterion is flagged "insufficient" rather than
+// silently handed to the LLM - calibrated against scoreTextMatch's per-token weights (2-3 pts/token).
+const MIN_SUFFICIENT_LEXICAL_SCORE = 4
+const MIN_SUFFICIENT_SEMANTIC_SCORE = 0.28
+const SUBMISSION_INDEX_VERSION = 1
+
 // Repeats whatever the assessor actually typed (word limits, tone, "no markdown", anything) at the end
 // of the prompt, not just in an earlier system message - models weight instructions closest to
 // generation far more heavily, so a rule stated once near the top of a long prompt gets diluted by the
@@ -289,78 +301,294 @@ function buildQueryText({ assessment, studentSubmission = '', evidenceNotes = ''
   ].filter(Boolean).join(' ')
 }
 
-function buildRelevantStudentEvidenceExcerpt({ studentSubmission = '', categoryName = '', evidenceNotes = '', maxParagraphs = 6, maxChars = 2200 }) {
+// PDF extraction (documentTextExtractor.js) prefixes each page's text with "Page N:" inline in the
+// flat string - parsed back out here so submission chunks can carry a real page citation.
+function buildStudentSubmissionParagraphs(studentSubmission = '') {
   const sourceText = String(studentSubmission || '').trim()
   if (!sourceText) {
-    return ''
+    return []
   }
 
-  const paragraphs = sourceText
+  let currentPage = null
+  return sourceText
     .replace(/\r\n/g, '\n')
     .split(/\n{2,}/)
-    .map(paragraph => paragraph.replace(/[ \t\f\v]+/g, ' ').trim())
+    .map(raw => raw.replace(/[ \t\f\v]+/g, ' ').replace(/\n+/g, ' ').trim())
     .filter(Boolean)
+    .map(paragraph => {
+      const pageMatch = paragraph.match(/^Page (\d+):\s*/)
+      if (pageMatch) {
+        currentPage = Number(pageMatch[1])
+      }
+      const text = paragraph.replace(/^Page \d+:\s*/, '').trim()
+      return { text, page: currentPage, isHeading: looksLikeHeading(text) }
+    })
+    .filter(item => item.text)
+}
 
+// Best-effort only (no real document structure survives raw text extraction, especially for PDFs) -
+// short, unpunctuated, mostly-capitalised lines like "1. Executive Summary" or "Literature Review".
+// Ceiling: will misfire on short punchy sentences; upgrade path is parsing DOCX heading styles via
+// mammoth's convertToHtml instead of extractRawText if this proves too noisy in practice.
+function looksLikeHeading(paragraph) {
+  const text = String(paragraph || '').trim()
+  if (!text || text.length > 80 || /[.!?]$/.test(text)) {
+    return false
+  }
+  if (/^(\d+[.)]\s*)+[A-Za-z]/.test(text)) {
+    return true
+  }
+  const words = text.split(' ').filter(Boolean)
+  if (words.length === 0 || words.length > 8) {
+    return false
+  }
+  const capitalisedWords = words.filter(word => /^[A-Z0-9]/.test(word))
+  return capitalisedWords.length >= Math.ceil(words.length * 0.6)
+}
+
+// Hierarchical chunking: paragraphs -> heading-bounded sections -> overlapping chunks within a
+// section, each tagged with its heading/page for citation and linked to its neighbours so a match
+// can be expanded with surrounding context later (expandWithNeighbors).
+function buildStudentSubmissionChunks(studentSubmission = '', { targetLength = SUBMISSION_CHUNK_TARGET_LENGTH, overlapChars = SUBMISSION_CHUNK_OVERLAP_CHARS } = {}) {
+  const paragraphs = buildStudentSubmissionParagraphs(studentSubmission)
   if (paragraphs.length === 0) {
-    return ''
+    return []
   }
 
-  // Deliberately excludes shortFeedback (the assessor's/AI's own draft) from the search query:
-  // "Improve with RAG" writes its result back into that same draft field, so on a re-run the draft
-  // is the tool's own prior (possibly wrong) output rather than a neutral hint - scoring against its
-  // wording creates a feedback loop that drifts the excerpt toward whatever the last wrong answer
-  // happened to mention, instead of the actual category content.
-  const queryTokens = unique([
-    ...tokenize(categoryName),
-    ...tokenize(evidenceNotes)
-  ])
+  const rawChunks = []
+  let currentHeading = ''
+  let buffer = []
+  let bufferLength = 0
+  let bufferPage = null
 
-  // Headings and table-of-contents entries (e.g. "1. Executive Summary" or "1. Executive Summary .... 1")
-  // trivially match a category's own name with nothing else - if those are the only matches, they crowd
-  // out the real body paragraph (which usually doesn't repeat the category name verbatim) instead of
-  // falling back to it. Requiring a minimum length keeps them from counting as a "real" match.
-  const MIN_CONTENT_MATCH_LENGTH = 40
-  const matches = paragraphs
-    .map((paragraph, index) => ({
-      paragraph,
-      index,
-      score: queryTokens.length > 0 ? scoreTextMatch(queryTokens, paragraph, 'submission') : 0
-    }))
-    .filter(item => item.score > 0)
-
-  const scored = matches
-    .filter(item => item.paragraph.length >= MIN_CONTENT_MATCH_LENGTH)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-
-  const headingOnlyMatches = matches.filter(item => item.paragraph.length < MIN_CONTENT_MATCH_LENGTH)
-
-  let candidatePool
-  if (scored.length > 0) {
-    candidatePool = scored
-  } else if (headingOnlyMatches.length > 0) {
-    // No real content matched the category name, only heading/ToC-style lines. A ToC entry always
-    // appears earlier in the document than the section it points to, so anchor on the LAST such
-    // match (the actual section heading) and take what follows it - a section's body normally sits
-    // immediately after its own heading, not at the very start of the document (which is usually a
-    // title page, unrelated to any specific category).
-    const anchorIndex = headingOnlyMatches[headingOnlyMatches.length - 1].index
-    candidatePool = paragraphs
-      .map((paragraph, index) => ({ paragraph, index, score: 0 }))
-      .filter(item => item.index > anchorIndex)
-  } else {
-    candidatePool = paragraphs.map((paragraph, index) => ({ paragraph, index, score: 0 }))
+  const flush = () => {
+    if (buffer.length === 0) {
+      return
+    }
+    rawChunks.push({ text: buffer.join('\n\n'), heading: currentHeading, page: bufferPage })
   }
 
-  const selected = candidatePool
-    .slice(0, maxParagraphs)
-    .sort((a, b) => a.index - b.index)
-
-  let excerpt = selected.map(item => item.paragraph).join('\n\n').trim()
-  if (excerpt.length > maxChars) {
-    excerpt = `${excerpt.slice(0, maxChars).trim()}...`
+  const startNewBuffer = (carryOverlapFrom) => {
+    const tail = carryOverlapFrom ? carryOverlapFrom.slice(-overlapChars).trim() : ''
+    buffer = tail ? [tail] : []
+    bufferLength = tail.length
   }
 
-  return excerpt
+  paragraphs.forEach(paragraph => {
+    if (paragraph.isHeading) {
+      flush()
+      startNewBuffer(buffer[buffer.length - 1])
+      currentHeading = paragraph.text
+      return
+    }
+
+    if (buffer.length === 0) {
+      bufferPage = paragraph.page
+    }
+    buffer.push(paragraph.text)
+    bufferLength += paragraph.text.length
+
+    if (bufferLength >= targetLength) {
+      flush()
+      startNewBuffer(paragraph.text)
+      bufferPage = paragraph.page
+    }
+  })
+  flush()
+
+  const usableChunks = rawChunks.filter(chunk => chunk.text.length >= MIN_CONTENT_MATCH_LENGTH)
+
+  return usableChunks.map((chunk, index) => ({
+    id: `submission-${index + 1}`,
+    type: 'submission',
+    heading: chunk.heading,
+    page: chunk.page,
+    label: [
+      'Student submission',
+      chunk.heading ? `— ${chunk.heading}` : '',
+      chunk.page ? `(p.${chunk.page})` : ''
+    ].filter(Boolean).join(' '),
+    text: chunk.text,
+    prevChunkId: index > 0 ? `submission-${index}` : null,
+    nextChunkId: index < usableChunks.length - 1 ? `submission-${index + 2}` : null
+  }))
+}
+
+function hashSubmissionSource(studentSubmission = '') {
+  return String(studentSubmission || '').trim()
+}
+
+export async function buildStudentSubmissionIndex({ studentSubmission = '' }) {
+  const chunks = buildStudentSubmissionChunks(studentSubmission)
+  const embeddings = chunks.length > 0 ? await createEmbeddings(chunks.map(chunk => chunk.text)) : []
+
+  return {
+    version: SUBMISSION_INDEX_VERSION,
+    embeddingModel: EMBEDDING_MODEL,
+    createdAt: new Date().toISOString(),
+    sourceHash: hashSubmissionSource(studentSubmission),
+    chunks: chunks.map((chunk, index) => ({ ...chunk, embedding: embeddings[index] || null }))
+  }
+}
+
+function isStudentSubmissionIndexCurrentInternal(index, studentSubmission) {
+  if (!index || index.version !== SUBMISSION_INDEX_VERSION || !Array.isArray(index.chunks)) {
+    return false
+  }
+  return index.sourceHash === hashSubmissionSource(studentSubmission)
+}
+
+export function isStudentSubmissionIndexCurrent(index, studentSubmission) {
+  return isStudentSubmissionIndexCurrentInternal(index, studentSubmission)
+}
+
+// Each rubric criterion is treated as its own focused sub-question, deliberately excluding
+// shortFeedback (the assessor's/AI's own draft) from the query: "Improve with RAG" writes its result
+// back into that same draft field, so on a re-run the draft is the tool's own prior (possibly wrong)
+// output rather than a neutral hint - scoring against its wording would create a feedback loop.
+function buildCriterionSubmissionQuery(criterion, evidenceNotes = '') {
+  return [criterion?.criterion_name, criterion?.description, evidenceNotes].filter(Boolean).join('. ')
+}
+
+function scoreAndRankSubmissionChunks(chunks, queryTokens, queryEmbedding) {
+  return chunks
+    .filter(chunk => chunk.text.length >= MIN_CONTENT_MATCH_LENGTH)
+    .map(chunk => {
+      const lexicalScore = scoreTextMatch(queryTokens, chunk.text, 'submission')
+      const semanticScore = queryEmbedding ? (cosineSimilarity(queryEmbedding, chunk.embedding) ?? 0) : 0
+      return { ...chunk, lexicalScore, semanticScore, combinedScore: lexicalScore + semanticScore * 20 }
+    })
+    .sort((a, b) => b.combinedScore - a.combinedScore)
+}
+
+function isEvidenceSufficient(bestChunk) {
+  if (!bestChunk) {
+    return false
+  }
+  return bestChunk.lexicalScore >= MIN_SUFFICIENT_LEXICAL_SCORE || bestChunk.semanticScore >= MIN_SUFFICIENT_SEMANTIC_SCORE
+}
+
+function expandWithNeighbors(topChunks, allChunksById, maxExpanded = 1) {
+  const includedIds = new Set(topChunks.map(chunk => chunk.id))
+  const expanded = [...topChunks]
+
+  topChunks.slice(0, maxExpanded).forEach(chunk => {
+    ;[chunk.prevChunkId, chunk.nextChunkId].forEach(neighborId => {
+      if (neighborId && !includedIds.has(neighborId) && allChunksById.has(neighborId)) {
+        includedIds.add(neighborId)
+        expanded.push({ ...allChunksById.get(neighborId), isContextExpansion: true })
+      }
+    })
+  })
+
+  return expanded
+}
+
+// Retrieve -> rerank (score+sort) -> expand (pull neighbours) -> iterate once if evidence looks thin.
+// The retry re-searches with only the query's distinctive tokens (drops assessor-note filler) rather
+// than a second embeddings round-trip - upgrade path if this heuristic proves too weak in practice.
+function retrieveSubmissionEvidence({ chunks = [], queryText = '', queryEmbedding = null, maxChunks = 2 }) {
+  if (chunks.length === 0) {
+    return { chunks: [], sufficient: false }
+  }
+
+  const allChunksById = new Map(chunks.map(chunk => [chunk.id, chunk]))
+  const firstPass = scoreAndRankSubmissionChunks(chunks, tokenize(queryText), queryEmbedding)
+  let top = firstPass.slice(0, maxChunks)
+  let sufficient = isEvidenceSufficient(top[0])
+
+  if (!sufficient) {
+    const broadenedTokens = unique(tokenize(queryText).filter(token => token.length > 4)).slice(0, 12)
+    if (broadenedTokens.length > 0) {
+      const retryPass = scoreAndRankSubmissionChunks(chunks, broadenedTokens, queryEmbedding)
+      if ((retryPass[0]?.combinedScore || 0) > (top[0]?.combinedScore || 0)) {
+        top = retryPass.slice(0, maxChunks)
+        sufficient = isEvidenceSufficient(top[0])
+      }
+    }
+  }
+
+  return { chunks: expandWithNeighbors(top, allChunksById, 1), sufficient }
+}
+
+function mergeSubmissionResultsById(results, includeCriterionLabel) {
+  const byId = new Map()
+
+  results.forEach(({ criterion, chunks: evidenceChunks }) => {
+    evidenceChunks.forEach(chunk => {
+      const existing = byId.get(chunk.id)
+      if (existing) {
+        if (!existing.criteriaLabels.includes(criterion)) {
+          existing.criteriaLabels.push(criterion)
+        }
+        existing.combinedScore = Math.max(existing.combinedScore || 0, chunk.combinedScore || 0)
+      } else {
+        byId.set(chunk.id, { ...chunk, criteriaLabels: [criterion] })
+      }
+    })
+  })
+
+  return Array.from(byId.values()).map(({ criteriaLabels, ...chunk }) => ({
+    ...chunk,
+    label: includeCriterionLabel ? `${chunk.label} (evidence for: ${criteriaLabels.join(', ')})` : chunk.label
+  }))
+}
+
+// Document-preparation + question-time retrieval for the student's own submission, run once per
+// buildAssessmentRagContext call and shared across every criterion via one batched embeddings request
+// (chunks + all per-criterion queries in a single call) - cheap even when marking many criteria at once.
+async function retrieveSubmissionEvidenceForCriteria({ studentSubmission, criteria, categoryName, evidenceNotes, studentSubmissionIndex, useEmbeddings }) {
+  const baseChunks = buildStudentSubmissionChunks(studentSubmission)
+  if (baseChunks.length === 0) {
+    return { chunks: [], sufficient: true, insufficientCriteria: [] }
+  }
+
+  const matchedCriterion = categoryName ? findCriterionByName(criteria, categoryName) : null
+  const targetCriteria = categoryName
+    ? [matchedCriterion || { criterion_name: categoryName, description: '' }]
+    : criteria
+
+  if (targetCriteria.length === 0) {
+    return { chunks: [], sufficient: true, insufficientCriteria: [] }
+  }
+
+  const cachedIndex = isStudentSubmissionIndexCurrentInternal(studentSubmissionIndex, studentSubmission) ? studentSubmissionIndex : null
+  let scoringChunks = cachedIndex ? cachedIndex.chunks : baseChunks
+  const queries = targetCriteria.map(criterion => buildCriterionSubmissionQuery(criterion, evidenceNotes))
+  let queryEmbeddings = []
+
+  if (useEmbeddings) {
+    try {
+      const needsChunkEmbeddings = !cachedIndex
+      const inputs = [...(needsChunkEmbeddings ? baseChunks.map(chunk => chunk.text) : []), ...queries]
+      const embeddings = await createEmbeddings(inputs)
+      if (needsChunkEmbeddings) {
+        const chunkEmbeddings = embeddings.slice(0, baseChunks.length)
+        scoringChunks = baseChunks.map((chunk, index) => ({ ...chunk, embedding: chunkEmbeddings[index] || null }))
+        queryEmbeddings = embeddings.slice(baseChunks.length)
+      } else {
+        queryEmbeddings = embeddings
+      }
+    } catch {
+      queryEmbeddings = []
+    }
+  }
+
+  const results = targetCriteria.map((criterion, index) => ({
+    criterion: criterion.criterion_name,
+    ...retrieveSubmissionEvidence({
+      chunks: scoringChunks,
+      queryText: queries[index],
+      queryEmbedding: queryEmbeddings[index] || null
+    })
+  }))
+
+  const insufficientCriteria = results.filter(result => !result.sufficient).map(result => result.criterion)
+  const mergedChunks = mergeSubmissionResultsById(results, targetCriteria.length > 1)
+    .sort((a, b) => (b.combinedScore || 0) - (a.combinedScore || 0))
+    .slice(0, MAX_SUBMISSION_CONTEXT_CHUNKS)
+
+  return { chunks: mergedChunks, sufficient: insufficientCriteria.length === 0, insufficientCriteria }
 }
 
 function hashChunkSource({ assessment, candidateChunks = [], priorEvaluations = [] }) {
@@ -571,8 +799,11 @@ function buildPerAnswerSystemMessages(answerInstructions = '') {
   ]
 }
 
-function buildRetrievedContextMessages(retrievedContext = [], retrievalMode = '') {
+function buildRetrievedContextMessages(retrievedContext = [], retrievalMode = '', insufficientCriteria = []) {
   const normalizedMode = normaliseWhitespace(retrievalMode || 'not-specified')
+  const insufficientNote = insufficientCriteria.length > 0
+    ? `No reliable evidence was found in the student submission for: ${insufficientCriteria.join(', ')}. Say so explicitly for these instead of guessing or inventing achievement.`
+    : ''
   const compactContext = Array.isArray(retrievedContext)
     ? retrievedContext
       .map((item, index) => {
@@ -602,8 +833,9 @@ function buildRetrievedContextMessages(retrievedContext = [], retrievalMode = ''
         `Retrieved context mode: ${normalizedMode}`,
         'Use the retrieved context as supporting reference material only.',
         'Prioritise the student submission, assessor notes, and explicit rubric criteria when they conflict with generic examples.',
-        'Do not claim to have used sources that are not present in the retrieved context block.'
-      ].join('\n')
+        'Do not claim to have used sources that are not present in the retrieved context block.',
+        insufficientNote
+      ].filter(Boolean).join('\n')
     },
     {
       role: 'user',
@@ -664,20 +896,15 @@ function buildStudentSubmissionImageMessages(images = []) {
   ]
 }
 
-export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
-  const submissionExcerpt = buildRelevantStudentEvidenceExcerpt({
-    studentSubmission,
-    categoryName,
-    evidenceNotes
-  })
-  const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, submissionExcerpt].filter(Boolean).join('\n\n')
-  const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
+export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentSubmissionIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+  const { retrievedContext, retrievalMode, insufficientCriteria } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
     priorEvaluations,
-    studentSubmission: retrievalQuery,
+    studentSubmission,
     evidenceNotes,
     vectorIndex,
+    studentSubmissionIndex,
     categoryName
   })
 
@@ -687,7 +914,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
-      ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildRetrievedContextMessages(retrievedContext, retrievalMode, insufficientCriteria),
       ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
@@ -700,9 +927,6 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           'Assessor short draft:',
           shortFeedback || 'Not provided.',
           '',
-          'Relevant student evidence excerpt:',
-          submissionExcerpt || 'Not provided.',
-          '',
           'Assessor evidence notes:',
           evidenceNotes || 'Not provided.',
           '',
@@ -710,6 +934,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           '- Rewrite and improve the assessor short draft using only the data above.',
           '- Prioritise evidence and references that match the selected criterion/category.',
           '- Keep the assessor intent and judgement aligned with the provided instructions.',
+          '- If the retrieved context flags insufficient evidence for this criterion, say so explicitly instead of inventing achievement.',
           '- Return plain feedback text only.',
           ...buildClosingInstructionsReminder(answerInstructions)
         ].filter(Boolean).join('\n')
@@ -718,7 +943,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
   }
 }
 
-export async function buildAssessmentRagContext({ assessment, assessmentParagraphs = [], priorEvaluations = [], studentSubmission = '', evidenceNotes = '', vectorIndex = null, categoryName = '' }) {
+export async function buildAssessmentRagContext({ assessment, assessmentParagraphs = [], priorEvaluations = [], studentSubmission = '', evidenceNotes = '', vectorIndex = null, studentSubmissionIndex = null, categoryName = '' }) {
   const criteria = buildCriteriaList(assessment)
   const queryText = buildQueryText({ assessment, studentSubmission, evidenceNotes, criteria })
   const queryTokens = tokenize(queryText)
@@ -727,6 +952,16 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
     ? vectorIndex
     : null
 
+  const submissionRetrieval = await retrieveSubmissionEvidenceForCriteria({
+    studentSubmission,
+    criteria,
+    categoryName,
+    evidenceNotes,
+    studentSubmissionIndex,
+    useEmbeddings: Boolean(currentIndex)
+  })
+
+  let rubricResult
   if (!currentIndex) {
     const rankedChunks = candidateChunks
       .map(chunk => ({ ...chunk, score: scoreTextMatch(queryTokens, chunk.text, chunk.type) }))
@@ -735,54 +970,59 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
 
     const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
 
-    return {
-      criteria,
-      retrievedContext: formatRetrievedContext(selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS)),
+    rubricResult = {
+      chunks: selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS),
       retrievalMode: hasCategoryMatch ? 'lexical-category' : 'lexical'
+    }
+  } else {
+    try {
+      const [queryEmbedding] = await createEmbeddings([queryText || assessment?.name || 'assessment'])
+      const rankedChunks = currentIndex.chunks
+        .map(chunk => {
+          const lexicalScore = scoreTextMatch(queryTokens, chunk.text, chunk.type)
+          const semanticScore = cosineSimilarity(queryEmbedding, chunk.embedding) ?? 0
+          const combinedScore = lexicalScore + (semanticScore * 20)
+          return {
+            ...chunk,
+            lexicalScore,
+            semanticScore,
+            combinedScore
+          }
+        })
+        .filter(chunk => chunk.combinedScore > 0 || chunk.type === 'rubric')
+        .sort((a, b) => b.combinedScore - a.combinedScore)
+
+      const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
+
+      rubricResult = {
+        chunks: selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS),
+        retrievalMode: hasCategoryMatch ? 'vector-category' : 'vector'
+      }
+    } catch {
+      const rankedChunks = candidateChunks
+        .map(chunk => ({ ...chunk, score: scoreTextMatch(queryTokens, chunk.text, chunk.type) }))
+        .filter(chunk => chunk.score > 0 || chunk.type === 'rubric')
+        .sort((a, b) => b.score - a.score)
+
+      const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
+
+      rubricResult = {
+        chunks: selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS),
+        retrievalMode: hasCategoryMatch ? 'lexical-fallback-category' : 'lexical-fallback'
+      }
     }
   }
 
-  try {
-    const [queryEmbedding] = await createEmbeddings([queryText || assessment?.name || 'assessment'])
-    const rankedChunks = currentIndex.chunks
-      .map(chunk => {
-        const lexicalScore = scoreTextMatch(queryTokens, chunk.text, chunk.type)
-        const semanticScore = cosineSimilarity(queryEmbedding, chunk.embedding) ?? 0
-        const combinedScore = lexicalScore + (semanticScore * 20)
-        return {
-          ...chunk,
-          lexicalScore,
-          semanticScore,
-          combinedScore
-        }
-      })
-      .filter(chunk => chunk.combinedScore > 0 || chunk.type === 'rubric')
-      .sort((a, b) => b.combinedScore - a.combinedScore)
-
-    const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
-
-    return {
-      criteria,
-      retrievedContext: formatRetrievedContext(selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS)),
-      retrievalMode: hasCategoryMatch ? 'vector-category' : 'vector'
-    }
-  } catch {
-    const rankedChunks = candidateChunks
-      .map(chunk => ({ ...chunk, score: scoreTextMatch(queryTokens, chunk.text, chunk.type) }))
-      .filter(chunk => chunk.score > 0 || chunk.type === 'rubric')
-      .sort((a, b) => b.score - a.score)
-
-    const { chunks: categoryPrioritised, hasCategoryMatch } = applyCategoryPriority(rankedChunks, categoryName)
-
-    return {
-      criteria,
-      retrievedContext: formatRetrievedContext(selectRetrievedChunks(categoryPrioritised, MAX_RETRIEVED_CHUNKS)),
-      retrievalMode: hasCategoryMatch ? 'lexical-fallback-category' : 'lexical-fallback'
-    }
+  return {
+    criteria,
+    retrievedContext: formatRetrievedContext([...rubricResult.chunks, ...submissionRetrieval.chunks]),
+    retrievalMode: rubricResult.retrievalMode,
+    retrievalSufficient: submissionRetrieval.sufficient,
+    insufficientCriteria: submissionRetrieval.insufficientCriteria
   }
 }
 
-export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentSubmissionIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { messages, retrievedContext, retrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
     assessment,
     categoryName,
@@ -794,6 +1034,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     assessmentParagraphs,
     priorEvaluations,
     vectorIndex,
+    studentSubmissionIndex,
     globalSystemInstructions,
     answerInstructions
   })
@@ -833,7 +1074,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
   }
 }
 
-export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentSubmissionIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   console.info('Evidence check request started', {
     assessment: assessment?.name || 'Unnamed assessment',
     categoryName: normaliseWhitespace(categoryName || 'General feedback'),
@@ -842,14 +1083,14 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     evidenceNotesLength: String(evidenceNotes || '').length
   })
 
-  const retrievalQuery = [categoryName, answerInstructions, studentSubmission, evidenceNotes].filter(Boolean).join('\n\n')
-  const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
+  const { retrievedContext, retrievalMode, insufficientCriteria } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
     priorEvaluations,
-    studentSubmission: retrievalQuery,
+    studentSubmission,
     evidenceNotes,
     vectorIndex,
+    studentSubmissionIndex,
     categoryName
   })
 
@@ -861,7 +1102,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
       ...buildPerAnswerSystemMessages(answerInstructions),
-      ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildRetrievedContextMessages(retrievedContext, retrievalMode, insufficientCriteria),
       ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
@@ -997,14 +1238,15 @@ function extractJson(text) {
   }
 }
 
-export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
-  const { criteria, retrievedContext, retrievalMode } = await buildAssessmentRagContext({
+export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, studentSubmissionIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+  const { criteria, retrievedContext, retrievalMode, insufficientCriteria } = await buildAssessmentRagContext({
     assessment,
     assessmentParagraphs,
     priorEvaluations,
     studentSubmission,
     evidenceNotes,
-    vectorIndex
+    vectorIndex,
+    studentSubmissionIndex
   })
 
   if (criteria.length === 0) {
@@ -1018,7 +1260,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
     maxTokens: 2200,
     messages: [
       ...buildSystemMessages(globalSystemInstructions, ''),
-      ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
+      ...buildRetrievedContextMessages(retrievedContext, retrievalMode, insufficientCriteria),
       ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
         role: 'user',
@@ -1061,6 +1303,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
           '- Keep awarded marks within each criterion maximum.',
           '- Base judgements only on the provided submission, notes, and retrieved context.',
           '- Do not invent evidence or achievement claims.',
+          '- If retrieved context flags a criterion as having insufficient evidence, state that clearly for that criterion.',
           '- Keep suggested_feedback ready to paste into the feedback app.',
           '- Return valid JSON only.',
           ...buildClosingInstructionsReminder(assessment?.commonParagraphAiInstructions)
