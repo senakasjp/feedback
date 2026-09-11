@@ -46,6 +46,47 @@ async function readFileAsText(file) {
   })
 }
 
+function reconstructLinesFromTextItems(items) {
+  const lines = []
+  let currentLine = []
+  let lastY = null
+
+  for (const item of items) {
+    if (!('str' in item)) continue
+    const y = Array.isArray(item.transform) ? item.transform[5] : null
+    if (lastY !== null && y !== null && Math.abs(y - lastY) > 1) {
+      lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim())
+      currentLine = []
+    }
+    if (item.str) currentLine.push(item.str)
+    if (y !== null) lastY = y
+  }
+  if (currentLine.length) lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim())
+
+  return lines.filter(Boolean).join('\n')
+}
+
+// Renders every PDF page to an image so a vision model can see diagrams/charts that are drawn
+// directly on the page (not just embedded raster images, which pdfjs makes much harder to isolate).
+// Every page is still included (full coverage) - scale 1.5 + JPEG keeps per-page size down without
+// losing legibility, since vision APIs downsize past a few thousand px internally anyway.
+async function renderPdfPagesAsImages(pdf, pdfjsLib) {
+  const images = []
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber)
+    const viewport = page.getViewport({ scale: 1.5 })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    const context = canvas.getContext('2d')
+    await page.render({ canvasContext: context, viewport }).promise
+    images.push({ mimeType: 'image/jpeg', dataUrl: canvas.toDataURL('image/jpeg', 0.85), pageNumber })
+  }
+
+  return images
+}
+
 async function extractTextFromPdf(file) {
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const buffer = await readFileAsArrayBuffer(file)
@@ -57,25 +98,88 @@ async function extractTextFromPdf(file) {
     pdf = await pdfjsLib.getDocument({ data: buffer }).promise
   } catch {
     // Tauri/WebView fallback: disable worker when worker boot fails
-    pdf = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise
+    pdf = await pdfjsLib.getDocument(/** @type {any} */ ({ data: buffer, disableWorker: true })).promise
   }
   const pages = []
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber)
     const content = await page.getTextContent()
-    const text = content.items
-      .map(item => ('str' in item ? item.str : ''))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    const text = reconstructLinesFromTextItems(content.items)
 
     if (text) {
-      pages.push(`Page ${pageNumber}: ${text}`)
+      pages.push(`Page ${pageNumber}:\n${text}`)
     }
   }
 
-  return normaliseWhitespace(pages.join('\n\n'))
+  // Text extraction already captures printed text cleanly - OCR would only duplicate it, so
+  // page renders here are for vision (diagrams/charts), not OCR.
+  const images = await renderPdfPagesAsImages(pdf, pdfjsLib)
+
+  return { text: normaliseWhitespace(pages.join('\n\n')), images }
+}
+
+function loadImageElement(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Failed to load image for downscaling'))
+    img.src = dataUrl
+  })
+}
+
+// Caps embedded-image size sent to the AI - full coverage, every image still sent, just no larger
+// than a vision model can meaningfully use. Falls back to the original on any error rather than
+// dropping the image.
+// ponytail: 1024px cut vision token cost ~2-3x vs the old 1600px cap; bump back up if diagrams with
+// small text/labels start getting misread.
+async function downscaleImageIfNeeded(dataUrl, maxDimension = 1024) {
+  try {
+    const img = await loadImageElement(dataUrl)
+    const scale = maxDimension / Math.max(img.width, img.height)
+    if (scale >= 1) {
+      return { dataUrl, mimeType: dataUrl.slice(5, dataUrl.indexOf(';')) }
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(img.width * scale)
+    canvas.height = Math.round(img.height * scale)
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+    return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), mimeType: 'image/jpeg' }
+  } catch {
+    return { dataUrl, mimeType: dataUrl.slice(5, dataUrl.indexOf(';')) }
+  }
+}
+
+async function ocrImage(dataUrl) {
+  try {
+    const { default: Tesseract } = await import('tesseract.js')
+    const { data } = await Tesseract.recognize(dataUrl, 'eng')
+    return normaliseWhitespace(data?.text || '')
+  } catch {
+    return ''
+  }
+}
+
+async function extractImagesFromDocx(file, mammoth) {
+  const images = []
+  const arrayBuffer = await readFileAsArrayBuffer(file)
+
+  await mammoth.convertToHtml({ arrayBuffer }, {
+    convertImage: mammoth.images.imgElement(async image => {
+      const base64 = await image.read('base64')
+      const mimeType = image.contentType || 'image/png'
+      const { dataUrl, mimeType: finalMimeType } = await downscaleImageIfNeeded(`data:${mimeType};base64,${base64}`)
+      images.push({ mimeType: finalMimeType, dataUrl })
+      return {}
+    })
+  })
+
+  for (const image of images) {
+    image.ocrText = await ocrImage(image.dataUrl)
+  }
+
+  return images
 }
 
 async function extractTextFromDocx(file) {
@@ -83,18 +187,19 @@ async function extractTextFromDocx(file) {
 	const mammoth = mammothModule.default || mammothModule
 	const arrayBuffer = await readFileAsArrayBuffer(file)
 	const result = await mammoth.extractRawText({ arrayBuffer })
-	return normaliseWhitespace(result.value)
+	const images = await extractImagesFromDocx(file, mammoth)
+	return { text: normaliseWhitespace(result.value), images }
 }
 
 async function extractTextFromTextFile(file, extension) {
   const rawText = await readFileAsText(file)
-  if (extension === 'html' || extension === 'htm' || file.type === 'text/html') {
-    return stripHtml(rawText)
-  }
-
-  return normaliseWhitespace(rawText)
+  const text = (extension === 'html' || extension === 'htm' || file.type === 'text/html')
+    ? stripHtml(rawText)
+    : normaliseWhitespace(rawText)
+  return { text, images: [] }
 }
 
+/** @returns {Promise<{ text: string, images: Array<{ mimeType: string, dataUrl: string, ocrText?: string, pageNumber?: number }> }>} */
 export async function extractTextFromFile(file) {
   const extension = getFileExtension(file?.name)
 
@@ -113,7 +218,7 @@ export async function extractTextFromFile(file) {
   throw new Error(`Unsupported file type for ${file?.name || 'upload'}. Use PDF, DOCX, TXT, MD, HTML, CSV, or JSON.`)
 }
 
-export function createUploadedDocumentRecord({ file, extractedText, documentType, scope = 'assessment' }) {
+export function createUploadedDocumentRecord({ file, extractedText, images = [], documentType, scope = 'assessment' }) {
   return {
     id: `${scope}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: file.name,
@@ -121,6 +226,7 @@ export function createUploadedDocumentRecord({ file, extractedText, documentType
     size: file.size || 0,
     documentType,
     extractedText: normaliseWhitespace(extractedText),
+    images: Array.isArray(images) ? images : [],
     uploadedAt: new Date().toISOString()
   }
 }

@@ -27,15 +27,23 @@
 	// Props
 	let { 
 		subjects = [], 
-		onSelectSubject, 
+		onSelectSubject,
+		onSubjectSelect,
 		onUpdateSubjects,
+		onUpdateSubject,
+		onDeleteSubject,
+		onBack,
 		showAddSubject = false,
 		newSubjectName = '',
 		onAddSubject
 	}: {
 		subjects?: Subject[];
-		onSelectSubject: (subject: Subject) => void;
-		onUpdateSubjects: (subjects: Subject[]) => void;
+		onSelectSubject?: (subject: Subject) => void;
+		onSubjectSelect?: (subject: Subject) => void;
+		onUpdateSubjects?: (subjects: Subject[]) => void;
+		onUpdateSubject?: (subjects: Subject[]) => void;
+		onDeleteSubject?: (subject: Subject) => void;
+		onBack?: () => void;
 		showAddSubject?: boolean;
 		newSubjectName?: string;
 		onAddSubject?: (name: string) => void;

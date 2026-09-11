@@ -3,6 +3,18 @@
 > **New:** PDF rubric export now respects manual row → category mapping for marks/highlighting (no more `undefined` marks in the PDF).
 
 
+## Desktop App Doesn't Reflect Recent Code Changes
+
+**Symptoms**: A feature works when tested via `npm run dev` in a browser, but the installed `/Applications/Feedback.app` doesn't show it at all — even after toggling every relevant setting in the UI.
+
+**Diagnosis**: `/Applications/Feedback.app` is a compiled snapshot from whichever git branch was checked out when `BULD_DEPLOY.SH` was last run. If that branch didn't yet contain the feature (e.g. it only exists on a feature branch, or was added after the last deploy), the installed app simply doesn't have the code — no amount of in-app configuration will make it appear.
+
+**Solutions**:
+- Confirm the feature exists in your current branch's source (`grep` for a distinctive string in `src/App.svelte`, or `git log -S "<string>" -- src/App.svelte`).
+- **Don't** try to verify via `strings` on the compiled binary at `/Applications/Feedback.app/Contents/MacOS/app` — Tauri compresses embedded frontend assets, so this reliably shows false negatives even when the feature is present.
+- Instead, run `npm run build` and `grep` the distinctive string in `dist/assets/*.js` to confirm it compiled into this build.
+- If confirmed, redeploy from the correct branch: `bash BULD_DEPLOY.SH` (runs e2e tests, rebuilds via `tauri:build`, replaces `/Applications/Feedback.app`, relaunches). This is safe — your data lives in the sibling `/Applications/FeedbackData/` folder and is never touched by the deploy script.
+
 ## Version 3.2.9 - Latest Issues and Solutions
 
 ### PDF Rubric Shows `undefined` or Doesn’t Highlight

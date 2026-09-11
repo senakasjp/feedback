@@ -1,9 +1,13 @@
-<script>
+<script lang="ts">
 	// Props
 	let { 
 		subjects = [],
 		onSelectSubject,
 		onDeleteSubject
+	}: {
+		subjects?: any[];
+		onSelectSubject?: (subject: any) => void;
+		onDeleteSubject?: (subject: any) => void;
 	} = $props()
 </script>
 

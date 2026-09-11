@@ -18,12 +18,14 @@
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags } from './utils/helpers.js'
 	import { getMotivationalMessage } from './utils/motivationalMessages.js'
+	import { debugInfo, debugLog, isVerboseDebugEnabled } from './utils/debug.js'
 	
 	// Import data services
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
 	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, findCriterionByName, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
-	import { AI_CHAT_MODEL_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeReasoningEffort } from './services/aiModelService.js'
+	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
+	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
 	
 	// Import constants
@@ -40,9 +42,11 @@
 	const NAVIGATION_STATE_KEY = 'feedback-navigation-state-v1'
 	const AI_MODEL_STORAGE_KEY = 'feedback-ai-selected-model-v1'
 	const AI_REASONING_STORAGE_KEY = 'feedback-ai-reasoning-effort-v1'
+	const AI_PROVIDER_STORAGE_KEY = 'feedback-ai-selected-provider-v1'
 	const TABLE_HTML_SPACER_SNIPPET = '<div style="margin-top: 20px;"></div>'
 	const TABLE_HTML_TICK_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10003;</td>'
 	const TABLE_HTML_CROSS_SNIPPET = '<td style="border: 1px solid #333; padding: 10px; text-align: center;">&#10007;</td>'
+	const console = { ...globalThis.console, log: debugLog, info: debugInfo }
 
 	const ASSESSMENT_DOCUMENT_TYPES = [
 		{ value: 'assignment-brief', label: 'Assignment Brief' },
@@ -83,6 +87,7 @@
 	let paragraphs = $state([])
 	let assignmentParagraphSnapshot = $state([])
 	let selectedParagraphs = $state(new Set())
+	let missingParagraphCategories = $state(new Set()) // Category names with no paragraphs added, flagged when generating a PDF
 	let studentName = $state('')
 	let studentPhoto = $state('')
 	// No studentImage - only header photo for assessment
@@ -115,6 +120,8 @@
 	let quickAddKnowledgeArea = $state({}) // Store quick-add knowledge area selection per category
 	let quickAddText = $state({}) // Store quick-add paragraph text per category
 	let quickAddAiInstructions = $state({}) // Store per-answer AI instructions per category
+	let quickAddIncludeCommonPrompt = $state({}) // Per-category: whether the assessment's common AI prompt applies (default true)
+	let showCommonPromptBox = $state(false)
 	let quickAddInstructionAssessmentKey = $state('')
 	let quickAddInstructionExpanded = $state({})
 	const quickAddInstructionSaveTimers = {}
@@ -131,6 +138,7 @@
 	let improvingText = $state({}) // Track which category text is being improved by AI
 	let improvingTextWithRag = $state({}) // Track which category text is being expanded with RAG
 	let evidenceCheckingText = $state({}) // Track which category is running evidence check
+	let improvingAllWithRag = $state(false) // Track bulk "Improve all with RAG" run across every category
 	let aiImprovedText = $state({}) // Track which category text was AI-improved (for styling)
 	let studentSubmissionText = $state('') // Per-student submission or evidence text for AI marking
 	let studentSubmissionDocuments = $state([])
@@ -150,7 +158,6 @@
 	let showPromptPreviewModal = $state(false)
 	let promptPreviewTitle = $state('')
 	let promptPreviewMessages = $state([])
-	let promptPreviewRequestPayload = $state(null)
 	let showAppLogModal = $state(false)
 	let appLogEntries = $state([])
 	let activeFeedbackTab = $state('enter-data')
@@ -160,6 +167,12 @@
 	// Visual debug for checkbox issue
 	let showCheckboxDebug = $state(false)
 	let checkboxDebugInfo = $state([])
+	let paragraphLookup = $derived.by(() => buildParagraphLookup())
+	let assessmentCategoryLookup = $derived.by(() => buildAssessmentCategoryLookup())
+	let orderedParagraphs = $derived.by(() => buildOrderedParagraphs())
+	let groupedParagraphs = $derived.by(() => buildGroupedParagraphs())
+	let paragraphInfoIndex = $derived.by(() => buildParagraphInfoIndex())
+	let groupedParagraphCaches = $derived.by(() => buildGroupedParagraphCaches())
 	
 	// Function to add debug messages
 	function addCheckboxDebug(message) {
@@ -307,6 +320,8 @@
 	let isDarkMode = $state(false) // Dark mode toggle state
 	let showAiModelSettings = $state(false)
 	let aiModelSettingsContainer = $state(null)
+	let selectedAiProvider = $state(DEFAULT_AI_PROVIDER)
+	let apiKeyDrafts = $state({})
 	let selectedAiModel = $state(DEFAULT_AI_CHAT_MODEL)
 	let selectedAiReasoningEffort = $state(DEFAULT_AI_REASONING_EFFORT)
 	let aiModelSettingsReady = $state(false)
@@ -409,7 +424,10 @@
 	function installAppLogging() {
 		;['log', 'info', 'warn', 'error', 'debug'].forEach((method) => {
 			console[method] = (...args) => {
-				addAppLog(method, ...args)
+				const shouldCapture = method === 'warn' || method === 'error' || isVerboseDebugEnabled()
+				if (shouldCapture) {
+					addAppLog(method, ...args)
+				}
 				originalConsoleMethods[method](...args)
 			}
 		})
@@ -424,7 +442,9 @@
 
 		window.addEventListener('error', handleWindowError)
 		window.addEventListener('unhandledrejection', handleUnhandledRejection)
-		addAppLog('info', 'Application logging initialized.')
+		if (isVerboseDebugEnabled()) {
+			addAppLog('info', 'Application logging initialized.')
+		}
 
 		return () => {
 			console.log = originalConsoleMethods.log
@@ -516,17 +536,21 @@
 	function initializeAiModelSettings() {
 		const savedModel = localStorage.getItem(AI_MODEL_STORAGE_KEY)
 		const nextModel = sanitizeAiChatModel(savedModel || DEFAULT_AI_CHAT_MODEL)
+		const savedProvider = localStorage.getItem(AI_PROVIDER_STORAGE_KEY)
 		const savedReasoningEffort = localStorage.getItem(AI_REASONING_STORAGE_KEY)
 
+		selectedAiProvider = sanitizeAiProvider(savedProvider || getProviderForModel(nextModel))
 		selectedAiModel = nextModel
 		manualAiModelInput = nextModel
 		selectedAiReasoningEffort = sanitizeReasoningEffort(nextModel, savedReasoningEffort || DEFAULT_AI_REASONING_EFFORT)
+		apiKeyDrafts = Object.fromEntries(AI_PROVIDER_OPTIONS.map(option => [option.value, getStoredApiKey(option.value)]))
 		aiModelSettingsReady = true
 	}
 
 	$effect(() => {
 		if (!aiModelSettingsReady) return
 		localStorage.setItem(AI_MODEL_STORAGE_KEY, selectedAiModel)
+		localStorage.setItem(AI_PROVIDER_STORAGE_KEY, selectedAiProvider)
 		localStorage.setItem(AI_REASONING_STORAGE_KEY, selectedAiReasoningEffort)
 	})
 
@@ -538,8 +562,29 @@
 		showAiModelSettings = false
 	}
 
+	function selectAiProvider(provider) {
+		selectedAiProvider = sanitizeAiProvider(provider)
+		const providerModels = getModelsForProvider(selectedAiProvider)
+		if (!providerModels.some(option => option.value === selectedAiModel)) {
+			selectAiModel(providerModels[0]?.value || selectedAiModel)
+		}
+	}
+
+	function saveApiKey(providerId) {
+		setStoredApiKey(providerId, apiKeyDrafts[providerId] || '')
+		apiKeyDrafts = { ...apiKeyDrafts, [providerId]: getStoredApiKey(providerId) }
+		showSuccessNotification(`✅ ${getLlmProvider(providerId).label} API key saved.`)
+	}
+
+	function clearApiKey(providerId) {
+		setStoredApiKey(providerId, '')
+		apiKeyDrafts = { ...apiKeyDrafts, [providerId]: '' }
+		showSuccessNotification(`${getLlmProvider(providerId).label} API key cleared (falls back to .env if set).`)
+	}
+
 	function selectAiModel(model) {
 		selectedAiModel = sanitizeAiChatModel(model)
+		selectedAiProvider = getProviderForModel(selectedAiModel)
 		manualAiModelInput = selectedAiModel
 		selectedAiReasoningEffort = sanitizeReasoningEffort(selectedAiModel, selectedAiReasoningEffort)
 	}
@@ -558,8 +603,17 @@
 	function getCurrentAiModelPreference() {
 		return {
 			selectedModel: selectedAiModel,
-			reasoningEffort: selectedAiReasoningEffort
+			reasoningEffort: selectedAiReasoningEffort,
+			provider: selectedAiProvider
 		}
+	}
+
+	function isCurrentAiProviderConfigured() {
+		return isProviderConfigured(selectedAiProvider)
+	}
+
+	function getCurrentAiProviderLabel() {
+		return getLlmProvider(selectedAiProvider).label
 	}
 
 	function getSupportedReasoningOptionObjects() {
@@ -809,6 +863,40 @@
 		await insertTableHtmlSnippet(TABLE_HTML_CROSS_SNIPPET, 'Cross snippet')
 	}
 
+	// Mark-range bands: generates the rubric table's header row (e.g. "Excellent (80-100%)")
+	let rubricBandCount = $state(4)
+	let rubricBands = $state([
+		{ label: 'Excellent', lower: 80, upper: 100 },
+		{ label: 'Good', lower: 65, upper: 79 },
+		{ label: 'Average', lower: 50, upper: 64 },
+		{ label: 'Below Average', lower: 0, upper: 49 }
+	])
+
+	function setRubricBandCount(rawValue) {
+		const count = Math.max(1, Math.min(10, Number(rawValue) || 1))
+		rubricBandCount = count
+		const next = rubricBands.slice(0, count)
+		while (next.length < count) {
+			next.push({ label: `Band ${next.length + 1}`, lower: 0, upper: 0 })
+		}
+		rubricBands = next
+	}
+
+	function updateRubricBand(index, field, value) {
+		rubricBands = rubricBands.map((band, i) => i === index ? { ...band, [field]: value } : band)
+	}
+
+	async function insertRubricBandsHeaderRow() {
+		const sectionWidth = 10
+		const bandWidth = rubricBands.length ? Math.floor((100 - sectionWidth) / rubricBands.length) : 0
+		const cells = [`<td style="width: ${sectionWidth}%;"><strong>Section</strong></td>`]
+		for (const band of rubricBands) {
+			const label = String(band.label || 'Band').trim()
+			cells.push(`<td style="width: ${bandWidth}%;"><strong>${label} (${band.lower}–${band.upper}%)</strong></td>`)
+		}
+		await insertTableHtmlSnippet(`<tr>\n${cells.join('\n')}\n</tr>`, 'Bands header row')
+	}
+
 	async function setLockPdfPortrait(checked) {
 		lockPdfPortrait = Boolean(checked)
 		if (currentAssessment) {
@@ -935,8 +1023,8 @@
 		temp.innerHTML = html
 		const labels = new Set()
 		const rows = Array.from(temp.querySelectorAll('table tr'))
-		rows.forEach(row => {
-			const firstCell = row.cells?.[0]
+		rows.forEach(			row => {
+			const firstCell = /** @type {HTMLTableRowElement} */ (row).cells?.[0]
 			if (!firstCell) return
 			const text = (firstCell.textContent || '').replace(/\u00a0/g, ' ').trim()
 			if (text) labels.add(text)
@@ -968,6 +1056,9 @@
 
 	function shouldUseLandscapeForHtml(html, marginMm = 20) {
 		if (!html) return false
+		// A pasted rubric table almost always reads better in landscape: more width per column
+		// means far less text-wrapping, which keeps rows shorter and lets more of them fit per page.
+		if (/<table[\s>]/i.test(html)) return true
 		const pxPerMm = 96 / 25.4
 		const portraitWidthMm = 210 // A4 portrait width
 		const maxContentWidthMm = portraitWidthMm - (marginMm * 2)
@@ -1207,6 +1298,7 @@
 					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
 					assessmentReferenceDocuments = currentAssessment?.aiReferenceDocuments || []
 					quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+					quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 					quickAddInstructionExpanded = {}
 					quickAddInstructionAssessmentKey = `${subjectId || ''}:${assessmentId || ''}`
 					// Keep HTML card collapsed by default; user can expand manually
@@ -1341,6 +1433,7 @@
 					assessmentVectorIndex = currentAssessment?.aiVectorIndex || null
 					assessmentReferenceDocuments = currentAssessment?.aiReferenceDocuments || []
 					quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+					quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 					quickAddInstructionExpanded = {}
 					quickAddInstructionAssessmentKey = `${subjectId || ''}:${assessmentId || ''}`
 					// Keep HTML card collapsed by default; user can expand manually
@@ -1383,6 +1476,7 @@
 		stopSpeechRecorder()
 		speechTranscribingByCategory = {}
 		quickAddAiInstructions = {}
+		quickAddIncludeCommonPrompt = {}
 		quickAddInstructionExpanded = {}
 		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
 			clearTimeout(quickAddInstructionSaveTimers[key])
@@ -1400,9 +1494,8 @@
 		aiDraftReviewItems = []
 		showAiDraftReviewModal = false
 		showPromptPreviewModal = false
-		promptPreviewTitle = ''
-		promptPreviewMessages = []
-		promptPreviewRequestPayload = null
+		// Note: promptPreviewTitle/Messages/RequestPayload are NOT cleared here — the header
+		// "Last Prompt" button keeps the most recently sent prompt available across assessments.
 		activeFeedbackTab = 'enter-data'
 		quickAddToAssessmentWhenStudentSelected = false
 
@@ -1417,6 +1510,7 @@
 	$effect(() => {
 		if (!currentAssessment?.categories || !currentAssessmentId) {
 			quickAddAiInstructions = {}
+			quickAddIncludeCommonPrompt = {}
 			quickAddInstructionExpanded = {}
 			quickAddInstructionAssessmentKey = ''
 			return
@@ -1425,6 +1519,7 @@
 		const assessmentKey = `${currentSubjectId || ''}:${currentAssessmentId || ''}`
 		if (quickAddInstructionAssessmentKey !== assessmentKey) {
 			quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+			quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 			quickAddInstructionExpanded = {}
 			quickAddInstructionAssessmentKey = assessmentKey
 		}
@@ -1814,14 +1909,14 @@
 
 	async function improveTextWithAI(categoryName) {
 		const text = stripHtmlTags((quickAddText[categoryName] || '').trim())
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 		if (!text) {
 			showSuccessNotification('⚠️ Please enter some text first')
 			return
 		}
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
@@ -1829,6 +1924,8 @@
 		improvingText = { ...improvingText, [categoryName]: true }
 
 		try {
+			promptPreviewTitle = `Improve Prompt - ${categoryName}`
+			promptPreviewMessages = buildImproveEnglishPromptPreview(text, answerInstructions)
 			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference())
 			// Strip any HTML tags that might have been introduced
 			const cleanedText = stripHtmlTags(result.improvedText || '')
@@ -1933,6 +2030,73 @@
 		await saveSubjects()
 	}
 
+	function buildQuickAddIncludeCommonPromptDefaults() {
+		const defaults = {}
+		const perAnswerMap = currentAssessment?.commonPromptEnabledByCategory || {}
+		for (const category of currentAssessment?.categories || []) {
+			const mappedValue = perAnswerMap[category.name] ?? perAnswerMap[normalizeCategoryName(category.name)]
+			defaults[category.name] = mappedValue ?? (category.includeCommonAiPrompt ?? true)
+		}
+		return defaults
+	}
+
+	function isCommonPromptIncluded(categoryName) {
+		return quickAddIncludeCommonPrompt[categoryName] !== false
+	}
+
+	async function persistCategoryIncludeCommonPrompt(categoryName, isIncluded) {
+		quickAddIncludeCommonPrompt = { ...quickAddIncludeCommonPrompt, [categoryName]: isIncluded }
+		if (!currentAssessment || !currentAssessmentId || !currentSubjectId) return
+
+		const nextPerAnswerMap = {
+			...(currentAssessment.commonPromptEnabledByCategory || {}),
+			[categoryName]: isIncluded,
+			[normalizeCategoryName(categoryName)]: isIncluded
+		}
+
+		let updatedCategories = currentAssessment.categories || []
+		const categoryIndex = updatedCategories.findIndex(
+			category => normalizeCategoryName(category.name) === normalizeCategoryName(categoryName)
+		)
+		if (categoryIndex !== -1) {
+			updatedCategories = [...updatedCategories]
+			updatedCategories[categoryIndex] = {
+				...updatedCategories[categoryIndex],
+				includeCommonAiPrompt: isIncluded
+			}
+		}
+
+		currentAssessment = {
+			...currentAssessment,
+			categories: updatedCategories,
+			commonPromptEnabledByCategory: nextPerAnswerMap
+		}
+
+		const subjectIndex = subjects.findIndex(subject => subject.id === currentSubjectId)
+		if (subjectIndex === -1) return
+		const assessmentIndex = subjects[subjectIndex].assessments.findIndex(assessment => assessment.id === currentAssessmentId)
+		if (assessmentIndex === -1) return
+
+		subjects[subjectIndex].assessments[assessmentIndex] = currentAssessment
+		await saveSubjects()
+	}
+
+	// Merges the assessment-wide common prompt (unless opted out per category) with this category's own instructions.
+	// Labels each part rather than relying on the '\n\n' between them - every consumer of this
+	// (buildPerAnswerSystemMessages, buildImproveEnglishMessages) runs the result through a
+	// whitespace-collapsing normaliser before sending it to the model, which strips blank lines,
+	// so an unlabelled join reads as one run-on paragraph with no boundary between the two instructions.
+	function getCombinedAnswerInstructions(categoryName) {
+		const common = isCommonPromptIncluded(categoryName)
+			? (currentAssessment?.commonParagraphAiInstructions || '').trim()
+			: ''
+		const perCategory = (quickAddAiInstructions[categoryName] || '').trim()
+		const parts = []
+		if (common) parts.push(`Assessment-wide common instructions (applies to every paragraph): ${common}`)
+		if (perCategory) parts.push(`Instructions specific to this paragraph: ${perCategory}`)
+		return parts.join('\n\n')
+	}
+
 	function updateAssessmentReferenceDocuments(nextDocuments) {
 		assessmentReferenceDocuments = nextDocuments
 		if (currentAssessment) {
@@ -1959,14 +2123,20 @@
 
 		getSafeStudentSubmissionDocuments().forEach(document => {
 			if (!document?.extractedText) return
+			const ocrText = (document.images || [])
+				.map((image, index) => image.ocrText?.trim() ? `[Image ${index + 1} OCR text]: ${image.ocrText.trim()}` : '')
+				.filter(Boolean)
+				.join('\n')
 			sections.push([
 				`${getDocumentTypeLabel(document.documentType, 'student')}: ${document.name}`,
-				document.extractedText
-			].join('\n'))
+				document.extractedText,
+				ocrText
+			].filter(Boolean).join('\n'))
 		})
 
 		return sections.join('\n\n')
 	}
+
 
 	function buildCurrentStudentEvaluationData() {
 		return {
@@ -2019,9 +2189,10 @@
 			let extractionFailures = 0
 			for (const file of files) {
 				let extractedText = ''
+				let images = []
 				let extractionError = ''
 				try {
-					extractedText = await extractTextFromFile(file)
+					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
 					extractionError = String(error?.message || error || 'Unknown extraction error')
@@ -2031,6 +2202,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					images,
 					documentType: selectedAssessmentDocumentType,
 					scope: 'assessment'
 				})
@@ -2078,15 +2250,29 @@
 		const files = Array.from(input?.files || [])
 		if (files.length === 0) return
 
+		// PDF text extraction is text-layer-only (no OCR fallback for scanned pages) and was the
+		// least reliable path for getting a student's full submission into AI analysis - require
+		// DOCX/TXT/etc instead, where extraction is exhaustive.
+		const pdfFiles = files.filter(file => file.name?.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf')
+		if (pdfFiles.length > 0) {
+			showSuccessNotification(`⚠️ PDF uploads are not supported for student submissions - please use DOCX, TXT, MD, HTML, CSV, or JSON instead. Skipped: ${pdfFiles.map(file => file.name).join(', ')}`)
+		}
+		const nonPdfFiles = files.filter(file => !pdfFiles.includes(file))
+		if (nonPdfFiles.length === 0) {
+			if (input) input.value = ''
+			return
+		}
+
 		uploadingStudentDocument = true
 		try {
 			const uploadedDocuments = []
 			let extractionFailures = 0
-			for (const file of files) {
+			for (const file of nonPdfFiles) {
 				let extractedText = ''
+				let images = []
 				let extractionError = ''
 				try {
-					extractedText = await extractTextFromFile(file)
+					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
 					extractionError = String(error?.message || error || 'Unknown extraction error')
@@ -2096,6 +2282,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					images,
 					documentType: selectedStudentDocumentType,
 					scope: 'student'
 				})
@@ -2246,14 +2433,10 @@
 
 	async function improveTextWithRag(categoryName) {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
-		if (!shortText) {
-			showSuccessNotification('⚠️ Please enter some text first')
-			return
-		}
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
@@ -2263,18 +2446,26 @@
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
 			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
-			const result = await improveFeedbackWithRag({
+			const studentSubmission = getCombinedStudentSubmissionText()
+			const ragArgs = {
 				assessment: assessmentForAi,
 				categoryName,
 				shortFeedback: shortText,
 				answerInstructions,
 				student: getCurrentStudent(),
-				studentSubmission: getCombinedStudentSubmissionText(),
+				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes: getSelectedEvidenceNotes(categoryName),
 				assessmentParagraphs,
 				priorEvaluations,
 				vectorIndex,
-				globalSystemInstructions: globalAiSystemInstructions,
+				globalSystemInstructions: globalAiSystemInstructions
+			}
+			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
+			promptPreviewTitle = `RAG Prompt - ${categoryName}`
+			promptPreviewMessages = preview.messages
+			const result = await improveFeedbackWithRag({
+				...ragArgs,
 				modelPreference: getCurrentAiModelPreference()
 			})
 
@@ -2294,18 +2485,184 @@
 		}
 	}
 
+	// Run improveTextWithRag for every category in turn, for the currently selected student -
+	// same per-category action as the "Improve with RAG" button, just looped across the assessment.
+	async function improveAllCategoriesWithRag() {
+		improvingAllWithRag = true
+		try {
+			for (const category of currentAssessment?.categories || []) {
+				await improveTextWithRag(category.name)
+			}
+		} finally {
+			improvingAllWithRag = false
+		}
+	}
+
+	// Clear the draft comment box for every category, for the currently selected student -
+	// the undo for "Improve all with RAG" (or any typed/improved draft) before it's saved as a paragraph.
+	// Keys off getGroupedParagraphs()'s own `group.category` (not currentAssessment.categories[].name) -
+	// the textarea reads quickAddText[group.category], and that key can differ from the canonical
+	// category name (e.g. parsed-from-text formatting of an "(LO1)"-style suffix), which silently left
+	// the visible textarea uncleared.
+	function deleteAllStudentRagComments() {
+		const groups = getGroupedParagraphs()
+		if (!groups.length) return
+		if (!confirm('Delete the draft comment for every category for this student? This cannot be undone.')) return
+
+		groups.forEach(group => {
+			quickAddText = { ...quickAddText, [group.category]: '' }
+			aiImprovedText = { ...aiImprovedText, [group.category]: false }
+		})
+	}
+
+	// Fill the main "New paragraph" box from the existing color-banded master template for this
+	// category (the assignment-level paragraphs shown under each category, one per mark-range color),
+	// instead of typing it out again. Re-filling on a new category/color pick is expected (that's the
+	// point of picking), but text the user typed themselves is left alone.
+	let lastAutoFilledParagraph = ''
+	function fillParagraphFromColorTemplate() {
+		if (!selectedCategory || !selectedColor) return
+		if (newParagraph.trim() && newParagraph !== lastAutoFilledParagraph) return
+
+		const template = paragraphs.find(paragraph =>
+			paragraph?._source !== 'student' &&
+			paragraph?.color === selectedColor &&
+			paragraphMatchesCategory(paragraph?.text, selectedCategory)
+		)
+
+		if (template) {
+			newParagraph = extractMainTextFromParagraph(template.text)
+			lastAutoFilledParagraph = newParagraph
+		}
+	}
+
+	// Canonical band order used throughout this app (paragraph position 1..5 in the "Map paragraph
+	// position to table columns" settings, and the fixed highlight order green=high..red=low).
+	const CATEGORY_COLOR_BAND_ORDER = ['green', 'lightgreen', 'yellow', 'orange', 'red']
+
+	// Get the color bands that apply to a category's own marking mode, in canonical high-to-low order -
+	// these are assessment/category properties (allocated marks, percentage bounds, fixed colorMarks),
+	// not tied to any student. "Manual"/none mode has no color-banding concept in this app, so it
+	// returns no bands.
+	function getCategoryColorBands(category) {
+		const markingMode = getEffectiveMarkingMode(category.name)
+
+		if (markingMode === 'percentage') {
+			return getCategoryAllocatedMarks(category.name) ? [...CATEGORY_COLOR_BAND_ORDER] : []
+		}
+
+		if (markingMode === 'fixed') {
+			const colorMarks = category.colorMarks || {}
+			return CATEGORY_COLOR_BAND_ORDER.filter(color => parseNumericMarkValue(colorMarks[color]) !== null)
+		}
+
+		return []
+	}
+
+	// Find the pasted rubric table's row for this category: manual override via tableRowCategoryMap
+	// first (same lookup the "Match table rows to categories" settings UI writes to), then fall back to
+	// fuzzy name matching (same normalizeCategoryLabel() used to build that UI - strips "(LO1)" etc.).
+	// Returns the row's cells (td/th elements) or null if no rubric table / no matching row.
+	function findRubricRowCellsForCategory(category) {
+		const html = currentAssessment?.rubricHtml
+		if (!html) return null
+
+		const temp = document.createElement('div')
+		temp.innerHTML = html
+		const rows = Array.from(temp.querySelectorAll('table tr'))
+
+		for (const row of rows) {
+			const firstCell = row.cells?.[0]
+			if (!firstCell) continue
+			const label = (firstCell.textContent || '').replace(/ /g, ' ').trim()
+			if (!label) continue
+			const normalizedLabel = normalizeCategoryLabel(label)
+			const mappedCategoryName = tableRowCategoryMap[normalizedLabel]
+			const isMatch = mappedCategoryName ? mappedCategoryName === category.name : normalizedLabel === normalizeCategoryLabel(category.name)
+			if (isMatch) return Array.from(row.cells)
+		}
+		return null
+	}
+
+	// Look up the real rubric text for one color band from the matched row, using the existing
+	// "Map paragraph position to table columns" mapping (position 1 = green .. 5 = red). Returns null
+	// if there's no rubric table, no matching row, no column mapped for this band, or the cell is empty.
+	function getRubricBandText(category, color, rowCells) {
+		if (!rowCells) return null
+		const position = CATEGORY_COLOR_BAND_ORDER.indexOf(color) + 1
+		const columnIndex = tableColumnMarkMap[position]
+		if (columnIndex === undefined || columnIndex === '') return null
+		const cell = rowCells[Number(columnIndex)]
+		if (!cell) return null
+		const text = (cell.textContent || '').replace(/ /g, ' ').trim()
+		return text || null
+	}
+
+	// Go through every category in this assessment and, for each color band it supports, add a
+	// paragraph if one doesn't already exist - pulling the real descriptor text from the matching cell
+	// of the pasted rubric table when a row/column mapping is available, otherwise a placeholder to fill
+	// in by hand. Scaffolds the assessment-level template table in one click instead of adding each one
+	// by hand. Assignment-scoped regardless of whether a student happens to be selected - these are
+	// templates, not one student's feedback.
+	function fillAllCategoryColorBandTemplates() {
+		if (!currentAssessment?.categories?.length) {
+			showSuccessNotification('⚠️ This assessment has no categories.')
+			return
+		}
+
+		let addedFromRubricCount = 0
+		let addedPlaceholderCount = 0
+		let skippedCategoryCount = 0
+
+		for (const category of currentAssessment.categories) {
+			const colors = getCategoryColorBands(category)
+			if (colors.length === 0) {
+				skippedCategoryCount++
+				continue
+			}
+
+			const rowCells = findRubricRowCellsForCategory(category)
+
+			for (const color of colors) {
+				const alreadyExists = paragraphs.some(paragraph =>
+					paragraph?._source !== 'student' &&
+					paragraph?.color === color &&
+					paragraphMatchesCategory(paragraph?.text, category.name)
+				)
+				if (alreadyExists) continue
+
+				const rubricText = getRubricBandText(category, color, rowCells)
+				paragraphs.push({
+					id: generateId(),
+					text: `${category.name}: ${rubricText || '[add feedback for this band]'}`,
+					color,
+					_source: 'assignment',
+					createdAt: new Date().toISOString(),
+					subjectId: currentSubjectId,
+					assessmentId: currentAssessmentId
+				})
+				if (rubricText) addedFromRubricCount++
+				else addedPlaceholderCount++
+			}
+		}
+
+		const addedCount = addedFromRubricCount + addedPlaceholderCount
+		if (addedCount > 0) saveAssessmentData()
+		showSuccessNotification(`✅ Added ${addedCount} paragraph${addedCount === 1 ? '' : 's'} (${addedFromRubricCount} from the rubric table, ${addedPlaceholderCount} placeholder). Skipped ${skippedCategoryCount} categor${skippedCategoryCount === 1 ? 'y' : 'ies'} with no color-band marking mode.`)
+	}
+
 	async function runEvidenceCheck(categoryName) {
 		if (!currentStudentId) {
 			showSuccessNotification('⚠️ Please select a student first.')
 			return
 		}
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 		const studentSubmission = getCombinedStudentSubmissionText()
 		const evidenceNotes = getSelectedEvidenceNotes(categoryName)
 
@@ -2332,6 +2689,7 @@
 				categoryName,
 				student: getCurrentStudent(),
 				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes,
 				assessmentParagraphs,
 				priorEvaluations,
@@ -2364,8 +2722,8 @@
 			return
 		}
 
-		if (!isOpenAIConfigured()) {
-			showSuccessNotification('⚠️ OpenAI API key is not configured. Please add your API key to the .env file.')
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
 
@@ -2396,6 +2754,7 @@
 				student: getCurrentStudent(),
 				globalSystemInstructions: globalAiSystemInstructions,
 				studentSubmission,
+				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes,
 				assessmentParagraphs,
 				priorEvaluations,
@@ -2455,41 +2814,30 @@
 	}
 
 	function closePromptPreviewModal() {
+		// Keep the last prompt cached (not cleared) so the header "Last Prompt" button can reopen it.
 		showPromptPreviewModal = false
-		promptPreviewTitle = ''
-		promptPreviewMessages = []
-		promptPreviewRequestPayload = null
 	}
 
-	function buildPromptPreviewRequestPayload(messages = [], temperature = 0.3, maxTokens = 1000) {
-		const modelPreference = getCurrentAiModelPreference()
-		const normalizedTemperature = String(modelPreference.selectedModel || '').trim().toLowerCase().startsWith('gpt-5')
-			? 1
-			: temperature
-		return {
-			endpoint: 'https://api.openai.com/v1/chat/completions',
-			model: modelPreference.selectedModel,
-			reasoning_effort: modelPreference.reasoningEffort,
-			temperature: normalizedTemperature,
-			max_completion_tokens: maxTokens,
-			messages
+	function openLastAiPromptModal() {
+		if (promptPreviewMessages.length === 0) {
+			showSuccessNotification('ℹ️ No AI prompt has been sent yet in this session.')
+			return
 		}
+		showPromptPreviewModal = true
 	}
 
 	async function viewFinalPrompt(categoryName, mode = 'ai') {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
-		const answerInstructions = (quickAddAiInstructions[categoryName] || '').trim()
-
-		if (!shortText) {
-			showSuccessNotification('⚠️ Please enter some text first')
-			return
-		}
+		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 
 		try {
 			if (mode === 'ai') {
+				if (!shortText) {
+					showSuccessNotification('⚠️ Please enter some text first')
+					return
+				}
 				const messages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
 				promptPreviewMessages = messages
-				promptPreviewRequestPayload = buildPromptPreviewRequestPayload(messages, 0.3, 1000)
 				promptPreviewTitle = `Improve Prompt - ${categoryName}`
 				showPromptPreviewModal = true
 				return
@@ -2497,23 +2845,24 @@
 
 			const priorEvaluations = await loadPriorAssessmentEvaluations()
 			const assessmentParagraphs = paragraphs.filter(paragraph => paragraph?._source !== 'student')
-			const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
-			const preview = await buildImproveFeedbackWithRagPromptPreview({
-				assessment: assessmentForAi,
-				categoryName,
-				shortFeedback: shortText,
-				answerInstructions,
-				student: getCurrentStudent(),
-				studentSubmission: getCombinedStudentSubmissionText(),
-				evidenceNotes: getSelectedEvidenceNotes(categoryName),
-				assessmentParagraphs,
-				priorEvaluations,
-				vectorIndex,
-				globalSystemInstructions: globalAiSystemInstructions
-			})
+				const { assessmentForAi, vectorIndex } = await ensureAssessmentVectorIndex({ priorEvaluations, assessmentParagraphs })
+				const studentSubmission = getCombinedStudentSubmissionText()
+				const preview = await buildImproveFeedbackWithRagPromptPreview({
+					assessment: assessmentForAi,
+					categoryName,
+					shortFeedback: shortText,
+					answerInstructions,
+					student: getCurrentStudent(),
+					studentSubmission,
+					studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
+					evidenceNotes: getSelectedEvidenceNotes(categoryName),
+					assessmentParagraphs,
+					priorEvaluations,
+					vectorIndex,
+					globalSystemInstructions: globalAiSystemInstructions
+				})
 
 			promptPreviewMessages = preview.messages
-			promptPreviewRequestPayload = buildPromptPreviewRequestPayload(preview.messages, 0.35, 900)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
 			showPromptPreviewModal = true
 		} catch (error) {
@@ -2712,7 +3061,7 @@
 
 	async function startWebAudioFallbackRecording(categoryName) {
 		const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-		const AudioContextClass = window.AudioContext || window.webkitAudioContext
+		const AudioContextClass = /** @type {any} */ (window).AudioContext || /** @type {any} */ (window).webkitAudioContext
 		if (!AudioContextClass) {
 			stream.getTracks().forEach(track => track.stop())
 			throw new Error('Web Audio API is not available.')
@@ -3274,7 +3623,7 @@
 
 	function getCategoryParagraphIndices(categoryName) {
 		const target = normalizeCategoryName(categoryName)
-		const group = getGroupedParagraphs().find(item => normalizeCategoryName(item.category) === target)
+		const group = groupedParagraphCaches.groupsByNormalizedCategory[target]
 		if (!group) return []
 
 		const indices = []
@@ -3688,7 +4037,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			currentAssessment.categories.forEach(cat => categoriesToCheck.add(cat.name))
 		}
 
-		const paragraphInfoIndex = buildParagraphInfoIndex()
 		const nextWarnings = {}
 		categoriesToCheck.forEach(category => {
 			const warning = getCategoryWarningState(category, paragraphInfoIndex)
@@ -4133,6 +4481,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.log(`STRICT FILTER: Selecting student ${studentId} for assessment ${currentAssessmentId}`)
 			await loadStudentEvaluation()
 			quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
+			quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 		} else {
 			// Clear only student-specific data, keep paragraphs and header photo visible
 			studentName = ''
@@ -4140,6 +4489,65 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			studentPhoto = ''
 			// No studentImage - only header photo for assessment
 			// Don't clear paragraphs, selectedParagraphs, or marks - keep them visible
+		}
+	}
+
+	function cloneAssignmentParagraphsForStudentSelection() {
+		const snapshot = assignmentParagraphSnapshot.filter(paragraph => !isStudentOwnedParagraph(paragraph))
+		if (snapshot.length > 0) {
+			return snapshot.map(paragraph => typeof paragraph === 'object' ? { ...paragraph } : paragraph)
+		}
+
+		const currentAssignmentParagraphs = paragraphs.filter(paragraph => !isStudentOwnedParagraph(paragraph))
+		return currentAssignmentParagraphs.map(paragraph => typeof paragraph === 'object' ? { ...paragraph } : paragraph)
+	}
+
+	function normalizeParagraphComparisonKey(paragraph) {
+		const text = typeof paragraph === 'string' ? paragraph : paragraph?.text
+		const color = typeof paragraph === 'object' ? paragraph?.color : ''
+		return `${String(text || '').trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')}::${String(color || '')}`
+	}
+
+	function paragraphsDifferByContent(assignmentParagraphs, studentParagraphs) {
+		if (studentParagraphs.length === 0) {
+			return false
+		}
+
+		if (assignmentParagraphs.length !== studentParagraphs.length) {
+			return true
+		}
+
+		const assignmentCounts = new Map()
+		for (const paragraph of assignmentParagraphs) {
+			const key = normalizeParagraphComparisonKey(paragraph)
+			assignmentCounts.set(key, (assignmentCounts.get(key) || 0) + 1)
+		}
+
+		for (const paragraph of studentParagraphs) {
+			const key = normalizeParagraphComparisonKey(paragraph)
+			const nextCount = assignmentCounts.get(key)
+			if (!nextCount) {
+				return true
+			}
+			if (nextCount === 1) {
+				assignmentCounts.delete(key)
+			} else {
+				assignmentCounts.set(key, nextCount - 1)
+			}
+		}
+
+		return assignmentCounts.size > 0
+	}
+
+	async function loadStudentEvaluationRecord(studentId, assessmentId) {
+		try {
+			const data = await invoke('read_student_evaluation', { studentId, assessmentId })
+			return data ? JSON.parse(data) : null
+		} catch (error) {
+			console.log('Tauri not available, using browser storage')
+			const key = `student-evaluation-${studentId}-${assessmentId}`
+			const data = localStorage.getItem(key)
+			return data ? JSON.parse(data) : null
 		}
 	}
 
@@ -4473,8 +4881,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// Load student evaluation data
 	async function loadStudentEvaluation() {
+		const requestedStudentId = currentStudentId
+		const requestedAssessmentId = currentAssessmentId
+		const requestedSubjectId = currentSubjectId
+
 		// STRICT FILTER: Validate context before loading student evaluation
-		if (!currentStudentId || !currentAssessmentId) {
+		if (!requestedStudentId || !requestedAssessmentId) {
 			console.log('STRICT FILTER: No student or assessment selected for evaluation')
 			return
 		}
@@ -4491,20 +4903,25 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			return
 		}
 		
-		const assessmentExists = currentSubject.assessments.some(assessment => assessment.id === currentAssessmentId)
+		const assessmentExists = currentSubject.assessments.some(assessment => assessment.id === requestedAssessmentId)
 		if (!assessmentExists) {
-			console.error(`STRICT FILTER: Assessment ${currentAssessmentId} not found in current subject for student evaluation`)
+			console.error(`STRICT FILTER: Assessment ${requestedAssessmentId} not found in current subject for student evaluation`)
 			return
 		}
 
-		console.log(`STRICT FILTER: Loading student evaluation for student ${currentStudentId} in assessment ${currentAssessmentId}`)
+		console.log(`STRICT FILTER: Loading student evaluation for student ${requestedStudentId} in assessment ${requestedAssessmentId}`)
 
-		// Load assignment paragraphs first
-		await loadAssessmentData(currentSubjectId, currentAssessmentId, true) // preserveSelections = true
-		const assignmentParagraphs = [...paragraphs]
+		const assignmentParagraphs = cloneAssignmentParagraphsForStudentSelection()
 
-		// Load student paragraphs for this specific student (without overwriting assignment paragraphs)
-		const studentParagraphs = await loadStudentParagraphsForMerging()
+		// Load student paragraphs and evaluation record in parallel
+		const [studentParagraphs, evaluationData] = await Promise.all([
+			loadStudentParagraphsForMerging(requestedStudentId, requestedSubjectId, requestedAssessmentId),
+			loadStudentEvaluationRecord(requestedStudentId, requestedAssessmentId)
+		])
+
+		if (currentStudentId !== requestedStudentId || currentAssessmentId !== requestedAssessmentId || currentSubjectId !== requestedSubjectId) {
+			return
+		}
 
 		console.log('MERGE DEBUG: Before merging:', {
 			assignmentCount: assignmentParagraphs.length,
@@ -4519,74 +4936,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}))
 		})
 
-		// Check if student paragraphs are identical to assignment paragraphs
-		let studentHasChanges = false
-		
-		// If no student paragraphs exist, treat as identical (merged)
-		if (studentParagraphs.length === 0) {
-			console.log('MERGE DEBUG: No student paragraphs found - treating as merged with assignment')
-			studentHasChanges = false
-		} else {
-			// CONTENT-BASED COMPARISON: Compare paragraphs by content, not by index
-			console.log('MERGE DEBUG: Starting content-based comparison')
-			
-			// Create normalized versions for comparison
-			const normalizedAssignmentParagraphs = assignmentParagraphs.map(para => {
-				const text = typeof para === 'string' ? para : para.text
-				const color = typeof para === 'object' ? para.color : ''
-				return {
-					text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
-					color: color || '',
-					original: para
-				}
-			})
-			
-			const normalizedStudentParagraphs = studentParagraphs.map(para => {
-				const text = typeof para === 'string' ? para : para.text
-				const color = typeof para === 'object' ? para.color : ''
-				return {
-					text: text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
-					color: color || '',
-					original: para
-				}
-			})
-			
-			// Check if all assignment paragraphs have matching student paragraphs
-			for (const assignmentPara of normalizedAssignmentParagraphs) {
-				const matchingStudentPara = normalizedStudentParagraphs.find(studentPara => 
-					studentPara.text === assignmentPara.text && studentPara.color === assignmentPara.color
-				)
-				
-				console.log(`MERGE DEBUG: Looking for match for assignment paragraph:`, {
-					assignmentText: assignmentPara.text.substring(0, 50) + '...',
-					assignmentColor: assignmentPara.color,
-					foundMatch: !!matchingStudentPara,
-					studentText: matchingStudentPara ? matchingStudentPara.text.substring(0, 50) + '...' : 'none',
-					studentColor: matchingStudentPara ? matchingStudentPara.color : 'none'
-				})
-				
-				if (!matchingStudentPara) {
-					studentHasChanges = true
-					console.log(`MERGE DEBUG: No matching student paragraph found - student has changes`)
-					break
-				}
-			}
-			
-			// Also check if there are extra student paragraphs not in assignment
-			if (!studentHasChanges) {
-				for (const studentPara of normalizedStudentParagraphs) {
-					const matchingAssignmentPara = normalizedAssignmentParagraphs.find(assignmentPara => 
-						assignmentPara.text === studentPara.text && assignmentPara.color === studentPara.color
-					)
-					
-					if (!matchingAssignmentPara) {
-						studentHasChanges = true
-						console.log(`MERGE DEBUG: Extra student paragraph found - student has changes`)
-						break
-					}
-				}
-			}
-		}
+		const studentHasChanges = paragraphsDifferByContent(assignmentParagraphs, studentParagraphs)
 		
 		let mergedParagraphs
 		if (!studentHasChanges) {
@@ -4621,77 +4971,38 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.log('DEBUG: Student selectedParagraphs:', currentStudent.selectedParagraphs)
 			console.log('DEBUG: Looking for assessmentId:', currentAssessmentId)
 			
-			const studentSelectedParagraphs = studentsService.getStudentSelectedParagraphs(currentStudent, currentAssessmentId)
+			const studentSelectedParagraphs = studentsService.getStudentSelectedParagraphs(currentStudent, requestedAssessmentId)
 			console.log('DEBUG: Retrieved student selected paragraphs:', studentSelectedParagraphs)
 			
 			if (studentSelectedParagraphs && studentSelectedParagraphs.length > 0) {
 				savedSelectedParagraphs = new Set(studentSelectedParagraphs)
 				console.log('✅ LOADED: Selected paragraphs from student properties:', Array.from(savedSelectedParagraphs))
 			} else {
-				console.log('⚠️ No selections found in student properties for assessment:', currentAssessmentId)
+				console.log('⚠️ No selections found in student properties for assessment:', requestedAssessmentId)
 			}
 		} else {
 			console.log('❌ ERROR: Current student not found for ID:', currentStudentId)
 		}
 
-		// Then load other evaluation data (marks, etc.) from evaluation file
-		try {
-			const data = await invoke('read_student_evaluation', { 
-				studentId: currentStudentId,
-				assessmentId: currentAssessmentId
-			})
-			if (data) {
-				const evaluationData = JSON.parse(data)
-				
-				// STRICT FILTER: Validate that the loaded data matches the current context
-				if (evaluationData.studentId !== currentStudentId || evaluationData.assessmentId !== currentAssessmentId) {
-					console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
-					return
-				}
-				
-				// Only use evaluation file selectedParagraphs if not found in student properties (legacy data)
-				if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
-					savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
-					console.log('🔄 LEGACY: Selected paragraphs from evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
-					console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
-				}
-				
-				savedStudentName = evaluationData.studentName || ''
-				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
-				savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
-				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
-				savedCategoryMarks = evaluationData.categoryMarks || {}
-				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
-				savedQuickAddText = evaluationData.quickAddText || {}
+		if (evaluationData) {
+			if (evaluationData.studentId !== requestedStudentId || evaluationData.assessmentId !== requestedAssessmentId) {
+				console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
+				return
 			}
-		} catch (error) {
-			console.log('Tauri not available, using browser storage')
-			const key = `student-evaluation-${currentStudentId}-${currentAssessmentId}`
-			const data = localStorage.getItem(key)
-			if (data) {
-				const evaluationData = JSON.parse(data)
-				
-				// STRICT FILTER: Validate that the loaded data matches the current context
-				if (evaluationData.studentId !== currentStudentId || evaluationData.assessmentId !== currentAssessmentId) {
-					console.error('STRICT FILTER: Student evaluation data mismatch - ignoring loaded data')
-					return
-				}
-				
-				// Only use evaluation file selectedParagraphs if not found in student properties (legacy data)
-				if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
-					savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
-					console.log('🔄 LEGACY: Selected paragraphs from localStorage evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
-					console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
-				}
-				
-				savedStudentName = evaluationData.studentName || ''
-				savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
-				savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
-				savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
-				savedCategoryMarks = evaluationData.categoryMarks || {}
-				savedManualTotalMarks = evaluationData.manualTotalMarks || ''
-				savedQuickAddText = evaluationData.quickAddText || {}
+
+			if (savedSelectedParagraphs.size === 0 && evaluationData.selectedParagraphs) {
+				savedSelectedParagraphs = new Set(evaluationData.selectedParagraphs)
+				console.log('🔄 LEGACY: Selected paragraphs from evaluation file (legacy data):', Array.from(savedSelectedParagraphs))
+				console.log('⚠️ WARNING: Using legacy data - consider migrating to student properties')
 			}
+
+			savedStudentName = evaluationData.studentName || ''
+			savedStudentSubmissionText = evaluationData.studentSubmissionText || ''
+			savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
+			savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
+			savedCategoryMarks = evaluationData.categoryMarks || {}
+			savedManualTotalMarks = evaluationData.manualTotalMarks || ''
+			savedQuickAddText = evaluationData.quickAddText || {}
 		}
 
 		console.log('SELECTION DEBUG: Before mapping:', {
@@ -4734,9 +5045,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		studentSubmissionText = savedStudentSubmissionText
 		studentSubmissionDocuments = Array.isArray(savedStudentSubmissionDocuments) ? savedStudentSubmissionDocuments : []
 		studentPhoto = savedStudentImage || getStudentPhoto(getCurrentStudent()) || ''
-		if (savedStudentImage && currentStudentId) {
+		if (savedStudentImage && requestedStudentId) {
 			students = students.map(student => (
-				student.id === currentStudentId && !getStudentPhoto(student)
+				student.id === requestedStudentId && !getStudentPhoto(student)
 					? { ...student, studentImage: savedStudentImage, photo: savedStudentImage }
 					: student
 			))
@@ -5191,12 +5502,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	}
 
 	// Load student paragraphs for merging (without overwriting paragraphs variable)
-	async function loadStudentParagraphsForMerging() {
-		if (!currentStudentId) return []
+	async function loadStudentParagraphsForMerging(studentId = currentStudentId, subjectId = currentSubjectId, assessmentId = currentAssessmentId) {
+		if (!studentId) return []
 
 		try {
 			const data = await invoke('read_student_paragraphs', { 
-				studentId: currentStudentId
+				studentId
 			})
 			if (data) {
 				const studentData = JSON.parse(data)
@@ -5206,13 +5517,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				const filteredParagraphs = allStudentParagraphs.filter(para => {
 					// If paragraph has subjectId and assessmentId, use strict filtering
 					if (para.subjectId && para.assessmentId) {
-						const matches = para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+						const matches = para.subjectId === subjectId && para.assessmentId === assessmentId
 						if (!matches) {
 							console.log('MERGE FILTERED OUT: Paragraph from different assignment:', {
 								paraSubjectId: para.subjectId,
 								paraAssessmentId: para.assessmentId,
-								currentSubjectId,
-								currentAssessmentId,
+								subjectId,
+								assessmentId,
 								text: para.text?.substring(0, 50)
 							})
 						}
@@ -5228,7 +5539,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
-			const key = `student-paragraphs-${currentStudentId}`
+			const key = `student-paragraphs-${studentId}`
 			const data = localStorage.getItem(key)
 			if (data) {
 				const studentData = JSON.parse(data)
@@ -5239,7 +5550,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				const filteredParagraphs = allStudentParagraphs.filter(para => {
 					// If paragraph has subjectId and assessmentId, use strict filtering
 					if (para.subjectId && para.assessmentId) {
-						return para.subjectId === currentSubjectId && para.assessmentId === currentAssessmentId
+						return para.subjectId === subjectId && para.assessmentId === assessmentId
 					}
 					// For legacy paragraphs without context, include them (will be migrated on next save)
 					console.log('LEGACY DATA: Including paragraph without subjectId/assessmentId for migration:', para.text?.substring(0, 50))
@@ -5445,12 +5756,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// getSectionOrder function is now imported from utils/helpers.js
 
-	function getOrderedParagraphs() {
-		console.log('🔍 getOrderedParagraphs called with:', {
-			paragraphsCount: paragraphs.length,
-			paragraphs: paragraphs.map(p => ({ id: p.id, text: p.text?.substring(0, 50) }))
-		})
-		
+	function buildOrderedParagraphs() {
 		const ordered = paragraphs
 			.map((paragraph, originalIndex) => {
 				// Handle both string and object formats
@@ -5473,14 +5779,35 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				// If same section, maintain original order
 				return a.originalIndex - b.originalIndex
 			})
-		
-		console.log('🔍 getOrderedParagraphs result:', {
-			orderedCount: ordered.length,
-			orderedIds: ordered.map(o => o.id),
-			orderedTexts: ordered.map(o => o.paragraph?.substring(0, 30))
-		})
-		
+
 		return ordered
+	}
+
+	function getOrderedParagraphs() {
+		return orderedParagraphs
+	}
+
+	function buildParagraphLookup() {
+		const byId = {}
+		const mainIndexById = {}
+		paragraphs.forEach((paragraph, index) => {
+			const paragraphId = paragraph?.id
+			if (paragraphId === undefined || paragraphId === null || paragraphId === '') return
+			byId[paragraphId] = paragraph
+			mainIndexById[paragraphId] = index
+		})
+		return { byId, mainIndexById }
+	}
+
+	function buildAssessmentCategoryLookup() {
+		const byExactName = {}
+		const byNormalizedName = {}
+		for (const category of currentAssessment?.categories || []) {
+			if (!category?.name) continue
+			byExactName[category.name] = category
+			byNormalizedName[normalizeCategoryName(category.name)] = category
+		}
+		return { byExactName, byNormalizedName }
 	}
 
 	// getColorBadgeClass function is now imported from utils/helpers.js
@@ -5491,8 +5818,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 	// extractKnowledgeArea function is now imported from utils/helpers.js
 
-	function getGroupedParagraphs() {
-		const ordered = getOrderedParagraphs()
+	function buildGroupedParagraphs() {
+		const ordered = orderedParagraphs
+		const { byId } = paragraphLookup
+		const { byExactName, byNormalizedName } = assessmentCategoryLookup
 		const grouped = {}
 		
 		// First, initialize all categories from the assessment (even if they have no paragraphs)
@@ -5515,7 +5844,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		// Then process paragraphs and add them to their respective categories
 		ordered.forEach(({paragraph, color, id, originalIndex}) => {
 			// Get the source information from the paragraph object
-			const paragraphObj = paragraphs.find(p => p.id === id)
+			const paragraphObj = byId[id]
 			const source = paragraphObj?._source
 			const createdAt = paragraphObj?.createdAt
 			// Extract category and knowledge area from paragraph text
@@ -5563,9 +5892,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const groupKey = finalCategory
 			
 			if (!grouped[groupKey]) {
-				const matchedCategory = (currentAssessment?.categories || []).find(
-					item => normalizeCategoryName(item.name) === normalizeCategoryName(finalCategory)
-				)
+				const matchedCategory = byNormalizedName[normalizeCategoryName(finalCategory)]
 				grouped[groupKey] = {
 					categoryId: matchedCategory?.id || finalCategory,
 					category: finalCategory,
@@ -5595,7 +5922,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						}
 					}
 				} else if (effectiveMode === 'percentage') {
-					const categoryObj = currentAssessment?.categories?.find(cat => cat.name === finalCategory)
+					const categoryObj = byExactName[finalCategory] || byNormalizedName[normalizeCategoryName(finalCategory)]
 					const allocatedMarks = categoryObj?.allocatedMarks
 					const range = getMarksRange(color, allocatedMarks)
 					const bounds = getColorPercentageBounds(color)
@@ -5632,9 +5959,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return Object.values(grouped)
 	}
 
+	function getGroupedParagraphs() {
+		return groupedParagraphs
+	}
+
 	function buildParagraphInfoIndex() {
 		const index = {}
-		const groupedParagraphs = getGroupedParagraphs()
 		groupedParagraphs.forEach(group => {
 			Object.values(group.knowledgeAreas || {}).forEach(paragraphsInArea => {
 				paragraphsInArea.forEach(paragraphObj => {
@@ -5648,16 +5978,33 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return index
 	}
 
+	function buildGroupedParagraphCaches() {
+		const groupsByNormalizedCategory = {}
+		const categoryParagraphsByNormalized = {}
+		groupedParagraphs.forEach(group => {
+			const normalizedCategory = normalizeCategoryName(group.category)
+			groupsByNormalizedCategory[normalizedCategory] = group
+			categoryParagraphsByNormalized[normalizedCategory] = Object.values(group.knowledgeAreas || {}).flat()
+		})
+		return { groupsByNormalizedCategory, categoryParagraphsByNormalized }
+	}
+
 	function getCategoryParagraphSequence(group) {
 		if (!group?.knowledgeAreas) return []
 		return Object.values(group.knowledgeAreas).flat()
 	}
 
+	function findCategoriesMissingParagraphs() {
+		return getGroupedParagraphs()
+			.filter(group => group.category && getCategoryParagraphSequence(group).length === 0)
+			.map(group => group.category)
+	}
+
 	function resolveParagraphMainIndex(entry) {
 		if (!entry) return -1
 		if (entry.id !== undefined && entry.id !== null && entry.id !== '') {
-			const byId = paragraphs.findIndex(paragraph => paragraph?.id === entry.id)
-			if (byId !== -1) return byId
+			const byId = paragraphLookup.mainIndexById[entry.id]
+			if (byId !== undefined) return byId
 		}
 		return Number.isInteger(entry.originalIndex) ? entry.originalIndex : -1
 	}
@@ -5697,7 +6044,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		})
 		
 		// Use the EXACT same order as the UI display (getGroupedParagraphs)
-		const groupedParagraphs = getGroupedParagraphs()
 		const result = []
 		const processedCategories = new Set()
 		
@@ -5788,7 +6134,91 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return finalText
 	}
 
+	const HTML2CANVAS_RASTER_SCALE = 2
+
+	// CSS-px (container-relative) top/bottom of every <tr> in a rendered PDF-export container,
+	// used so the page-slicer below can avoid cutting a table row in half.
+	function getRowBoundaryRectsPx(container) {
+		const containerTop = container.getBoundingClientRect().top
+		return Array.from(container.querySelectorAll('tr')).map(row => {
+			const rect = row.getBoundingClientRect()
+			return { top: rect.top - containerTop, bottom: rect.bottom - containerTop }
+		})
+	}
+
+	// Slices a rasterized HTML canvas across PDF pages. When the natural cut point would land
+	// inside a table row (per rowBoundariesPx), the slice is pulled back to end at that row's
+	// top instead, pushing the whole row onto the next page rather than splitting it visually.
+	function sliceCanvasIntoPdfPages(doc, canvas, { pageHeight, margin, startY, pxPerMm, targetWidthMm, xOffset, rowBoundariesPx = [], gapMm = 2 }) {
+		const naturalWidthMm = canvas.width / pxPerMm
+		const naturalHeightMm = canvas.height / pxPerMm
+		const scale = targetWidthMm / naturalWidthMm
+		const targetHeightMm = naturalHeightMm * scale
+		const pxPerMmAtCanvasScale = pxPerMm / scale
+		const rowBoundariesCanvasPx = rowBoundariesPx.map(r => ({
+			top: r.top * HTML2CANVAS_RASTER_SCALE,
+			bottom: r.bottom * HTML2CANVAS_RASTER_SCALE
+		}))
+
+		let nextY = startY
+		let consumedMm = 0
+
+		while (consumedMm < targetHeightMm - 0.01) {
+			if (nextY > pageHeight - margin - 5) {
+				doc.addPage()
+				nextY = margin
+			}
+
+			const availableMm = pageHeight - margin - nextY
+			if (availableMm <= 0) {
+				doc.addPage()
+				nextY = margin
+				continue
+			}
+
+			const isFreshPage = nextY <= margin + 0.01
+			let drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
+			let slicePxTop = Math.round(consumedMm * pxPerMmAtCanvasScale)
+			let slicePxHeight = Math.round(drawMm * pxPerMmAtCanvasScale)
+
+			const isFinalSlice = consumedMm + drawMm >= targetHeightMm - 0.01
+			if (!isFinalSlice && slicePxHeight > 0) {
+				const sliceBottomPx = slicePxTop + slicePxHeight
+				const splitRow = rowBoundariesCanvasPx.find(r => sliceBottomPx > r.top + 1 && sliceBottomPx < r.bottom - 1)
+				if (splitRow) {
+					const adjustedPxHeight = Math.round(splitRow.top) - slicePxTop
+					if (adjustedPxHeight > 8) {
+						slicePxHeight = adjustedPxHeight
+						drawMm = slicePxHeight / pxPerMmAtCanvasScale
+					} else if (!isFreshPage) {
+						// Nothing useful fits before this row starts — start a fresh page instead of a sliver.
+						doc.addPage()
+						nextY = margin
+						continue
+					}
+					// else: already at the top of a fresh page and the row still doesn't fit on one page —
+					// fall through and let it split; there's no page big enough to avoid it.
+				}
+			}
+
+			const sliceCanvas = document.createElement('canvas')
+			sliceCanvas.width = canvas.width
+			sliceCanvas.height = slicePxHeight
+			const ctx = sliceCanvas.getContext('2d')
+			ctx.drawImage(canvas, 0, -slicePxTop)
+
+			const sliceData = sliceCanvas.toDataURL('image/png')
+			doc.addImage(sliceData, 'PNG', xOffset, nextY, targetWidthMm, drawMm)
+
+			nextY += drawMm + gapMm
+			consumedMm += drawMm
+		}
+
+		return nextY
+	}
+
 	async function renderAssessmentHtmlToPdf(doc, startY, margin, pageWidth, matchedCategories = new Set()) {
+		const normalizeParagraphCategory = (str) => (str || '')
 		const htmlContent = normalizeHtmlQuotes(assessmentHtml || '').trim()
 		if (!htmlContent) return startY
 
@@ -5797,14 +6227,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const pxPerMm = 96 / 25.4 // approximate CSS pixel density
 		const maxContentWidthMm = pageWidth - (margin * 2)
 		const maxContentWidthPx = maxContentWidthMm * pxPerMm
-		const paragraphInfoIndex = buildParagraphInfoIndex()
 		const getParagraphCategoryKey = (para) => {
 			const info = para?.id ? paragraphInfoIndex[para.id] : null
-			if (info?.category) return normalize(info.category)
+			if (info?.category) return normalizeParagraphCategory(info.category)
 			const paraText = typeof para === 'string' ? para : para?.text || ''
 			if (!paraText) return ''
 			const prefix = paraText.split(':')[0]
-			return normalize(prefix)
+			return normalizeParagraphCategory(prefix)
 		}
 		const container = document.createElement('div')
 		container.className = 'pdf-assessment-html'
@@ -5851,12 +6280,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		})
 
 		// Strip inline padding/line-height on cells so our injected styles win
-		container.querySelectorAll('th, td').forEach(cell => {
+		container.querySelectorAll('th, td').forEach(/** @type {HTMLElement} */ (cell) => {
+			// @ts-ignore - cell is HTMLTableCellElement which has style
 			cell.style.padding = ''
+			// @ts-ignore
 			cell.style.lineHeight = ''
 
 			// Fix text color visibility - ensure text is visible on all backgrounds
+			// @ts-ignore
 			const bgColor = cell.style.backgroundColor || window.getComputedStyle(cell).backgroundColor
+			// @ts-ignore
 			const currentColor = cell.style.color
 
 			// If background is dark (red, green, blue with low RGB values), ensure white text
@@ -5873,25 +6306,30 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					// If dark background (brightness < 128), use white text
 					// If light background, use black text
 					if (brightness < 128) {
+						// @ts-ignore
 						cell.style.color = '#ffffff'
 					} else {
+						// @ts-ignore
 						cell.style.color = '#000000'
 					}
 				}
 			} else if (!currentColor || currentColor === 'white' || currentColor === '#ffffff') {
 				// If no background but text is white, make it black
+				// @ts-ignore
 				cell.style.color = '#000000'
 			}
 		})
 
-		// Normalize spacing inside pasted HTML so tables don't blow up the PDF
-		const styleElement = document.createElement('style')
-		styleElement.textContent = `
-			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: 10pt; color: #000 !important; background: #fff !important; }
-			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; }
+		// Normalize spacing inside pasted HTML so tables don't blow up the PDF.
+		// Font size/padding are parameterized so a very tall table can be shrunk to fit
+		// more rows per page (see the shrink-to-fit loop below) instead of leaving one
+		// oversized row alone on a page.
+		const buildAssessmentHtmlStyleText = (fontSizePt, cellPaddingPx) => `
+			.pdf-assessment-html { width: 100%; box-sizing: border-box; font-size: ${fontSizePt}pt; color: #000 !important; background: #fff !important; }
+			.pdf-assessment-html table { border-collapse: collapse; border-spacing: 0; width: 100%; table-layout: fixed; word-wrap: break-word; margin-bottom: 40px; }
 			.pdf-assessment-html th,
 			.pdf-assessment-html td {
-				padding: 12px 10px !important;
+				padding: ${cellPaddingPx}px ${Math.max(4, Math.round(cellPaddingPx * 0.83))}px !important;
 				line-height: 1.35 !important;
 				vertical-align: top !important;
 				word-break: break-word !important;
@@ -5918,9 +6356,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			.pdf-assessment-html td {
 				border: 1px solid #222 !important;
 			}
-			.pdf-assessment-html p:not([style*="font-size"]) { font-size: 10pt; }
-			.pdf-assessment-html div:not([style*="font-size"]) { font-size: 10pt; }
+			.pdf-assessment-html p:not([style*="font-size"]) { font-size: ${fontSizePt}pt; }
+			.pdf-assessment-html div:not([style*="font-size"]) { font-size: ${fontSizePt}pt; }
 		`
+		const ASSESSMENT_HTML_BASE_FONT_PT = 10
+		const ASSESSMENT_HTML_BASE_PADDING_PX = 12
+		const styleElement = document.createElement('style')
+		styleElement.textContent = buildAssessmentHtmlStyleText(ASSESSMENT_HTML_BASE_FONT_PT, ASSESSMENT_HTML_BASE_PADDING_PX)
 		container.prepend(styleElement)
 
 		// Auto-highlight rubric cells based on category marks and row names
@@ -5951,7 +6393,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const selectedMarkMap = {}
 			const selectedCategoryKeys = new Set()
 			Object.keys(marksMap).forEach(key => selectedCategoryKeys.add(key))
-			const grouped = getGroupedParagraphs()
+			const grouped = groupedParagraphs
 			grouped.forEach(group => {
 				Object.values(group.knowledgeAreas || {}).forEach(paras => {
 					paras.forEach(p => {
@@ -5979,17 +6421,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				}
 			})
 
-			// Build UI-order paragraph cache by category for position lookup
-			const groupedParagraphs = getGroupedParagraphs()
+			// Build UI-order paragraph cache by category for position lookup.
+			// Keyed with the same paren-stripping `normalize` as rowKey/effectiveKey above -
+			// groupedParagraphCaches.categoryParagraphsByNormalized uses normalizeCategoryName
+			// instead, which keeps "(LO1)"-style suffixes and never matches, so the highlight
+			// silently never applies for any category named that way.
 			const getCategoryParagraphsInOrder = (catKey) => {
-				const result = []
-				groupedParagraphs.forEach(group => {
-					if (normalize(group.category) !== catKey) return
-					Object.values(group.knowledgeAreas || {}).forEach(list => {
-						list.forEach(p => result.push(p))
-					})
-				})
-				return result
+				const group = groupedParagraphs.find(g => normalize(g.category) === catKey)
+				return group ? Object.values(group.knowledgeAreas || {}).flat() : []
 			}
 
 			const tables = Array.from(container.querySelectorAll('table'))
@@ -6078,8 +6517,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			console.error('Auto-highlight rubric cells failed:', err)
 		}
 
-		container.querySelectorAll('[data-color]').forEach(el => {
+		container.querySelectorAll('[data-color]').forEach(/** @type {HTMLElement} */ (el) => {
+			// @ts-ignore
 			el.style.backgroundColor = highlightColor
+			// @ts-ignore
 			el.style.color = '#000'
 		})
 
@@ -6087,45 +6528,35 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		let nextY = startY
 		try {
-			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
-			const naturalWidthMm = canvas.width / pxPerMm
-			const naturalHeightMm = canvas.height / pxPerMm
+			// Shrink-to-fit: if any single row is tall enough that two of them couldn't share a
+			// page, step the font size (and padding) down until rows are short enough to pack
+			// multiple per page, rather than leaving one oversized row alone on a page.
 			const maxDrawableHeightMm = pageHeight - (margin * 2)
-			const scaleForWidth = maxContentWidthMm / naturalWidthMm
-			const scale = scaleForWidth // fill available text width; slice vertically as needed
-			const targetWidthMm = maxContentWidthMm
-			const targetHeightMm = naturalHeightMm * scale
-			const xOffset = margin
-			let consumedMm = 0
-
-			while (consumedMm < targetHeightMm - 0.01) {
-				if (nextY > pageHeight - margin - 5) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const availableMm = pageHeight - margin - nextY
-				if (availableMm <= 0) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
-				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
-				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
-
-				const sliceCanvas = document.createElement('canvas')
-				sliceCanvas.width = canvas.width
-				sliceCanvas.height = slicePxHeight
-				const ctx = sliceCanvas.getContext('2d')
-				ctx.drawImage(canvas, 0, -slicePxTop)
-
-				const sliceData = sliceCanvas.toDataURL('image/png')
-				doc.addImage(sliceData, 'PNG', xOffset, nextY, targetWidthMm, drawMm)
-
-				nextY += drawMm + 2
-				consumedMm += drawMm
+			const maxRowShareOfPage = 0.48
+			const minFontSizePt = 7
+			for (let fontSizePt = ASSESSMENT_HTML_BASE_FONT_PT; fontSizePt >= minFontSizePt; fontSizePt--) {
+				const rows = Array.from(container.querySelectorAll('tr'))
+				if (!rows.length) break
+				const tallestRowMm = Math.max(...rows.map(row => row.getBoundingClientRect().height)) / pxPerMm
+				if (tallestRowMm <= maxDrawableHeightMm * maxRowShareOfPage) break
+				if (fontSizePt === minFontSizePt) break
+				const nextFontSizePt = fontSizePt - 1
+				const nextPaddingPx = Math.max(4, Math.round(ASSESSMENT_HTML_BASE_PADDING_PX * (nextFontSizePt / ASSESSMENT_HTML_BASE_FONT_PT)))
+				styleElement.textContent = buildAssessmentHtmlStyleText(nextFontSizePt, nextPaddingPx)
 			}
+
+			const rowBoundariesPx = getRowBoundaryRectsPx(container)
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: HTML2CANVAS_RASTER_SCALE, useCORS: true })
+			nextY = sliceCanvasIntoPdfPages(doc, canvas, {
+				pageHeight,
+				margin,
+				startY,
+				pxPerMm,
+				targetWidthMm: maxContentWidthMm,
+				xOffset: margin,
+				rowBoundariesPx,
+				gapMm: 2
+			})
 		} catch (error) {
 			console.error('Failed to render assessment HTML into PDF:', error)
 		} finally {
@@ -6172,41 +6603,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		let nextY = startY
 		try {
-			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2, useCORS: true })
-			const naturalWidthMm = canvas.width / pxPerMm
-			const naturalHeightMm = canvas.height / pxPerMm
-			const scale = maxContentWidthMm / naturalWidthMm
-			const targetHeightMm = naturalHeightMm * scale
-			let consumedMm = 0
-
-			while (consumedMm < targetHeightMm - 0.01) {
-				if (nextY > pageHeight - margin - 5) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const availableMm = pageHeight - margin - nextY
-				if (availableMm <= 0) {
-					doc.addPage()
-					nextY = margin
-				}
-
-				const drawMm = Math.min(availableMm, targetHeightMm - consumedMm)
-				const slicePxTop = Math.round(consumedMm * pxPerMm / scale)
-				const slicePxHeight = Math.round(drawMm * pxPerMm / scale)
-
-				const sliceCanvas = document.createElement('canvas')
-				sliceCanvas.width = canvas.width
-				sliceCanvas.height = slicePxHeight
-				const ctx = sliceCanvas.getContext('2d')
-				ctx.drawImage(canvas, 0, -slicePxTop)
-
-				const sliceData = sliceCanvas.toDataURL('image/png')
-				doc.addImage(sliceData, 'PNG', margin, nextY, maxContentWidthMm, drawMm)
-
-				nextY += drawMm + 1.5
-				consumedMm += drawMm
-			}
+			const rowBoundariesPx = getRowBoundaryRectsPx(container)
+			const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: HTML2CANVAS_RASTER_SCALE, useCORS: true })
+			nextY = sliceCanvasIntoPdfPages(doc, canvas, {
+				pageHeight,
+				margin,
+				startY,
+				pxPerMm,
+				targetWidthMm: maxContentWidthMm,
+				xOffset: margin,
+				rowBoundariesPx,
+				gapMm: 1.5
+			})
 		} catch (error) {
 			console.error('Failed to render selected feedback HTML into PDF:', error)
 		} finally {
@@ -6387,8 +6795,86 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			.catch(() => showSuccessNotification('❌ Copy failed - unable to access clipboard. Please try again or copy manually.'))
 	}
 
+		// jsPDF's standard fonts (helvetica/times/courier) only render WinAnsi/Latin-1 characters.
+		// AI-generated feedback text often includes minus signs, arrows, math comparisons, primes,
+		// greek letters, or checkmarks that fall outside that range - jsPDF doesn't reject them, it
+		// silently mis-measures and mis-renders the whole line (letter-spaced text that overflows the
+		// page). Map the ones we know about to a safe equivalent; anything else falls back to '?' so
+		// layout stays intact instead of corrupting the line.
+		const PDF_SAFE_EXTRA_CODEPOINTS = new Set([
+			0x2018, 0x2019, 0x201a, 0x201c, 0x201d, 0x201e, // curly quotes
+			0x2013, 0x2014, // en/em dash
+			0x2020, 0x2021, 0x2022, 0x2026, 0x2030, // dagger, bullet, ellipsis, permille
+			0x2039, 0x203a, 0x2122 // guillemets, trademark
+		])
+		const PDF_CHAR_FALLBACK = {
+			0x2010: '-', 0x2011: '-', 0x2012: '-', 0x2015: '-', 0x2212: '-', // hyphen/minus variants
+			0x2192: '->', 0x2190: '<-', 0x2194: '<->', 0x21d2: '=>', 0x21d0: '<=',
+			0x2248: '~', 0x2264: '<=', 0x2265: '>=', 0x2260: '!=',
+			0x2032: '\'', 0x2033: '"',
+			0x2713: 'v', 0x2714: 'v', 0x2715: 'x', 0x2716: 'x', 0x274c: 'x',
+			0x00a0: ' '
+		}
+		function sanitizeTextForPdf(value) {
+			return String(value ?? '').replace(/[-￿]/g, (ch) => {
+				const code = ch.codePointAt(0)
+				if (code <= 0x17f || PDF_SAFE_EXTRA_CODEPOINTS.has(code)) return ch // Latin-1 + Latin Extended-A (macrons)
+				return PDF_CHAR_FALLBACK[code] ?? '?'
+			})
+		}
+		function makePdfTextSafe(doc) {
+			const originalText = doc.text.bind(doc)
+			doc.text = (text, ...rest) => {
+				const safeText = Array.isArray(text) ? text.map(sanitizeTextForPdf) : sanitizeTextForPdf(text)
+				return originalText(safeText, ...rest)
+			}
+			const originalSplit = doc.splitTextToSize.bind(doc)
+			doc.splitTextToSize = (text, ...rest) => originalSplit(sanitizeTextForPdf(text), ...rest)
+			return doc
+		}
+
+		// jsPDF's standard fonts can't render macrons at all (see above), so PDFs need a real
+		// Unicode font embedded. NotoSans (SIL OFL, public/fonts/) covers Latin Extended-A. Base64
+		// payloads are cached at module scope since the font bytes never change across exports;
+		// only the per-document addFont registration needs repeating for each new jsPDF instance.
+		let notoSansRegularBase64 = null
+		let notoSansBoldBase64 = null
+
+		async function fetchFontAsBase64(url) {
+			const buffer = await (await fetch(url)).arrayBuffer()
+			const bytes = new Uint8Array(buffer)
+			let binary = ''
+			const chunkSize = 0x8000
+			for (let i = 0; i < bytes.length; i += chunkSize) {
+				binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize))
+			}
+			return btoa(binary)
+		}
+
+		async function registerPdfFonts(doc) {
+			if (!notoSansRegularBase64) {
+				notoSansRegularBase64 = await fetchFontAsBase64('/fonts/NotoSans-Regular.ttf')
+			}
+			if (!notoSansBoldBase64) {
+				notoSansBoldBase64 = await fetchFontAsBase64('/fonts/NotoSans-Bold.ttf')
+			}
+			doc.addFileToVFS('NotoSans-Regular.ttf', notoSansRegularBase64)
+			doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal')
+			doc.addFileToVFS('NotoSans-Bold.ttf', notoSansBoldBase64)
+			doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold')
+		}
+
 		async function generatePDF() {
 			console.log('📄 generatePDF called')
+
+			// Flag categories with no paragraphs added yet, so the user can see them highlighted before submitting
+			const missingCategories = findCategoriesMissingParagraphs()
+			missingParagraphCategories = new Set(missingCategories)
+			if (missingCategories.length > 0) {
+				showSuccessNotification(`⚠️ Cannot generate PDF - these categories have no paragraphs added: ${missingCategories.join(', ')}`)
+				return
+			}
+
 		// Check for unentered text in quick-add textareas
 		if (currentStudentId) {
 			const hasUnenteredText = Object.values(quickAddText).some(text => text && text.trim() !== '')
@@ -6421,7 +6907,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		const defaultMargin = 25 // Slightly larger margin for better breathing room
 		const needsLandscape = !lockPdfPortrait && shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
-		const doc = new jsPDF({ orientation: 'portrait' }) // keep first page portrait; switch later if needed
+		const doc = makePdfTextSafe(new jsPDF({ orientation: 'portrait' })) // keep first page portrait; switch later if needed
+		await registerPdfFonts(doc)
 		const headingText = 'Feedback Report'
 		const headingFontSize = 16
 		
@@ -6431,15 +6918,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const maxLineWidth = pageWidth - (margin * 2)
 
 		// Prepare heading metrics up-front so spacing is consistent
-		doc.setFont('helvetica', 'bold')
+		doc.setFont('NotoSans', 'bold')
 		doc.setFontSize(headingFontSize)
 		const headingMetrics = doc.getTextDimensions
 			? doc.getTextDimensions(headingText)
-			: { h: doc.internal.getLineHeight() }
-		const headingHeight = headingMetrics?.h || doc.internal.getLineHeight()
+			: { h: /** @type {any} */ (doc.internal).getLineHeight?.() || 10 }
+		const headingHeight = headingMetrics?.h || /** @type {any} */ (doc.internal).getLineHeight?.() || 10
 
 		const drawHeading = () => {
-			doc.setFont('helvetica', 'bold')
+			doc.setFont('NotoSans', 'bold')
 			doc.setFontSize(headingFontSize)
 			doc.text(headingText, pageWidth / 2, margin, { align: 'center' })
 		}
@@ -6468,7 +6955,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						
 						// Draw heading beneath the image
 						const headingY = yPosition + imageHeight + headingHeight + 2
-						doc.setFont('helvetica', 'bold')
+						doc.setFont('NotoSans', 'bold')
 						doc.setFontSize(headingFontSize)
 						doc.text(headingText, pageWidth / 2, headingY, { align: 'center' })
 						
@@ -6498,7 +6985,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	async function generateRestOfPDF(doc, yPosition, margin, pageWidth, maxLineWidth, selectedText, studentName, subjectName, assessmentName, useLandscapeForContent = false) {
 		// Try to set a font that's closer to Oxygen (Arial or Helvetica)
 		try {
-			doc.setFont('helvetica', 'normal')
+			doc.setFont('NotoSans', 'normal')
 		} catch (e) {
 		// Fallback to default font if helvetica is not available
 			console.log('Helvetica not available, using default font')
@@ -6519,7 +7006,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const lineSpacing = 10
 		const headerHeight = headerLines.length * lineSpacing
 		let headerY = pageHeight - margin - headerHeight
-		doc.setFont('helvetica', 'bold')
+		doc.setFont('NotoSans', 'bold')
 		doc.setFontSize(10)
 		headerLines.forEach(({ text, color }) => {
 			doc.setTextColor(...color)
@@ -6548,7 +7035,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			: doc.internal.getNumberOfPages()
 		
 		// Reset font to normal for content
-		doc.setFont('helvetica', 'normal')
+		doc.setFont('NotoSans', 'normal')
 		
 		// Render assessment HTML (as-is) into the PDF before content
 		const matchedCategoriesFromTable = new Set()
@@ -6579,7 +7066,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const categoriesWithMarks = new Set()
 		const mappedCategories = new Set()
 		const categoriesWithUncoveredSelections = new Set()
-		const paragraphInfoIndex = buildParagraphInfoIndex()
 		const paragraphsToSkip = new Set()
 		const coveredSelectedParagraphIds = new Set()
 		const normalizeLine = (val) => (val || '').toString().replace(/\u00a0/g, ' ').trim()
@@ -6605,16 +7091,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		}
 
-		const groupedParagraphsForCoverage = getGroupedParagraphs()
 		const getCategoryParagraphsInOrder = (normalizedCategory) => {
-			const result = []
-			groupedParagraphsForCoverage.forEach(group => {
-				if (normalizeCategoryName(group.category) !== normalizedCategory) return
-				Object.values(group.knowledgeAreas || {}).forEach(list => {
-					list.forEach(p => result.push(p))
-				})
-			})
-			return result
+			return groupedParagraphCaches.categoryParagraphsByNormalized[normalizedCategory] || []
 		}
 
 		const coveredParagraphPositions = new Set()
@@ -6796,14 +7274,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				skipCurrentCategory = false
 
 				// Bold font for ALL category headers (any line ending with ':')
-				doc.setFont('helvetica', 'bold')
+				doc.setFont('NotoSans', 'bold')
 				doc.setFontSize(currentBodyFontSize) // Same size as other content
 
 				const headerText = categoryCoveredByTable ? `${categoryName}:` : headerInfo.display
 				doc.text(headerText, margin, yPosition)
 
 				// Reset font to normal for content
-				doc.setFont('helvetica', 'normal')
+				doc.setFont('NotoSans', 'normal')
 				doc.setFontSize(currentBodyFontSize) // Back to regular size
 				yPosition += headerGap() // Controlled gap after headers
 			} else {
@@ -6884,9 +7362,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 </script>
 
 <!-- Header -->
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="--bs-navbar-padding-y: 0.35rem;">
 	<div class="container-fluid">
-		<a class="navbar-brand" href="/">Feedback Manager v3.3.4</a>
+		<a class="navbar-brand d-inline-flex align-items-center gap-2 lh-1" href="/" style="font-size: 0.95rem;">
+			<span>Feedback Manager v3.3.4</span>
+			<span class="small text-white-50 lh-1">({__BUILD_TIME__})</span>
+		</a>
 		<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
 			<span class="navbar-toggler-icon"></span>
 		</button>
@@ -6921,7 +7402,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					<button
 						class="btn btn-outline-light btn-sm ms-2"
 						onclick={toggleAiModelSettings}
-						title={`AI model settings: ${getAiModelLabel(selectedAiModel)} / ${getReasoningEffortLabel(selectedAiReasoningEffort)}`}
+						title={`AI model settings: ${getCurrentAiProviderLabel()} · ${getAiModelLabel(selectedAiModel)} / ${getReasoningEffortLabel(selectedAiReasoningEffort)}`}
 						aria-label="Open AI model settings"
 						aria-expanded={showAiModelSettings}
 						aria-haspopup="true"
@@ -6931,9 +7412,79 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					{#if showAiModelSettings}
 						<div class="ai-settings-menu dropdown-menu dropdown-menu-end show shadow">
 							<div class="ai-settings-section">
+								<div class="ai-settings-heading">Provider</div>
+								<div class="ai-settings-list compact">
+									{#each AI_PROVIDER_OPTIONS as option (option.value)}
+										<button
+											type="button"
+											class:selected={selectedAiProvider === option.value}
+											class="ai-settings-option"
+											onclick={() => selectAiProvider(option.value)}
+										>
+											<span>{option.label}</span>
+											{#if !isProviderConfigured(option.value)}
+												<i class="bi bi-exclamation-triangle text-warning" title="API key not configured"></i>
+											{:else if selectedAiProvider === option.value}
+												<i class="bi bi-check-lg"></i>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							</div>
+							<div class="ai-settings-divider"></div>
+							<div class="ai-settings-section">
+								<div class="ai-settings-heading">API Keys</div>
+								{#each AI_PROVIDER_OPTIONS as option (option.value)}
+									<div class="ai-settings-manual mt-2">
+										<label class="form-label small mb-1" for="apiKeyInput-{option.value}">
+											{option.label} key
+											{#if isProviderConfigured(option.value)}
+												<i class="bi bi-check-circle-fill text-success ms-1" title="Configured"></i>
+											{/if}
+										</label>
+										<div class="ai-settings-manual-row">
+											<input
+												id="apiKeyInput-{option.value}"
+												type="password"
+												autocomplete="off"
+												class="form-control form-control-sm ai-settings-input"
+												value={apiKeyDrafts[option.value] || ''}
+												oninput={(e) => { apiKeyDrafts = { ...apiKeyDrafts, [option.value]: e.currentTarget.value } }}
+												placeholder={getLlmProvider(option.value).envApiKey ? 'Using key from .env' : 'sk-...'}
+												onkeydown={(event) => {
+													if (event.key === 'Enter') {
+														event.preventDefault()
+														saveApiKey(option.value)
+													}
+												}}
+											>
+											<button
+												type="button"
+												class="btn btn-sm btn-outline-primary ai-settings-apply"
+												onclick={() => saveApiKey(option.value)}
+											>
+												Save
+											</button>
+											{#if apiKeyDrafts[option.value]}
+												<button
+													type="button"
+													class="btn btn-sm btn-outline-secondary ai-settings-apply"
+													onclick={() => clearApiKey(option.value)}
+													title="Clear stored key"
+													aria-label={`Clear stored ${option.label} API key`}
+												>
+													<i class="bi bi-x-lg"></i>
+												</button>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+							<div class="ai-settings-divider"></div>
+							<div class="ai-settings-section">
 								<div class="ai-settings-heading">Select model</div>
 								<div class="ai-settings-list">
-									{#each AI_CHAT_MODEL_OPTIONS as option (option.value)}
+									{#each getModelsForProvider(selectedAiProvider) as option (option.value)}
 										<button
 											type="button"
 											class:selected={selectedAiModel === option.value}
@@ -6948,7 +7499,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									{/each}
 								</div>
 								<div class="ai-settings-manual mt-2">
-									<label class="form-label small mb-1" for="manualAiModelInput">Manual model</label>
+									<label class="form-label small mb-1" for="manualAiModelInput">Manual model ({getCurrentAiProviderLabel()})</label>
 									<div class="ai-settings-manual-row">
 										<input
 											id="manualAiModelInput"
@@ -7014,6 +7565,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						aria-label="Open application log"
 					>
 						<i class="bi bi-journal-text me-1"></i>Log
+					</button>
+				</li>
+				<li class="nav-item">
+					<button
+						class="btn btn-outline-light btn-sm ms-2"
+						onclick={openLastAiPromptModal}
+						title={promptPreviewMessages.length > 0 ? `View last AI prompt: ${promptPreviewTitle}` : 'No AI prompt sent yet'}
+						aria-label="View last AI prompt"
+						disabled={promptPreviewMessages.length === 0}
+					>
+						<i class="bi bi-chat-left-text me-1"></i>Last Prompt
 					</button>
 				</li>
 				<li class="nav-item">
@@ -7374,6 +7936,56 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									</div>
 									{#if showAssessmentHtml}
 										<div class="card-body py-2">
+									<div class="alert alert-light border mb-3">
+										<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+											<span class="fw-bold">Mark ranges for bands</span>
+											<div class="d-flex align-items-center gap-2">
+												<label class="small mb-0" for="rubricBandCountInput">Number of bands</label>
+												<input
+													id="rubricBandCountInput"
+													type="number"
+													min="1"
+													max="10"
+													class="form-control form-control-sm"
+													style="width: 70px;"
+													value={rubricBandCount}
+													onchange={(e) => setRubricBandCount(e.currentTarget.value)}
+												>
+											</div>
+										</div>
+										{#each rubricBands as band, i}
+											<div class="d-flex align-items-center gap-2 mb-2">
+												<input
+													type="text"
+													class="form-control form-control-sm"
+													placeholder="Band label"
+													value={band.label}
+													oninput={(e) => updateRubricBand(i, 'label', e.currentTarget.value)}
+												>
+												<input
+													type="number"
+													class="form-control form-control-sm"
+													style="width: 90px;"
+													placeholder="Lower %"
+													value={band.lower}
+													oninput={(e) => updateRubricBand(i, 'lower', e.currentTarget.value)}
+												>
+												<span class="small text-muted">to</span>
+												<input
+													type="number"
+													class="form-control form-control-sm"
+													style="width: 90px;"
+													placeholder="Upper %"
+													value={band.upper}
+													oninput={(e) => updateRubricBand(i, 'upper', e.currentTarget.value)}
+												>
+												<span class="small text-muted">%</span>
+											</div>
+										{/each}
+										<button type="button" class="btn btn-outline-secondary btn-sm" onclick={insertRubricBandsHeaderRow}>
+											<i class="bi bi-plus-square me-1"></i>Insert bands header row
+										</button>
+									</div>
 									<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
 									<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
 									<div class="alert alert-secondary py-2">
@@ -7413,7 +8025,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												rows="6"
 												bind:value={assessmentHtml}
 												oninput={(e) => {
-													assessmentHtml = e.target.value
+													assessmentHtml = /** @type {HTMLInputElement} */ (e.target).value
 													if (currentAssessment) {
 														currentAssessment.rubricHtml = assessmentHtml
 														if (!currentAssessment.tableRowCategoryMap) {
@@ -7610,7 +8222,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<div class="col-md-4">
 															<label for="assessmentDocumentType" class="form-label fw-bold small">Document Type</label>
 															<select id="assessmentDocumentType" class="form-select form-select-sm" bind:value={selectedAssessmentDocumentType}>
-																{#each ASSESSMENT_DOCUMENT_TYPES as option}
+																{#each ASSESSMENT_DOCUMENT_TYPES as option (option.value)}
 																	<option value={option.value}>{option.label}</option>
 																{/each}
 															</select>
@@ -7630,7 +8242,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													</div>
 													{#if assessmentReferenceDocuments.length > 0}
 														<div class="list-group list-group-flush mt-3 border rounded">
-															{#each assessmentReferenceDocuments as document}
+															{#each assessmentReferenceDocuments as document (document.id)}
 																<div class="list-group-item d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-start">
 																	<div>
 																		<div class="fw-semibold">{document.name}</div>
@@ -7722,7 +8334,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<i class="bi bi-bar-chart-fill me-2"></i>Mark Ranges for {selectedCategory}
 													</h6>
 													<div class="d-flex flex-wrap gap-2">
-														{#each getCategoryMarkRanges(selectedCategoryAllocatedMarks, currentAssessment.percentageRanges) as markRange}
+														{#each getCategoryMarkRanges(selectedCategoryAllocatedMarks, currentAssessment.percentageRanges) as markRange (markRange.range)}
 															<div class="badge p-2" style="background-color: {markRange.color}; color: white; font-size: 0.85rem;">
 																{markRange.range}
 															</div>
@@ -7746,7 +8358,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													bind:value={selectedKnowledgeArea}
 												>
 													<option value="">Choose a knowledge area...</option>
-													{#each (currentAssessment?.knowledgeAreas || []) as area}
+													{#each (currentAssessment?.knowledgeAreas || []) as area (area)}
 														<option value={area}>{area}</option>
 													{/each}
 												</select>
@@ -7757,9 +8369,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													id="categorySelect"
 													class="form-select"
 													bind:value={selectedCategory}
+													onchange={fillParagraphFromColorTemplate}
 												>
 													<option value="">Choose a category...</option>
-													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category}
+													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category (category.id)}
 														<option value={category.name}>{category.name}</option>
 													{/each}
 												</select>
@@ -7783,7 +8396,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										<!-- Color Selection -->
 										<div class="mb-3">
 											<label for="colorSelect" class="form-label fw-bold">Paragraph Color:</label>
-											<select id="colorSelect" class="form-select" bind:value={selectedColor}>
+											<select id="colorSelect" class="form-select" bind:value={selectedColor} onchange={fillParagraphFromColorTemplate}>
 												<option value="">⚪ No Color</option>
 												<option value="red">🔴 Red</option>
 												<option value="orange">🟠 Orange</option>
@@ -7818,12 +8431,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									<div class="mb-3">
 										<label for="paragraphInput" class="form-label fw-bold">New paragraph:</label>
 										<div class="input-group input-group-sm">
-											<textarea 
-												id="paragraphInput" 
-												class="form-control form-control-sm" 
-												rows="4" 
-												bind:value={newParagraph} 
-												placeholder="Type your paragraph here..."
+											<textarea
+												id="paragraphInput"
+												class="form-control form-control-sm"
+												rows="4"
+												bind:value={newParagraph}
+												placeholder="Comment here..."
 											></textarea>
 											<button class="btn btn-primary btn-sm" type="button" onclick={addParagraph} style="min-width: 120px;">
 												<i class="bi bi-plus-circle me-2"></i>Add Paragraph
@@ -7901,7 +8514,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										{#if (currentAssessment?.knowledgeAreas || []).length > 0}
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
-													{#each (currentAssessment?.knowledgeAreas || []) as area}
+													{#each (currentAssessment?.knowledgeAreas || []) as area (area)}
 														<div class="d-flex align-items-center bg-light border rounded px-1 py-0 small">
 															<span class="text-muted me-1">{area}</span>
 																<button 
@@ -7982,7 +8595,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										{#if currentAssessment?.categories && currentAssessment.categories.length > 0}
 											<div class="mb-2">
 												<div class="d-flex flex-wrap gap-1">
-													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category, index}
+													{#each (currentAssessment.categories.slice().sort((a, b) => (a.order || 999) - (b.order || 999))) as category, index (category.id)}
 														<div class="d-flex align-items-center bg-light border rounded px-2 py-1 small">
 															<span class="text-muted me-1">
 																{category.name}
@@ -8141,7 +8754,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																{#if getFilteredStudents().length === 0}
 																	<div class="student-picker-empty">No matching students</div>
 																{:else}
-																	{#each getFilteredStudents() as student}
+																	{#each getFilteredStudents() as student (student.id)}
 																		<button
 																			type="button"
 																			class="student-picker-option {student.id === currentStudentId ? 'is-active' : ''}"
@@ -8215,7 +8828,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<div class="col-md-4">
 															<label for="studentDocumentType" class="form-label fw-bold small">File Type</label>
 													<select id="studentDocumentType" class="form-select form-select-sm" bind:value={selectedStudentDocumentType} disabled={!currentStudentId || uploadingStudentDocument}>
-																{#each STUDENT_DOCUMENT_TYPES as option}
+																{#each STUDENT_DOCUMENT_TYPES as option (option.value)}
 																	<option value={option.value}>{option.label}</option>
 																{/each}
 															</select>
@@ -8226,7 +8839,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																id="studentDocumentUpload"
 																type="file"
 																class="form-control form-control-sm"
-																accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.json"
+																accept=".docx,.txt,.md,.html,.htm,.csv,.json"
 														multiple
 														onchange={handleStudentSubmissionUpload}
 														disabled={!currentStudentId || uploadingStudentDocument}
@@ -8238,7 +8851,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											{/if}
 													{#if studentSubmissionDocuments.length > 0}
 														<div class="list-group list-group-flush mt-3 border rounded">
-															{#each studentSubmissionDocuments as document}
+															{#each studentSubmissionDocuments as document (document.id)}
 																<div class="list-group-item d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-start">
 																	<div>
 																		<div class="fw-semibold">{document.name}</div>
@@ -8322,6 +8935,77 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										</div>
 									</div>
 								</div>
+								{#if currentAssessment}
+									<div class="px-3 pt-3">
+										{#if currentAssessment?.categories?.length > 0}
+											<div class="border rounded p-3 bg-light mb-3">
+												{#if currentStudentId}
+													<button
+														type="button"
+														class="btn btn-outline-info btn-sm"
+														onclick={improveAllCategoriesWithRag}
+														disabled={improvingAllWithRag}
+													>
+														{#if improvingAllWithRag}
+															<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+															Improving all with RAG...
+														{:else}
+															<i class="bi bi-diagram-3 me-1"></i>Improve all with RAG
+														{/if}
+													</button>
+													<button
+														type="button"
+														class="btn btn-outline-danger btn-sm ms-2"
+														onclick={deleteAllStudentRagComments}
+													>
+														<i class="bi bi-trash me-1"></i>Delete all student RAG comments
+													</button>
+													<div class="small text-muted mt-2 mb-0">
+														Runs "Improve with RAG" for every category in turn, expanding each category's draft using the rubric and this student's submission. Delete clears every category's draft comment for this student.
+													</div>
+												{:else}
+													<button
+														type="button"
+														class="btn btn-outline-success btn-sm"
+														onclick={fillAllCategoryColorBandTemplates}
+													>
+														<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
+													</button>
+													<div class="small text-muted mt-2 mb-0">
+														Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
+													</div>
+												{/if}
+											</div>
+										{/if}
+										<div class="border rounded p-3 mb-3">
+											<button
+												type="button"
+												class="btn btn-link btn-sm p-0 text-decoration-none fw-bold d-flex align-items-center w-100"
+												onclick={() => showCommonPromptBox = !showCommonPromptBox}
+												aria-expanded={showCommonPromptBox}
+												aria-controls="commonParagraphPromptPanel"
+											>
+												<i class={`bi ${showCommonPromptBox ? 'bi-chevron-up' : 'bi-chevron-down'} me-2`}></i>
+												<span class="flex-grow-1 text-start">Common AI Prompt (all paragraphs)</span>
+												{#if currentAssessment.commonParagraphAiInstructions?.trim()}<span class="badge text-bg-info ms-2">Set</span>{/if}
+											</button>
+											{#if showCommonPromptBox}
+												<div id="commonParagraphPromptPanel" class="mt-3">
+													<textarea
+														id="commonParagraphPromptInput"
+														class="form-control form-control-sm"
+														rows="2"
+														placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
+														value={currentAssessment.commonParagraphAiInstructions || ''}
+														oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
+														onchange={persistAssessmentAiSettings}
+													></textarea>
+													<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
+												</div>
+											{/if}
+										</div>
+									</div>
+								{/if}
 								<div class="card-body p-0">
 									{#if paragraphs.length === 0}
 										<div class="text-center py-4 px-3">
@@ -8331,14 +9015,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										</div>
 									{:else}
 										<div class="p-3">
-											{#each getGroupedParagraphs() as group}
-												<div class="card mb-3 border-start border-info border-4">
+										{#each getGroupedParagraphs() as group}
+											<div class="card mb-3 border-start border-4 {missingParagraphCategories.has(group.category) ? 'border-danger' : 'border-info'}">
 													<div class="card-header bg-info text-white py-2">
-														<div class="d-flex align-items-center w-100 mb-2">
+														<div class="d-flex align-items-center w-100">
 															<div class="flex-grow-1">
 																<h6 class="mb-0 fw-bold">
 																	{#if group.category && group.category !== 'No Knowledge Area'}
 																		{group.category}
+																		{#if missingParagraphCategories.has(group.category)}
+																			<i class="bi bi-exclamation-circle-fill text-danger ms-1" title="No paragraphs added yet"></i>
+																		{/if}
 																	{/if}
 																</h6>
 															</div>
@@ -8417,7 +9104,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																<small class="text-muted">Add paragraphs using the form above</small>
 															</div>
 														{:else}
-											{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs]}
+											{#each Object.entries(group.knowledgeAreas) as [knowledgeArea, paragraphs] (knowledgeArea)}
 												{@const categoryParagraphSequence = getCategoryParagraphSequence(group)}
 												{#if knowledgeArea !== 'No Knowledge Area'}
 																	<div class="bg-light border-bottom px-3 py-2 d-flex align-items-center justify-content-between">
@@ -8436,7 +9123,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																		{/if}
 																	</div>
 											{/if}
-															{#each paragraphs as {text, color, id, createdAt, originalIndex, fullText, source, markInfo}, displayIndex}
+															{#each paragraphs as {text, color, id, createdAt, originalIndex, fullText, source, markInfo}, displayIndex (id)}
 												{@const categorySequenceIndex = findParagraphSequenceIndex(categoryParagraphSequence, id, originalIndex)}
 										<div 
 											class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
@@ -8509,7 +9196,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																					onChange={(newText) => editingParagraphText = newText}
 																					readonly={false}
 																					rows={3}
-																					placeholder="Edit paragraph text..."
+																					placeholder="Comment here..."
 																				/>
 																			{:else}
 																				<div class="d-flex align-items-start">
@@ -8623,7 +9310,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																	}}
 																>
 																	<option value="">No knowledge area</option>
-																	{#each (currentAssessment?.knowledgeAreas || []) as area}
+																	{#each (currentAssessment?.knowledgeAreas || []) as area (area)}
 																		<option value={area}>{area}</option>
 																	{/each}
 																</select>
@@ -8682,7 +9369,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class="btn btn-outline-primary btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithAI(group.category)}
-																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category]}
 																title="Improve English with AI"
 															>
 																{#if improvingText[group.category]}
@@ -8696,7 +9383,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class="btn btn-outline-info btn-sm quick-toolbar-btn"
 																type="button"
 																onclick={() => improveTextWithRag(group.category)}
-																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category] || !quickAddText[group.category]?.trim()}
+																disabled={improvingText[group.category] || improvingTextWithRag[group.category] || evidenceCheckingText[group.category]}
 																title="Expand draft using rubric and RAG context"
 															>
 																{#if improvingTextWithRag[group.category]}
@@ -8724,7 +9411,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 										type="button"
 										onclick={() => viewFinalPrompt(group.category, 'ai')}
-										disabled={!quickAddText[group.category]?.trim()}
 										title="View final prompt for Improve with AI"
 									>
 										<i class="bi bi-eye me-1"></i>View Improve Prompt
@@ -8733,7 +9419,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																class={`btn btn-sm quick-toolbar-btn ${isDarkMode ? 'btn-outline-light' : 'btn-outline-dark'}`}
 																type="button"
 																onclick={() => viewFinalPrompt(group.category, 'rag')}
-																disabled={!quickAddText[group.category]?.trim()}
 																title="View final prompt for Improve with RAG"
 															>
 																<i class="bi bi-eye-fill me-1"></i>View RAG Prompt
@@ -8770,7 +9455,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														id={quickAddInputId(group.category)}
 														class="form-control form-control-sm {aiImprovedText[group.category] ? 'ai-improved-text' : ''}"
 														rows="8"
-																placeholder={`Add paragraph to ${group.category}...`}
+																placeholder="Comment here..."
 																value={quickAddText[group.category] || ''}
 																oninput={(e) => {
 																	quickAddText = {
@@ -8830,6 +9515,18 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																onblur={() => persistCategoryAiInstruction(group.category)}
 															></textarea>
 																	<div class="form-text">Only for this answer. Not global system behaviour.</div>
+																	<div class="form-check form-switch mt-2">
+																		<input
+																			class="form-check-input"
+																			type="checkbox"
+																			id={`includeCommonPrompt-${group.category}`}
+																			checked={isCommonPromptIncluded(group.category)}
+																			onchange={(e) => persistCategoryIncludeCommonPrompt(group.category, e.currentTarget.checked)}
+																		>
+																		<label class="form-check-label small" for={`includeCommonPrompt-${group.category}`}>
+																			Apply the assessment's common AI prompt to this paragraph
+																		</label>
+																	</div>
 																</div>
 															{/if}
 														</div>
@@ -8929,7 +9626,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 							{#if checkboxDebugInfo.length === 0}
 								<p class="text-muted mb-0">No debug messages yet. Try clicking a checkbox.</p>
 							{:else}
-								{#each checkboxDebugInfo as message}
+								{#each checkboxDebugInfo as message (message)}
 									<div class="mb-1">{message}</div>
 								{/each}
 							{/if}
@@ -8937,7 +9634,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						<div class="mt-3">
 							<h6>Current Paragraph IDs:</h6>
 							<div style="max-height: 100px; overflow-y: auto; background-color: #e9ecef; padding: 10px; border-radius: 3px; font-family: monospace; font-size: 0.8em;">
-								{#each paragraphs as para, index}
+								{#each paragraphs as para, index (para.id)}
 									<div class="mb-1">
 										<span class="badge {selectedParagraphs.has(para.id) ? 'bg-success' : 'bg-secondary'} me-2">
 											{selectedParagraphs.has(para.id) ? '✓' : '○'}
@@ -9242,6 +9939,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	:global(.quick-action-toolbar .btn-outline-info.quick-toolbar-btn) {
 		color: #0b5ed7 !important;
 		border-color: #0b5ed7 !important;
+		min-width: 11.5rem;
 	}
 
 	:global(.quick-action-toolbar .btn-outline-primary.quick-toolbar-btn) {
@@ -9252,6 +9950,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	:global(.quick-action-toolbar .btn-outline-warning.quick-toolbar-btn) {
 		color: #0b5ed7 !important;
 		border-color: #0b5ed7 !important;
+		min-width: 10.5rem;
 	}
 
 	:global(.quick-action-toolbar .btn-outline-light.quick-toolbar-btn),
@@ -9548,7 +10247,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						<div class="alert alert-warning mb-0">No reviewable AI criterion suggestions were produced.</div>
 					{:else}
 						<div class="d-flex flex-column gap-3">
-							{#each aiDraftReviewItems as item, index}
+							{#each aiDraftReviewItems as item, index (index)}
 								<div class="card border-0 shadow-sm bg-light">
 									<div class="card-body">
 										<div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-2">
@@ -9624,15 +10323,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					<button type="button" class="btn-close btn-close-white" onclick={closePromptPreviewModal} aria-label="Close prompt preview"></button>
 				</div>
 				<div class="modal-body">
-					<div class="small text-muted mb-3">This is the final prompt payload prepared to send to the OpenAI API.</div>
-					{#if promptPreviewRequestPayload}
-						<div class="border rounded p-3 bg-light mb-3">
-							<div class="fw-bold text-uppercase small mb-2">Request Payload</div>
-							<pre class="mb-0 prompt-preview-pre">{JSON.stringify(promptPreviewRequestPayload, null, 2)}</pre>
-						</div>
-					{/if}
+					<div class="small text-muted mb-3">This is the final prompt sent to the API.</div>
 					<div class="d-flex flex-column gap-3">
-						{#each promptPreviewMessages as message, index}
+						{#each promptPreviewMessages as message, index (index)}
 							<div class="border rounded p-3 bg-light">
 								<div class="fw-bold text-uppercase small mb-2">Message {index + 1} - {message.role}</div>
 								<pre class="mb-0 prompt-preview-pre">{message.content}</pre>
@@ -9776,7 +10469,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						</div>
 					{:else}
 						<div class="list-group">
-							{#each sortedStudents as student}
+							{#each sortedStudents as student (student.id)}
 								<div class="list-group-item d-flex justify-content-between align-items-center">
 									<div>
 										<h6 class="mb-1">{student.name}</h6>
