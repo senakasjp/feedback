@@ -102,6 +102,7 @@
 	let newKnowledgeAreaName = $state('')
 	// Note: knowledgeAreas are now stored as assignment properties (currentAssessment.knowledgeAreas)
 	let categoryMarks = $state({}) // Store marks for each category
+	let categoryMarkJustification = $state({}) // Why the current mark was awarded, per category (assessor-facing, not the feedback paragraph)
 	let manualTotalMarks = $state('') // Store manually entered total marks
 	let assessmentHtml = $state('') // Custom HTML snippet stored on the assessment
 	let showAssessmentHtml = $state(false)
@@ -154,6 +155,7 @@
 	let buildingAssessmentVectorIndex = $state(false)
 	let aiRetrievalMode = $state('')
 	let showAiDraftReviewModal = $state(false)
+	let markJustificationModalCategory = $state('')
 	let aiDraftReviewItems = $state([])
 	let showPromptPreviewModal = $state(false)
 	let promptPreviewTitle = $state('')
@@ -774,6 +776,7 @@
 			// No studentImage - only header photo for assessment
 			selectedParagraphs = new Set()
 			categoryMarks = {}
+			categoryMarkJustification = {}
 			quickAddText = {}
 			quickAddToAssessmentWhenStudentSelected = false
 
@@ -1305,6 +1308,7 @@
 					showAssessmentHtml = false
 					// Reset all marks to zero
 					categoryMarks = {}
+					categoryMarkJustification = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
 				quickAddText = {}
 			} else {
@@ -1440,6 +1444,7 @@
 					showAssessmentHtml = false
 					// Reset all marks to zero
 					categoryMarks = {}
+					categoryMarkJustification = {}
 					manualTotalMarks = currentAssessment?.totalMarks ?? ''
 				quickAddText = {}
 				} else {
@@ -1471,6 +1476,7 @@
 		assessmentVectorIndex = null
 		assessmentReferenceDocuments = []
 		categoryMarks = {}
+		categoryMarkJustification = {}
 		manualTotalMarks = ''
 		quickAddText = {}
 		stopSpeechRecorder()
@@ -1928,7 +1934,7 @@
 			promptPreviewMessages = buildImproveEnglishPromptPreview(text, answerInstructions)
 			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference())
 			// Strip any HTML tags that might have been introduced
-			const cleanedText = stripHtmlTags(result.improvedText || '')
+			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || ''))
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			// Mark this text as AI-improved for styling
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
@@ -2148,6 +2154,7 @@
 			studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 			studentImage: studentPhoto || '',
 			categoryMarks: { ...categoryMarks },
+			categoryMarkJustification: { ...categoryMarkJustification },
 			manualTotalMarks: currentAssessment?.totalMarks ?? manualTotalMarks,
 			quickAddText: { ...quickAddText },
 			savedAt: new Date().toISOString()
@@ -2469,7 +2476,7 @@
 				modelPreference: getCurrentAiModelPreference()
 			})
 
-			const cleanedText = stripHtmlTags(result.improvedText || '').trim()
+			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || '').trim())
 			if (!cleanedText) {
 				throw new Error('No improved feedback was returned.')
 			}
@@ -2699,7 +2706,7 @@
 				modelPreference: getCurrentAiModelPreference()
 			})
 
-			const cleanedText = stripHtmlTags(result.reportText || '').trim()
+			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.reportText || '').trim())
 			if (!cleanedText) {
 				throw new Error('No evidence-check report was returned.')
 			}
@@ -2811,6 +2818,14 @@
 
 	function closeAiDraftReviewModal() {
 		showAiDraftReviewModal = false
+	}
+
+	function openMarkJustificationModal(categoryName) {
+		markJustificationModalCategory = categoryName
+	}
+
+	function closeMarkJustificationModal() {
+		markJustificationModalCategory = ''
 	}
 
 	function closePromptPreviewModal() {
@@ -4048,6 +4063,52 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		categoryWarnings = nextWarnings
 	}
 
+	// AI feedback text (Improve with AI/RAG, Reports Check) sometimes ends with an assessor-requested
+	// "Marks: X/Y" line instead of leaving it out of the paragraph - pull that into the marks input and
+	// auto-check the matching rubric-band paragraph instead of leaving it as prose in the feedback box.
+	const TRAILING_MARKS_LINE_REGEX = /\n{0,2}\s*Marks?\s*:\s*(-?\d+(?:\.\d+)?)\s*\/\s*-?\d+(?:\.\d+)?\s*\.?\s*$/i
+
+	function extractTrailingMarksLine(text) {
+		const source = String(text || '')
+		const match = source.match(TRAILING_MARKS_LINE_REGEX)
+		if (!match) return null
+		const awarded = parseFloat(match[1])
+		if (!Number.isFinite(awarded)) return null
+		return { awarded, strippedText: source.slice(0, match.index).trim() }
+	}
+
+	function paragraphMarkMatches(markValue, expectation) {
+		if (!expectation || !Number.isFinite(markValue)) return false
+		const tolerance = 0.01
+		if (expectation.type === 'fixed') return Math.abs(markValue - expectation.value) <= tolerance
+		return markValue >= (expectation.min - tolerance) && markValue <= (expectation.max + tolerance)
+	}
+
+	// Returns the feedback text with the "Marks:" line removed, having applied the mark as a side effect.
+	function applyTrailingMarksLine(categoryName, text) {
+		const extracted = extractTrailingMarksLine(text)
+		if (!extracted) return text
+
+		const candidateParagraphs = paragraphs.filter(p => paragraphMatchesCategory(p?.text, categoryName))
+		const matchingParagraph = candidateParagraphs.find(p => paragraphMarkMatches(extracted.awarded, getParagraphMarkExpectation(p, categoryName)))
+
+		updateCategoryMarks(categoryName, extracted.awarded)
+		categoryMarkJustification = { ...categoryMarkJustification, [categoryName]: extracted.strippedText }
+
+		if (matchingParagraph) {
+			const candidateIds = new Set(candidateParagraphs.map(p => p.id))
+			const nextSelected = new Set(selectedParagraphs)
+			candidateIds.forEach(id => nextSelected.delete(id))
+			nextSelected.add(matchingParagraph.id)
+			selectedParagraphs = nextSelected
+			refreshCategoryWarnings()
+		}
+
+		saveAssessmentData()
+
+		return extracted.strippedText
+	}
+
 	function updateCategoryMarks(category, marks) {
 		categoryMarks[category] = marks
 		categoryMarks = {...categoryMarks} // trigger reactivity
@@ -4414,6 +4475,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				// No studentImage - only header photo for assessment
 				selectedParagraphs.clear()
 				categoryMarks = {}
+				categoryMarkJustification = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
 				quickAddText = {}
 			}
@@ -4465,6 +4527,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				// No studentImage - only header photo for assessment
 				selectedParagraphs = new Set()
 				categoryMarks = {}
+				categoryMarkJustification = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
 				quickAddText = {}
 				
@@ -4716,6 +4779,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				studentSubmissionText = ''
 				selectedParagraphs = new Set()
 				categoryMarks = {}
+				categoryMarkJustification = {}
 				manualTotalMarks = currentAssessment?.totalMarks ?? ''
 				quickAddText = {}
 			}
@@ -4726,6 +4790,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			studentSubmissionText = ''
 			selectedParagraphs = new Set()
 			categoryMarks = {}
+			categoryMarkJustification = {}
 			manualTotalMarks = currentAssessment?.totalMarks ?? ''
 			quickAddText = {}
 		} finally {
@@ -4961,6 +5026,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		let savedStudentImage = ''
 		let savedStudentSubmissionDocuments = []
 		let savedCategoryMarks = {}
+		let savedCategoryMarkJustification = {}
 		let savedManualTotalMarks = ''
 		let savedQuickAddText = {}
 
@@ -5001,6 +5067,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			savedStudentSubmissionDocuments = evaluationData.studentSubmissionDocuments || []
 			savedStudentImage = evaluationData.studentImage || evaluationData.studentPhoto || evaluationData.photo || ''
 			savedCategoryMarks = evaluationData.categoryMarks || {}
+			savedCategoryMarkJustification = evaluationData.categoryMarkJustification || {}
 			savedManualTotalMarks = evaluationData.manualTotalMarks || ''
 			savedQuickAddText = evaluationData.quickAddText || {}
 		}
@@ -5053,6 +5120,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			))
 		}
 		categoryMarks = savedCategoryMarks
+		categoryMarkJustification = savedCategoryMarkJustification
 		quickAddText = savedQuickAddText
 		const assessmentTotalMarks = currentAssessment?.totalMarks
 		if (assessmentTotalMarks !== null && assessmentTotalMarks !== undefined && assessmentTotalMarks !== '') {
@@ -9048,6 +9116,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												/ {currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
 											</span>
 										{/if}
+										{#if currentStudentId && categoryMarkJustification[group.category]}
+											<button
+												type="button"
+												class="btn btn-outline-light btn-sm"
+												onclick={() => openMarkJustificationModal(group.category)}
+												title="Why this mark?"
+												aria-label="Why this mark?"
+											>
+												<i class="bi bi-question-circle"></i>
+											</button>
+										{/if}
 									</div>
 																	<!-- Category reordering buttons (only in assignment mode) -->
 											{#if !currentStudentId}
@@ -10219,7 +10298,29 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	</div>
 {/if}
 
-<!-- AI Draft Review Modal -->
+<!-- Mark Justification Modal -->
+{#if markJustificationModalCategory}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+		<div class="modal-dialog modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header bg-dark text-white">
+					<h5 class="modal-title">
+						<i class="bi bi-question-circle me-2"></i>Why this mark? — {markJustificationModalCategory}
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={closeMarkJustificationModal} aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<div class="fw-bold mb-2">Awarded: {categoryMarks[markJustificationModalCategory] || 0}</div>
+					<div style="white-space: pre-wrap;">{categoryMarkJustification[markJustificationModalCategory] || 'No justification recorded for this mark yet.'}</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" onclick={closeMarkJustificationModal}>Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
 {#if showAiDraftReviewModal}
 	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
