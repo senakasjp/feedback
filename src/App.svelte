@@ -4089,6 +4089,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const extracted = extractTrailingMarksLine(text)
 		if (!extracted) return text
 
+		// Don't clobber a mark the assessor already entered - just strip the AI's line from the text.
+		if (hasMarksValue(categoryMarks[categoryName])) return extracted.strippedText
+
 		const candidateParagraphs = paragraphs.filter(p => paragraphMatchesCategory(p?.text, categoryName))
 		const matchingParagraph = candidateParagraphs.find(p => paragraphMarkMatches(extracted.awarded, getParagraphMarkExpectation(p, categoryName)))
 
