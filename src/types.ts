@@ -1,32 +1,57 @@
 export interface Subject {
-  id: number;
-  name: string;
-  created_at: string;
+	id: string;
+	name: string;
+	assessments: Assessment[];
 }
 
 export interface Assessment {
-  id: number;
-  subject_id: number;
-  name: string;
-  created_at: string;
+	id: string;
+	name: string;
+	topics: Topic[];
+	categories: Category[];
+	knowledgeAreas: string[];
+	weight?: number;
+	headerPhoto?: string;
+}
+
+export interface Topic {
+	id: string;
+	name: string;
+	description?: string;
 }
 
 export interface Category {
-  id: number;
-  name: string;
-  created_at: string;
+	id: string;
+	name: string;
+	description?: string;
+	knowledgeArea?: string;
+	allocatedMarks?: number;
+	order?: number;
 }
 
 export interface Paragraph {
-  id: number;
-  assessment_id: number;
-  category_id: number;
-  name: string;
-  content: string;
-  image_path?: string;
-  created_at: string;
+	id: string;
+	text: string;
+	topicId?: string;
+	categoryId?: string;
+	order: number;
 }
 
-export interface SelectedParagraph extends Paragraph {
-  selected: boolean;
+export interface OrderedParagraph {
+	id: string;
+	text: string;
+	topicId?: string;
+	categoryId?: string;
+	order: number;
+	topicName?: string;
+	categoryName?: string;
+}
+
+export interface BreadcrumbItem {
+	label: string;
+	view: string;
+	active: boolean;
+	icon: string;
+	subject?: Subject;
+	assessment?: Assessment;
 }

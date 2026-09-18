@@ -1,0 +1,267 @@
+<script>
+	// Props
+	/** @type {any[]} */
+	export let subjects = [];
+	/** @type {any} */
+	export let currentSubject = null;
+	/** @type {any} */
+	export let currentAssessment = null;
+	export let currentView = '';
+	export let currentStudentId = '';
+	export let studentName = '';
+	export let studentPhoto = '';
+	export let showMobileSidebar = true;
+	/** @type {any} */
+	export let categoryMarks = {}; // Used in template for total marks display
+	/** @type {Function} */
+	export const getTotalMarks = () => 0;
+	/** @type {Function} */
+	export const onUpdateAssessment = () => {};
+	/** @type {Function} */
+	export const onUpdateSubject = () => {};
+	/** @type {Function} */
+	export const onUpdateKnowledgeAreas = () => {};
+	
+	// Calculate total marks locally - make it reactive
+	let totalMarks = 0
+	$: {
+		totalMarks = Object.values(categoryMarks).reduce((total, value) => {
+			const numMarks = parseFloat(value) || 0
+			return total + numMarks
+		}, 0)
+	}
+	
+	// Event handlers
+	export let onSelectSubject = (subject) => {};
+	export let onSelectAssessment = (assessment) => {};
+	export let onGoBackToSubjects = () => {};
+	export let onGoBackToAssessments = () => {};
+	export let onToggleShowAddSubject = () => {};
+	export let onToggleShowAddAssessment = () => {};
+	export let onToggleMobileSidebar = () => {};
+	export let onSaveStudentEvaluation = () => {};
+	export let onLoadStudentEvaluation = () => {};
+	export let onTransferStudentData = () => {};
+	export let onSaveAssignmentData = () => {};
+	export let onCopyToClipboard = () => {};
+	export let onGeneratePDF = () => {};
+	export let onExportAssignmentSettings = () => {};
+	
+	function getStudentFirstName(label = '') {
+		const cleanLabel = String(label || '').replace(/\s*\([0-9]+\)\s*$/g, '').trim()
+		const firstToken = cleanLabel.split(/\s+/).filter(Boolean)[0]
+		return firstToken || 'Student'
+	}
+	
+</script>
+
+<div class="card border-0 shadow-sm h-100 d-flex flex-column" style="position: sticky; top: 0; z-index: 1020; max-height: 100vh;">
+	<!-- Header -->
+	<div class="card-header bg-primary text-white py-3">
+		<div class="d-flex align-items-center">
+			<i class="bi bi-list me-2"></i>
+			<h6 class="mb-0">Navigation</h6>
+		</div>
+	</div>
+	
+	<div class="card-body flex-grow-1" style="overflow-y: auto; padding-top: 1rem;">
+			<!-- Mobile toggle button -->
+			<div class="d-lg-none mb-3">
+				<button class="btn btn-outline-primary w-100" onclick={() => onToggleMobileSidebar()} aria-expanded={showMobileSidebar} aria-controls="workspace-navigation">
+					<i class="bi bi-chevron-down me-2"></i>
+					{showMobileSidebar ? 'Hide Navigation' : 'Show Navigation'}
+				</button>
+			</div>
+			
+			<div id="workspace-navigation" class="{showMobileSidebar ? 'd-block' : 'd-none'} d-lg-block">
+				{#if !currentSubject}
+					<!-- Subject List -->
+					<div class="mb-3">
+						<!-- Header -->
+						<div class="d-flex justify-content-between align-items-center mb-3">
+							<h6 class="mb-0 text-primary">
+								<i class="bi bi-book me-2"></i>Subjects
+							</h6>
+							<button 
+								class="btn btn-primary btn-sm" 
+								onclick={() => onToggleShowAddSubject()}
+							>
+								<i class="bi bi-plus-circle me-1"></i>Add
+							</button>
+						</div>
+						
+						{#each subjects as subject}
+							<button 
+								type="button"
+								class="btn btn-outline-primary w-100 mb-2 text-start" 
+								onclick={() => onSelectSubject(subject)}
+							>
+								<div class="d-flex justify-content-between align-items-center">
+									<div>
+										<i class="bi bi-book me-2"></i>
+										{subject.name}
+									</div>
+									<span class="badge bg-primary ms-2">{subject.assessments.length}</span>
+								</div>
+							</button>
+						{/each}
+						
+						{#if subjects.length === 0}
+							<div class="text-start py-3">
+								<i class="bi bi-book text-muted me-2" style="font-size: 1.5rem;"></i>
+								<span class="text-muted small">No subjects yet. Add your first subject above.</span>
+							</div>
+						{/if}
+					</div>
+				{:else if !currentAssessment}
+					<!-- Assessment List -->
+					<div class="mb-3">
+						<!-- Navigation -->
+						<button class="btn btn-secondary btn-sm mb-3 w-100" onclick={onGoBackToSubjects}>
+							<i class="bi bi-arrow-left me-2"></i>Back to Subjects
+						</button>
+						
+						<!-- Header -->
+						<div class="d-flex justify-content-between align-items-center mb-3">
+							<h6 class="mb-0 text-success">
+								<i class="bi bi-clipboard-check me-2"></i>Assessments
+							</h6>
+							<button 
+								class="btn btn-success btn-sm" 
+								onclick={() => onToggleShowAddAssessment()}
+							>
+								<i class="bi bi-plus-circle me-1"></i>Add
+							</button>
+						</div>
+						
+						<!-- Context Info -->
+						<div class="mb-3">
+							<small class="text-muted">
+								<i class="bi bi-book me-1"></i>Subject: {currentSubject?.name}
+							</small>
+						</div>
+						
+						{#each currentSubject?.assessments || [] as assessment}
+							<button 
+								type="button"
+								class="btn btn-outline-success w-100 mb-2 text-start" 
+								onclick={() => onSelectAssessment(assessment)}
+							>
+								<div class="d-flex align-items-center">
+									<i class="bi bi-clipboard-check me-2"></i>
+									{assessment.name}
+								</div>
+							</button>
+						{/each}
+						
+						{#if (currentSubject?.assessments?.length || 0) === 0}
+							<div class="text-start py-3">
+								<i class="bi bi-clipboard-check text-muted me-2" style="font-size: 1.5rem;"></i>
+								<span class="text-muted small">No assessments yet. Add your first assessment above.</span>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<!-- Feedback Mode Navigation -->
+					<div class="mb-3">
+						<!-- Navigation -->
+						<button class="btn btn-secondary btn-sm mb-2 w-100" onclick={onGoBackToAssessments}>
+							<i class="bi bi-arrow-left me-2"></i>Back to Assessments
+						</button>
+						<button class="btn btn-outline-secondary btn-sm w-100" onclick={onGoBackToSubjects}>
+							<i class="bi bi-arrow-left me-2"></i>Back to Subjects
+						</button>
+						
+						<!-- Current Session Info - Only show in feedback page (3rd level) -->
+						{#if currentView === 'feedback' && currentAssessment}
+							<div class="mt-1 mb-1">
+								<div class="card bg-light">
+									<div class="card-body p-2">
+										<div class="text-center mb-2">
+											{#if studentPhoto}
+												<img 
+													src={studentPhoto} 
+													alt={studentName ? `${studentName} photo` : 'Student photo'} 
+													class="rounded d-block mx-auto border border-secondary-subtle bg-white"
+													style="width: 90px; height: 90px; object-fit: contain; object-position: center;"
+												/>
+											{:else}
+												<div
+													class="d-inline-flex align-items-center justify-content-center rounded-circle border border-secondary-subtle bg-white"
+													style="width: 72px; height: 72px;"
+													aria-label="Student avatar placeholder"
+													title="No student photo"
+												>
+													<i class="bi bi-person-fill text-secondary" style="font-size: 2rem;"></i>
+												</div>
+											{/if}
+										</div>
+										<h6 class="card-title text-primary mb-1">
+											<i class="bi bi-info-circle me-2"></i>Current Session
+										</h6>
+										<div class="small">
+											{#if currentSubject}
+												<div class="mb-2">
+													Subject: {currentSubject.name}
+												</div>
+											{/if}
+											{#if currentAssessment}
+												<div class="mb-2">
+													Assessment: {currentAssessment.name}
+												</div>
+											{/if}
+										{#if currentStudentId && studentName}
+											<div class="mb-2">
+												Student: {getStudentFirstName(studentName)}
+											</div>
+											{:else if currentStudentId}
+												<div class="mb-2 text-muted">
+													Student: Loading...
+												</div>
+											{/if}
+											{#if totalMarks > 0}
+												<div class="mb-0">
+													<strong class="text-danger">Total Marks: {totalMarks}</strong>
+												</div>
+											{/if}
+										</div>
+									</div>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Action Buttons - Only show in feedback page (3rd level) -->
+						{#if currentView === 'feedback' && currentAssessment}
+							<div class="mt-3">
+								<div class="d-grid gap-2">
+									{#if currentStudentId}
+										<button class="btn btn-success btn-sm w-100" onclick={onSaveStudentEvaluation}>
+											<i class="bi bi-save me-2"></i>Save Student Data
+										</button>
+										<button class="btn btn-primary btn-sm w-100" onclick={onLoadStudentEvaluation}>
+											<i class="bi bi-upload me-2"></i>Load Student Data
+										</button>
+										<button class="btn btn-warning btn-sm w-100" onclick={onTransferStudentData}>
+											<i class="bi bi-arrow-left-right me-2"></i>Transfer to Another Student
+										</button>
+									{/if}
+									<button class="btn btn-outline-primary btn-sm w-100" onclick={onSaveAssignmentData}>
+										<i class="bi bi-save me-2"></i>Save Assignment
+									</button>
+									<button class="btn btn-outline-info btn-sm w-100" onclick={onExportAssignmentSettings}>
+										<i class="bi bi-upload me-2"></i>Export Assignment Settings
+									</button>
+									<button class="btn btn-outline-success btn-sm w-100" onclick={onCopyToClipboard}>
+										<i class="bi bi-clipboard me-2"></i>Copy to Clipboard
+									</button>
+									<button class="btn btn-outline-danger btn-sm w-100" onclick={onGeneratePDF}>
+										<i class="bi bi-download me-2"></i>Print to Download
+									</button>
+								</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+	</div>
+</div>

@@ -1,0 +1,57 @@
+/* Assessment Manager - Bootstrap 5 Compatible Styles */
+
+/* Custom delete button styling */
+.delete-assessment-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  opacity: 0.6;
+  transition: all 0.3s ease;
+  border: none !important;
+  background: transparent !important;
+  color: #dc3545;
+}
+
+.delete-assessment-btn:hover {
+  opacity: 1;
+  background: #dc3545;
+  color: white;
+  transform: scale(1.1);
+}
+
+/* Assessment icon styling */
+.assessment-icon {
+  font-size: 2.5rem;
+  opacity: 0.8;
+}
+
+/* Assessment button styling */
+.assessment-btn {
+  width: 100%;
+  margin-top: auto;
+}
+
+.performance-highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.performance-highlight-card {
+  display: flex;
+  min-width: 0;
+}
+
+/* Align table-row-to-category mapping controls */
+.table-row-map .list-group-item {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+.table-row-map .form-select-sm {
+  min-height: calc(2rem + 2px);
+}

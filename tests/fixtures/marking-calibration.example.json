@@ -1,0 +1,28 @@
+{
+  "notice": "SYNTHETIC ONLY: invented scores for exercising the evaluator, NOT evidence of marking accuracy.",
+  "metadata": {
+    "rubricVersion": "synthetic-rubric-v1",
+    "model": "synthetic-no-model-called",
+    "promptVersion": "synthetic-prompt-v1",
+    "dataset": "synthetic-not-accuracy-evidence"
+  },
+  "tolerance": 0.1,
+  "criteria": [{ "id": "reasoning", "maxMarks": 10 }, { "id": "evidence", "maxMarks": 20 }],
+  "examples": [
+    { "id": "synthetic-weak", "human": { "reasoning": 2, "evidence": 4 } },
+    { "id": "synthetic-borderline", "human": { "reasoning": 5, "evidence": 10 } },
+    { "id": "synthetic-strong", "human": { "reasoning": 9, "evidence": 18 } }
+  ],
+  "runs": [
+    { "id": "synthetic-run-1", "predictions": [
+      { "id": "synthetic-weak", "scores": { "reasoning": 3, "evidence": 6 } },
+      { "id": "synthetic-borderline", "scores": { "reasoning": 4, "evidence": 10 } },
+      { "id": "synthetic-strong", "scores": { "reasoning": 8, "evidence": 18 } }
+    ] },
+    { "id": "synthetic-run-2", "predictions": [
+      { "id": "synthetic-weak", "scores": { "reasoning": 2, "evidence": 6 } },
+      { "id": "synthetic-borderline", "scores": { "reasoning": 5, "evidence": 12 } },
+      { "id": "synthetic-strong", "scores": { "reasoning": 9, "evidence": 18 } }
+    ] }
+  ]
+}

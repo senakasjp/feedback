@@ -1,0 +1,241 @@
+/* Shared presentation for every application page and dialog. */
+#app {
+  --ui-control-height: 2rem;
+  --ui-action-height: 2.25rem;
+  --dark-bg-primary: var(--ui-canvas);
+  --dark-bg-secondary: var(--ui-surface);
+  --dark-bg-tertiary: var(--ui-soft);
+  --dark-text-primary: var(--ui-ink);
+  --dark-text-secondary: var(--ui-muted);
+  --dark-text-muted: var(--ui-muted);
+  --dark-border: var(--ui-border);
+}
+
+#app :is(.card, .modal-content, .dropdown-menu) {
+  color: var(--ui-ink);
+  background-color: var(--ui-surface);
+}
+#app .modal-content {
+  border: 1px solid var(--ui-border);
+  box-shadow: var(--ui-shadow);
+}
+#app :is(.modal-header, .modal-body, .modal-footer) {
+  padding: var(--ui-space-5);
+  border-color: var(--ui-border);
+}
+#app .modal-header {
+  gap: var(--ui-space-3);
+}
+#app .modal-title {
+  font-size: var(--ui-card-title);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+#app :is(.card-header, .modal-header):is(.bg-primary, .bg-info, .bg-secondary, .bg-dark, .bg-light) {
+  background: var(--ui-soft) !important;
+  color: var(--ui-ink) !important;
+  border-color: var(--ui-border);
+}
+#app .app-main-column .card-header {
+  padding: var(--ui-space-3) var(--ui-space-5) !important;
+}
+#app .card-header :is(h5, h6) {
+  font-size: var(--ui-body);
+  font-weight: 600;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+#app :is(.card-header, .modal-header):is(.bg-primary, .bg-info, .bg-secondary, .bg-dark, .bg-light) .text-white {
+  color: var(--ui-ink) !important;
+}
+#app .modal-header:not(.bg-danger):not(.bg-warning) .btn-close {
+  filter: none;
+}
+[data-bs-theme="dark"] #app .modal-header:not(.bg-danger):not(.bg-warning) .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+#app :is(.app-workspace, .modal) .btn {
+  min-height: var(--ui-control-height);
+  font-size: var(--ui-body);
+}
+#app .workspace-page-heading .btn {
+  min-height: var(--ui-action-height);
+  padding: var(--ui-space-2) var(--ui-space-3);
+}
+#app :is(.app-workspace, .modal) .btn-primary {
+  background: var(--ui-primary-fill) !important;
+  border-color: var(--ui-primary-fill) !important;
+  color: var(--ui-header-text) !important;
+}
+#app :is(.app-workspace, .modal) .btn-primary:hover {
+  filter: brightness(1.12);
+}
+#app :is(.app-workspace, .modal) .btn-secondary {
+  background: var(--ui-soft) !important;
+  border-color: var(--ui-border) !important;
+  color: var(--ui-ink) !important;
+}
+#app :is(.app-workspace, .modal) :is(.btn-outline-primary, .btn-outline-info) {
+  color: var(--ui-accent) !important;
+  border-color: var(--ui-border) !important;
+}
+#app :is(.app-workspace, .modal) :is(.btn-outline-secondary, .btn-light, .btn-outline-light) {
+  color: var(--ui-muted) !important;
+  border-color: var(--ui-muted) !important;
+}
+#app :is(.app-workspace, .modal) :is(.btn-outline-primary, .btn-outline-info, .btn-outline-secondary, .btn-light, .btn-outline-light):hover {
+  background: var(--ui-soft) !important;
+  color: var(--ui-ink) !important;
+  border-color: var(--ui-accent) !important;
+}
+#app :is(.app-workspace, .modal) .btn-link {
+  color: var(--ui-accent) !important;
+}
+#app .ui-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--ui-control-height);
+  width: var(--ui-control-height);
+  height: var(--ui-control-height);
+  padding: var(--ui-space-1) !important;
+  font-size: var(--ui-body) !important;
+}
+#app :is(.form-control, .form-select):not(.is-invalid):not(.is-valid) {
+  color: var(--ui-ink) !important;
+  background-color: var(--ui-surface) !important;
+  border-color: var(--ui-border) !important;
+}
+#app :is(input.form-control, .form-select) {
+  min-height: var(--ui-control-height);
+}
+#app :is(.form-control, .form-select):disabled {
+  background-color: var(--ui-soft) !important;
+  color: var(--ui-muted) !important;
+}
+#app .form-control::placeholder { color: var(--ui-muted) !important; }
+#app :is(.form-text, .modal .text-muted) { color: var(--ui-muted) !important; }
+
+#app .ui-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--ui-space-2);
+}
+#app .ui-toolbar > * { min-width: 0; }
+#app .ui-tag {
+  max-width: 100%;
+  gap: var(--ui-space-1);
+  background: var(--ui-soft) !important;
+  border-color: var(--ui-border) !important;
+}
+#app .ui-tag > span { min-width: 0; overflow-wrap: anywhere; }
+#app .breadcrumb-nav {
+  margin-inline: 0;
+  padding: var(--ui-space-2);
+  background: var(--ui-soft);
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+}
+#app .breadcrumb-item + .breadcrumb-item::before { display: none; }
+#app :is(.breadcrumb-link, .breadcrumb-current) { color: var(--ui-accent); }
+#app .breadcrumb-link:hover {
+  background: var(--ui-soft);
+  color: var(--ui-accent-hover);
+  transform: none;
+}
+#app .help-page .card:not(.border-warning) { border-color: var(--ui-border) !important; }
+#app .help-page .card-header:not(.bg-warning) {
+  background: var(--ui-soft) !important;
+  color: var(--ui-ink) !important;
+}
+#app .help-page .card-body ol { list-style: decimal; }
+#app .help-page .card-body ul { list-style: disc; }
+#app .help-page code { overflow-wrap: anywhere; }
+
+#app .ai-settings-menu {
+  padding: var(--ui-space-4);
+  background: var(--ui-surface) !important;
+  color: var(--ui-ink) !important;
+  border-color: var(--ui-border) !important;
+  border-radius: var(--ui-radius);
+}
+#app .ai-settings-heading { color: var(--ui-muted) !important; font-size: var(--ui-body); }
+#app .ai-settings-option {
+  min-height: var(--ui-control-height);
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border-radius: var(--ui-radius-sm);
+  font-size: var(--ui-body);
+}
+#app .ai-settings-option:hover, #app .ai-settings-option.selected { background: var(--ui-soft) !important; }
+#app .ai-settings-divider { background: var(--ui-border) !important; }
+
+@media (max-width: 575px) {
+  #app .modal-dialog { margin: var(--ui-space-2); }
+  #app :is(.modal-header, .modal-body, .modal-footer) { padding: var(--ui-space-4); }
+  #app .app-main-column .card > .card-body:not(.p-0) { padding: var(--ui-space-4); }
+  #app .card-header > .d-flex { flex-wrap: wrap; gap: var(--ui-space-2); }
+  #app .card-header > .d-flex > * { min-width: 0; }
+  #app .ui-toolbar > .btn { white-space: normal; }
+}
+
+/* The legacy transparent-button reset must not erase Bootstrap's close glyph. */
+#app .btn-close {
+  background: transparent var(--bs-btn-close-bg) center / 1em auto no-repeat !important;
+  flex-shrink: 0;
+}
+#app .modal .btn-close {
+  box-sizing: border-box;
+  width: var(--ui-control-height);
+  height: var(--ui-control-height);
+  padding: var(--ui-space-2);
+}
+#app .app-main-column .card:is(.border-primary, .border-info, .border-secondary):not(.border-start) {
+  border-color: var(--ui-border) !important;
+}
+
+#app .paragraph-item > .d-flex > .flex-grow-1 { min-width: 0; }
+@media (max-width: 575px) {
+  #app .paragraph-item > .d-flex { flex-wrap: wrap; gap: var(--ui-space-2); }
+  #app .paragraph-item > .d-flex > .flex-grow-1 {
+    flex-basis: 100%;
+    margin-right: 0 !important;
+    order: 1;
+  }
+  #app .paragraph-item > .d-flex > .d-flex.gap-1 {
+    flex-wrap: wrap;
+    order: 2;
+  }
+  #app .paragraph-item .flex-grow-1 > .d-flex { flex-wrap: wrap; gap: var(--ui-space-2); }
+  #app .paragraph-item .flex-grow-1 { overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html, body { transition: none !important; animation: none !important; }
+}
+@media (max-width: 767px) {
+  #app .ui-composer { gap: var(--ui-space-2); }
+  #app .ui-composer > textarea { flex-basis: 100%; width: 100%; }
+  #app .ui-composer > .btn { flex: 1 1 auto; margin: 0 !important; }
+  #app .ui-composer > .mx-1 { display: none; }
+  #app .ui-composer > :is(textarea, .btn) { border-radius: var(--ui-radius-sm) !important; }
+}
+html[data-bs-theme] body {
+  background: var(--ui-canvas) !important;
+  color: var(--ui-ink) !important;
+}
+#app { color: var(--ui-ink); }
+#app .workspace-page-heading h1 { color: var(--ui-ink); }
+#app { --ui-success-ink: #146c43; --ui-danger-ink: #b02a37; }
+[data-bs-theme="dark"] #app { --ui-success-ink: #75b798; --ui-danger-ink: #ea868f; }
+#app :is(.btn-success, .btn-outline-success),
+#app :is(.assessment-manager, .modal) .text-success {
+  color: var(--ui-success-ink) !important;
+}
+#app :is(.btn-danger, .btn-outline-danger),
+#app .ui-tag .text-danger {
+  color: var(--ui-danger-ink) !important;
+}
+#app :is(.btn-success, .btn-outline-success) { border-color: var(--ui-success-ink) !important; }

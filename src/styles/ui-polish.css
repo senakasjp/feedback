@@ -1,0 +1,203 @@
+:root {
+  --ui-canvas: #f4f6fa;
+  --ui-surface: #ffffff;
+  --ui-soft: #edf2fa;
+  --ui-ink: #243247;
+  --ui-muted: #58677d;
+  --ui-border: #dce3ed;
+  --ui-accent: #244a87;
+  --ui-accent-hover: #193968;
+  --ui-primary-fill: #244a87;
+  --ui-header: #182b49;
+  --ui-header-text: #f4f7fc;
+  --ui-body: 0.875rem;
+  --ui-caption: 0.75rem;
+  --ui-card-title: 1.125rem;
+  --ui-title: 1.75rem;
+  --ui-space-1: 0.25rem;
+  --ui-space-2: 0.5rem;
+  --ui-space-3: 0.75rem;
+  --ui-space-4: 1rem;
+  --ui-space-5: 1.25rem;
+  --ui-space-6: 1.5rem;
+  --ui-space-8: 2rem;
+  --ui-radius-sm: 6px;
+  --ui-radius: 12px;
+  --ui-shadow: 0 2px 8px rgb(24 43 73 / 5%);
+}
+[data-bs-theme="dark"] {
+  --ui-canvas: #141b27;
+  --ui-surface: #1d2736;
+  --ui-soft: #28364b;
+  --ui-ink: #e5edf8;
+  --ui-muted: #acbcd2;
+  --ui-border: #3c4d65;
+  --ui-accent: #9fc4ff;
+  --ui-accent-hover: #c5dcff;
+  --ui-primary-fill: #315da2;
+}
+html body {
+  height: auto !important;
+  min-height: 100dvh;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: var(--ui-body);
+  line-height: 1.55;
+  background: var(--ui-canvas) !important;
+  color: var(--ui-ink) !important;
+}
+#app .workspace-skip-link {
+  position: absolute;
+  left: var(--ui-space-4);
+  top: var(--ui-space-2);
+  z-index: 1100;
+  transform: translateY(-200%);
+  padding: var(--ui-space-3);
+  background: var(--ui-surface);
+  color: var(--ui-accent);
+}
+#app .workspace-skip-link:focus { transform: none; }
+#app :where(button, a, input, textarea, select, [tabindex="0"]):focus-visible {
+  outline: 3px solid var(--ui-accent) !important;
+  outline-offset: 3px !important;
+  box-shadow: none !important;
+}
+#app .navbar {
+  padding: var(--ui-space-3) var(--ui-space-4) !important;
+  background: var(--ui-header) !important;
+  color: var(--ui-header-text);
+}
+#app .navbar > .container-fluid { gap: var(--ui-space-3); }
+#app .navbar-brand { flex-wrap: wrap; font-weight: 600; margin: 0; min-width: 0; }
+#app .navbar-brand .small { font-size: var(--ui-caption); font-weight: 400; color: var(--ui-header-text) !important; opacity: 0.8; }
+#app .navbar-collapse { display: flex !important; flex-grow: 1; flex-basis: auto; }
+#app .navbar-nav { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ui-space-1); }
+#app .navbar .nav-link { font-size: var(--ui-caption); overflow-wrap: anywhere; }
+#app .navbar .btn { margin-left: 0 !important; border-color: transparent !important; color: var(--ui-header-text) !important; }
+#app .navbar .btn:hover, #app .navbar .btn:active { background: rgb(255 255 255 / 12%) !important; }
+#app .navbar :focus-visible { outline-color: var(--ui-header-text) !important; }
+#app .app-workspace { margin-top: 0 !important; padding: var(--ui-space-6) !important; }
+#app .app-workspace > .container-fluid { max-width: 1800px; padding: 0; margin: auto; }
+#app .app-workspace > .container-fluid > .row { --bs-gutter-x: var(--ui-space-6); }
+#app .app-sidebar-column, #app .app-main-column { min-height: 0; min-width: 0; }
+#app .app-sidebar-column > .card {
+  padding: 0;
+  height: auto !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface) !important;
+  box-shadow: var(--ui-shadow) !important;
+}
+#app .app-sidebar-column > .card > .card-header {
+  padding: var(--ui-space-4) var(--ui-space-5) !important;
+  border-radius: var(--ui-radius) var(--ui-radius) 0 0;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-soft) !important;
+  color: var(--ui-ink) !important;
+}
+#app .app-sidebar-column .card-header .btn { color: var(--ui-accent) !important; border-color: var(--ui-border) !important; }
+#app .app-sidebar-column > .card > .card-body { padding: var(--ui-space-5) !important; }
+#app .app-sidebar-column .btn { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+#app .app-sidebar-column .card { padding: 0; }
+#app .app-main-column > nav { margin-bottom: var(--ui-space-5); }
+#app .breadcrumb { padding: var(--ui-space-2) 0; margin: 0; background: transparent !important; font-size: var(--ui-caption); }
+#app .workspace-page-heading { gap: var(--ui-space-4); flex-wrap: wrap; margin-bottom: var(--ui-space-6) !important; }
+#app .workspace-page-heading > div { min-width: 0; }
+#app .workspace-page-heading h1 { font-size: var(--ui-title); font-weight: 600; line-height: 1.25; letter-spacing: -0.03em; overflow-wrap: anywhere; }
+#app .workspace-page-heading .lead { font-size: var(--ui-body); line-height: 1.6; margin-bottom: 0; }
+#app .workspace-page-heading > .btn-group { flex-wrap: wrap; gap: var(--ui-space-2); }
+#app .subject-manager, #app .assessment-manager { padding: 0; }
+#app .workspace-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: var(--ui-space-5); }
+#app .workspace-card-grid > * {
+  min-width: 0;
+  padding: var(--ui-space-5) !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius) !important;
+  background: var(--ui-surface) !important;
+  color: var(--ui-ink);
+  box-shadow: var(--ui-shadow) !important;
+}
+#app .workspace-card-grid .card-header { padding: 0 0 var(--ui-space-5); background: transparent !important; gap: var(--ui-space-2); }
+#app .workspace-card-grid .card-header > div { min-width: 0; }
+#app .workspace-card-grid .card-body { padding: 0; align-items: stretch !important; }
+#app .workspace-card-grid .card-body > .text-center { text-align: left !important; }
+#app .workspace-card-grid .fw-bold, #app .workspace-card-grid h5 { font-size: var(--ui-card-title); font-weight: 600 !important; line-height: 1.35; overflow-wrap: anywhere; }
+#app .workspace-card-grid .text-dark { color: var(--ui-ink) !important; }
+#app .workspace-card-grid .text-muted { color: var(--ui-muted) !important; }
+#app .workspace-card-grid .assessment-card > .flex-grow-1 { align-items: flex-start !important; text-align: left !important; padding-block: var(--ui-space-4); }
+#app .workspace-card-grid .badge { font-weight: 500; }
+#app .workspace-card-grid .btn { min-height: 36px; }
+#app .subject-card-clickable:hover { border-color: var(--ui-accent) !important; }
+#app .btn { border-radius: var(--ui-radius-sm); font-family: inherit; font-weight: 500; line-height: 1.4; }
+#app .app-workspace .btn-primary {
+  background: var(--ui-primary-fill) !important;
+  color: var(--ui-header-text) !important;
+  border-color: var(--ui-primary-fill) !important;
+}
+#app .app-workspace .btn-primary:hover { filter: brightness(1.12); }
+#app .app-workspace .btn-secondary { background: var(--ui-soft) !important; color: var(--ui-ink) !important; border-color: var(--ui-border) !important; }
+#app .app-workspace .btn-outline-primary { color: var(--ui-accent) !important; border-color: var(--ui-border) !important; }
+#app .app-workspace .btn-outline-primary:hover { background: var(--ui-soft) !important; border-color: var(--ui-accent) !important; }
+#app .form-control, #app .form-select { border-radius: var(--ui-radius-sm); font-size: var(--ui-body); line-height: 1.55; }
+#app .form-label { font-size: var(--ui-body); font-weight: 500; }
+#app .modal-content { border-radius: var(--ui-radius); }
+#app .subject-manager .card, #app .assessment-manager > .row > .col-12 > .card { padding: 0; border-radius: var(--ui-radius); }
+#app .subject-manager > .row > .col-12 > .text-center { padding-block: var(--ui-space-6) !important; }
+#app .subject-manager .text-center > .card { border: 1px dashed var(--ui-border) !important; box-shadow: none !important; background: var(--ui-surface) !important; }
+#app .subject-manager .text-center > .card .card-body { padding: var(--ui-space-8) var(--ui-space-6) !important; }
+#app .ai-settings-menu .btn { color: var(--ui-accent) !important; border-color: var(--ui-border) !important; }
+#app .ai-settings-menu .btn:hover { background: var(--ui-soft) !important; }
+@media (min-width: 992px) {
+  #app .app-sidebar-column { width: 248px; }
+  #app .app-main-column { width: calc(100% - 248px); }
+}
+@media (max-width: 991px) {
+  #app .app-sidebar-column, #app .app-main-column { width: 100%; }
+  #app .app-sidebar-column > .card { position: relative !important; max-height: none !important; }
+  #app .navbar-collapse { width: 100%; }
+  #app .navbar-nav { margin-left: 0 !important; }
+  #app .ai-settings-menu { position: fixed; top: 120px; right: var(--ui-space-4); max-height: calc(100dvh - 144px); }
+}
+@media (max-width: 575px) {
+  #app .app-workspace { padding: var(--ui-space-4) !important; }
+  #app .navbar { padding-inline: var(--ui-space-3) !important; }
+  #app .navbar .btn { min-height: 36px; }
+  #app .workspace-page-heading > .btn-group { width: 100%; }
+  #app .workspace-page-heading > .btn-group .btn { border-radius: var(--ui-radius-sm) !important; margin: 0 !important; }
+  #app .workspace-card-grid .btn, #app .app-sidebar-column .btn { min-height: 40px; }
+  #app .performance-highlights-grid { grid-template-columns: minmax(0, 1fr); }
+  #app .ai-settings-menu { top: 160px; max-height: calc(100dvh - 184px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app *, #app *::before, #app *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* Remove the starter card padding without changing rubric or feedback colors. */
+#app .app-main-column .card {
+  padding: 0;
+  border-radius: var(--ui-radius);
+}
+#app .app-main-column .card > .card-body:not(.p-0) {
+  padding: var(--ui-space-5);
+}
+#app .app-main-column .card-header:is(.bg-info, .bg-secondary) {
+  padding: var(--ui-space-3) var(--ui-space-5);
+  background: var(--ui-soft) !important;
+  color: var(--ui-ink) !important;
+}
+#app .app-main-column .card-header:is(.bg-info, .bg-secondary) .text-white {
+  color: var(--ui-ink) !important;
+}
+#app .app-sidebar-column .btn-outline-info {
+  color: var(--ui-accent) !important;
+  border-color: var(--ui-border) !important;
+}
+#app .navbar-brand { color: var(--ui-header-text) !important; }
+#app .app-workspace .text-muted { color: var(--ui-muted) !important; }
+#app .app-workspace .btn-outline-secondary {
+  color: var(--ui-muted) !important;
+  border-color: var(--ui-muted) !important;
+}
+#app .app-workspace .btn-outline-secondary:hover {
+  background: var(--ui-soft) !important;
+  color: var(--ui-ink) !important;
+}

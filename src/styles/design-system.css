@@ -1,0 +1,39 @@
+/* Bootstrap 5 Design System - Minimal Custom Overrides */
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100% !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  font-family: 'Roboto', system-ui, Helvetica, Arial, sans-serif !important;
+}
+
+/* Consistent spacing between input groups and buttons */
+.input-group + .btn,
+.input-group + button,
+.form-control + .btn,
+.form-control + button {
+  margin-left: 0.5rem !important;
+}
+
+/* Spacing for button groups */
+.btn-group .btn + .btn {
+  margin-left: 0.25rem !important;
+}
+
+.paragraph-item {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, border-left-width 0.2s ease;
+  border-left: 4px solid transparent;
+}
+
+.paragraph-item.selected-paragraph {
+  background-color: #e7f1ff;
+  border-left-color: #0d6efd;
+  box-shadow: inset 0 0 0 1px rgba(13, 110, 253, 0.15);
+}

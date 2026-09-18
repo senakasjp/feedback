@@ -22,3 +22,28 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Claude Code worktrees (isolated agent copies, never part of app history)
+.claude/worktrees/
+
+# Playwright MCP transient session snapshots
+.playwright-mcp/
+
+# Private records and local development artifacts
+FeedbackData/
+.ui-polish-backups/
+.env*
+*.bak*
+*.dmg
+test-results/
+.claude/
+.opencode/
+.mcp.json
+opencode.json
+tui.json
+.cursorrules
