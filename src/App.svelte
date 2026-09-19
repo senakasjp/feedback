@@ -26,6 +26,7 @@
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
 	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { assignCategoryMark } from './services/categoryMarkingService.js'
 	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
 	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
@@ -159,6 +160,8 @@
 	let buildingAssessmentVectorIndex = $state(false)
 	let aiRetrievalMode = $state('')
 	let showAiDraftReviewModal = $state(false)
+	let assigningMarkCategory = $state('')
+	let categoryMarkRequestId = 0
 	let markJustificationModalCategory = $state('')
 	let aiDraftReviewItems = $state([])
 	let showPromptPreviewModal = $state(false)
@@ -1477,6 +1480,8 @@
 	
 	// Helper function to initialize empty data - STRICT DATA SEPARATION
 	function initializeEmptyData() {
+		categoryMarkRequestId += 1
+		assigningMarkCategory = ''
 		// Clear all assessment-related data
 		paragraphs = []
 		assignmentParagraphSnapshot = []
@@ -2828,6 +2833,90 @@
 
 	function closeAiDraftReviewModal() {
 		showAiDraftReviewModal = false
+	}
+
+	function assignMarksForCategory(categoryName) {
+		return assignMarksForHeadings([categoryName])
+	}
+
+	function assignMarksToAllHeadings() {
+		const names = (currentAssessment?.categories || [])
+			.filter(category => getCategoryAllocatedMarks(category.name) > 0)
+			.map(category => category.name)
+		return assignMarksForHeadings(names)
+	}
+
+	async function assignMarksForHeadings(categoryNames) {
+		if (!currentStudentId || assigningMarkCategory || hasPendingParagraphEdit()) return
+		if (!categoryNames.length) {
+			showSuccessNotification('Set allocated marks for the paragraph headings before assigning marks.')
+			return
+		}
+		if (!isCurrentAiProviderConfigured()) {
+			showSuccessNotification('Configure an AI provider in AI settings before assigning marks.')
+			return
+		}
+		const requestId = ++categoryMarkRequestId
+		const context = { subjectId: currentSubjectId, assessmentId: currentAssessmentId, studentId: currentStudentId }
+		const originalMarks = categoryNames.map(name => categoryMarks[name])
+		const originalSelection = JSON.stringify([...selectedParagraphs])
+		const assessment = $state.snapshot(getCurrentAssessmentForAi())
+		const submission = getCombinedStudentSubmissionText()
+		const documents = $state.snapshot(getSafeStudentSubmissionDocuments())
+		const originalParagraphs = $state.snapshot(paragraphs)
+		const assessmentParagraphs = originalParagraphs.filter(paragraph => paragraph?._source !== 'student')
+		const isCurrent = () => requestId === categoryMarkRequestId && currentView === 'feedback'
+			&& currentSubjectId === context.subjectId && currentAssessmentId === context.assessmentId && currentStudentId === context.studentId
+		try {
+			const results = []
+			for (const categoryName of categoryNames) {
+				assigningMarkCategory = categoryName
+				const { criterion } = await assignCategoryMark({
+					assessment, categoryName, student: getCurrentStudent(), studentSubmission: submission,
+					studentSubmissionDocuments: documents, assessmentParagraphs,
+					globalSystemInstructions: globalAiSystemInstructions,
+					answerInstructions: getCombinedAnswerInstructions(categoryName),
+					modelPreference: getCurrentAiModelPreference()
+				})
+				if (!isCurrent()) return
+				if (categoryNames.some((name, index) => categoryMarks[name] !== originalMarks[index])
+					|| originalSelection !== JSON.stringify([...selectedParagraphs]) || submission !== getCombinedStudentSubmissionText()
+					|| JSON.stringify(originalParagraphs) !== JSON.stringify(paragraphs)
+					|| JSON.stringify(assessment) !== JSON.stringify(getCurrentAssessmentForAi())
+					|| JSON.stringify(documents) !== JSON.stringify(getSafeStudentSubmissionDocuments())) {
+					throw new Error('The marks, paragraphs, selection, submission or rubric changed during marking. Assign marks again to use the latest values.')
+				}
+				const mark = criterion.awarded_mark
+				const candidates = paragraphs.filter(p => paragraphMatchesCategory(p?.text, categoryName))
+				const band = getGradeInfo(mark / getCategoryAllocatedMarks(categoryName) * 100, currentAssessment.percentageRanges || [])
+				const matchingParagraph = candidates.find(p => {
+					if (getEffectiveMarkingMode(categoryName) === 'fixed') {
+						return parseMark(getCategoryColorMarkValue(categoryName, p.markInfo?.color || p.color)) === mark
+					}
+					return (p.markInfo?.color || p.color) === band.color
+				})
+				if (!matchingParagraph) throw new Error(`No feedback colour band matches the suggested mark for ${categoryName}. Check its bands before assigning marks.`)
+				results.push({ categoryName, criterion, candidates, matchingParagraph })
+			}
+			const nextSelected = new Set(selectedParagraphs)
+			const nextMarks = { ...categoryMarks }
+			const nextJustifications = { ...categoryMarkJustification }
+			for (const { categoryName, criterion, candidates, matchingParagraph } of results) {
+				candidates.forEach(p => nextSelected.delete(p.id))
+				nextSelected.add(matchingParagraph.id)
+				nextMarks[categoryName] = criterion.awarded_mark
+				nextJustifications[categoryName] = [criterion.judgement, ...criterion.evidence, criterion.improvement_advice].filter(Boolean).join('\n\n')
+			}
+			selectedParagraphs = nextSelected
+			categoryMarks = nextMarks
+			categoryMarkJustification = nextJustifications
+			refreshCategoryWarnings()
+			showSuccessNotification(`Marks assigned to ${results.length} heading${results.length === 1 ? '' : 's'} and matching colour bands selected. Review, then save student data.`)
+		} catch (error) {
+			if (isCurrent()) showSuccessNotification(`Could not assign marks: ${error.message}`)
+		} finally {
+			if (requestId === categoryMarkRequestId) assigningMarkCategory = ''
+		}
 	}
 
 	function openMarkJustificationModal(categoryName) {
@@ -4432,6 +4521,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	}
 
 	async function selectStudent(studentId) {
+		categoryMarkRequestId += 1
+		assigningMarkCategory = ''
 		// STRICT FILTER: Validate context before selecting student
 		if (currentView !== 'feedback') {
 			console.error('STRICT FILTER: Cannot select student outside of feedback view')
@@ -8896,6 +8987,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										{#if currentAssessment?.categories?.length > 0}
 											<div class="border rounded p-3 bg-light mb-3">
 												{#if currentStudentId}
+													<div class="mb-2">
+														<button type="button" class="btn btn-primary btn-sm"
+															onclick={assignMarksToAllHeadings}
+															disabled={Boolean(assigningMarkCategory) || hasPendingParagraphEdit()}
+															aria-label="Assign marks to all headings">
+															<i class="bi bi-magic me-1"></i>{assigningMarkCategory ? 'Assigning marks…' : 'Assign marks to all headings'}
+														</button>
+														<div class="form-text" role="status">{assigningMarkCategory ? 'Assessing: ' + assigningMarkCategory : 'Assess the submission against each rubric heading, fill its marks box and select the matching colour band.'}</div>
+													</div>
 													<button
 														type="button"
 														class="btn btn-outline-info btn-sm"
@@ -8978,7 +9078,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 										{#each getGroupedParagraphs() as group}
 											<div class="card mb-3 border-start border-4 {missingParagraphCategories.has(group.category) ? 'border-danger' : 'border-info'}">
 													<div class="card-header bg-info text-white py-2">
-														<div class="d-flex align-items-center w-100">
+														<div class="d-flex flex-wrap align-items-center gap-2 w-100">
 															<div class="flex-grow-1">
 																<h6 class="mb-0 fw-bold">
 																	{#if group.category && group.category !== 'No Knowledge Area'}
@@ -8991,7 +9091,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															</div>
 															{#if group.category}
 																<div class="d-flex align-items-center gap-2">
-									<div class="d-flex align-items-center gap-2">
+									<div class="d-flex flex-wrap align-items-center gap-2">
 										<input 
 											type="number" 
 											class="form-control form-control-sm w-auto" 
@@ -9009,6 +9109,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											<span class="text-muted small fw-bold">
 												/ {currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
 											</span>
+										{/if}
+										{#if currentStudentId}
+											<button type="button" class="btn btn-outline-primary btn-sm"
+												onclick={() => assignMarksForCategory(group.category)}
+												disabled={Boolean(assigningMarkCategory) || !(getCategoryAllocatedMarks(group.category) > 0) || hasPendingParagraphEdit()}
+												aria-label={`Assign marks for ${group.category}`}
+												title="Assess the student submission against this category's rubric and select its colour band">
+												<i class="bi bi-magic me-1"></i>{assigningMarkCategory === group.category ? 'Assigning…' : 'Assign marks'}
+											</button>
 										{/if}
 										{#if currentStudentId && categoryMarkJustification[group.category]}
 											<button
