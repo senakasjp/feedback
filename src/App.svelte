@@ -8953,8 +8953,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														rows="2"
 														placeholder="e.g. Always reference the rubric wording and avoid absolute claims."
 														value={currentAssessment.commonParagraphAiInstructions || ''}
-														oninput={(e) => { currentAssessment.commonParagraphAiInstructions = e.currentTarget.value }}
-														onchange={persistAssessmentAiSettings}
+														onblur={(e) => {
+															const value = e.currentTarget.value
+															if (value === (currentAssessment.commonParagraphAiInstructions || '')) return
+															currentAssessment.commonParagraphAiInstructions = value
+															persistAssessmentAiSettings()
+														}}
 													></textarea>
 													<div class="form-text">Added to every paragraph's AI prompt in this assessment, unless a paragraph opts out below.</div>
 												</div>
