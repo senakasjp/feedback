@@ -19,6 +19,10 @@
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags } from './utils/helpers.js'
 	import { parseMark, validateCategoryMark, getAssessmentMaximum, getMarkSummary, getMarkBands, getGradeInfo, DEFAULT_GRADE_RANGES } from './utils/markingRules.js'
 	import { extractMarkSuggestion } from './utils/aiMarkSuggestion.js'
+	import { normalizeCategoryLabel, resolveRubricCategory } from './utils/rubricCategoryMatching.js'
+	import { inferRubricBandColumns, resolveRubricBandColumns } from './utils/rubricBandColumns.js'
+	import { isRubricHeaderRow, getRubricTableGrid, getRubricColumnHeaders } from './utils/rubricTable.js'
+	import { getRubricCategoryMarks, isRubricSummaryRow } from './utils/rubricMarks.js'
 	import { getMotivationalMessage } from './utils/motivationalMessages.js'
 	import { debugInfo, debugLog, isVerboseDebugEnabled } from './utils/debug.js'
 	
@@ -1010,6 +1014,12 @@
 	let selectedKnowledgeArea = $state('')
 	const tableRowLabels = $derived(extractTableRowLabels(assessmentHtml))
 	const tableColumnHeaders = $derived(extractTableColumnHeaders(assessmentHtml))
+	const automaticBandColumns = $derived(inferRubricBandColumns(tableColumnHeaders, getRubricConfiguredBands()))
+	const rubricCategoryMarks = $derived.by(() => {
+		const root = document.createElement('div')
+		root.innerHTML = assessmentHtml || ''
+		return getRubricCategoryMarks(root, currentAssessment?.categories || [], tableRowCategoryMap)
+	})
 
 	// pdrCategories is now imported from utils/constants.js
 
@@ -1024,15 +1034,6 @@
 
 	// ensureCategoriesHaveOrder function is now imported from utils/helpers.js
 
-	function normalizeCategoryLabel(str) {
-		return (str || '')
-			.toString()
-			.replace(/\u00a0/g, ' ')
-			.replace(/\([^)]*\)/g, '')
-			.replace(/\s+/g, ' ')
-			.trim()
-			.toLowerCase()
-	}
 
 	function normalizeHtmlQuotes(value) {
 		return String(value || '')
@@ -1046,7 +1047,8 @@
 		temp.innerHTML = html
 		const labels = new Set()
 		const rows = Array.from(temp.querySelectorAll('table tr'))
-		rows.forEach(			row => {
+		rows.forEach(row => {
+			if (isRubricHeaderRow(row) || isRubricSummaryRow(row)) return
 			const firstCell = /** @type {HTMLTableRowElement} */ (row).cells?.[0]
 			if (!firstCell) return
 			const text = (firstCell.textContent || '').replace(/\u00a0/g, ' ').trim()
@@ -1056,25 +1058,10 @@
 	}
 
 	function extractTableColumnHeaders(html) {
-		if (!html) return []
 		const temp = document.createElement('div')
-		temp.innerHTML = html
+		temp.innerHTML = html || ''
 		const table = temp.querySelector('table')
-		if (!table) return []
-
-		// Get first row (usually headers)
-		const firstRow = table.querySelector('tr')
-		if (!firstRow) return []
-
-		const headers = []
-		const cells = Array.from(firstRow.querySelectorAll('th, td'))
-		cells.forEach((cell, index) => {
-			const text = (cell.textContent || '').replace(/\u00a0/g, ' ').trim()
-			if (text && index > 0) { // Skip first column (row labels)
-				headers.push({ index, text })
-			}
-		})
-		return headers
+		return table ? getRubricColumnHeaders(table) : []
 	}
 
 	function shouldUseLandscapeForHtml(html, marginMm = 20) {
@@ -2432,7 +2419,7 @@
 
 	function getCurrentAssessmentForAi() {
 		return {
-			...currentAssessment,
+			...getCurrentAssessmentForMarking(),
 			rubricHtml: assessmentHtml || currentAssessment?.rubricHtml || ''
 		}
 	}
@@ -2569,115 +2556,97 @@
 	// position to table columns" settings, and the fixed highlight order green=high..red=low).
 	const CATEGORY_COLOR_BAND_ORDER = ['green', 'lightgreen', 'yellow', 'orange', 'red']
 
-	// Get the color bands that apply to a category's own marking mode, in canonical high-to-low order -
-	// these are assessment/category properties (allocated marks, percentage bounds, fixed colorMarks),
-	// not tied to any student. "Manual"/none mode has no color-banding concept in this app, so it
-	// returns no bands.
-	function getCategoryColorBands(category) {
-		const markingMode = getEffectiveMarkingMode(category.name)
-
-		if (markingMode === 'percentage') {
-			return getCategoryAllocatedMarks(category.name) ? [...CATEGORY_COLOR_BAND_ORDER] : []
-		}
-
-		if (markingMode === 'fixed') {
-			const colorMarks = category.colorMarks || {}
-			return CATEGORY_COLOR_BAND_ORDER.filter(color => parseNumericMarkValue(colorMarks[color]) !== null)
-		}
-
-		return []
+	function getRubricConfiguredBands() {
+		return getMarkBands(currentAssessment?.percentageRanges || []).map(band => ({
+			position: CATEGORY_COLOR_BAND_ORDER.indexOf(band.color) + 1,
+			lower: band.lower * 100,
+			upper: band.upper * 100
+		})).filter(band => band.position > 0)
 	}
 
-	// Find the pasted rubric table's row for this category: manual override via tableRowCategoryMap
-	// first (same lookup the "Match table rows to categories" settings UI writes to), then fall back to
-	// fuzzy name matching (same normalizeCategoryLabel() used to build that UI - strips "(LO1)" etc.).
-	// Returns the row's cells (td/th elements) or null if no rubric table / no matching row.
 	function findRubricRowCellsForCategory(category) {
-		const html = currentAssessment?.rubricHtml
-		if (!html) return null
-
 		const temp = document.createElement('div')
-		temp.innerHTML = html
-		const rows = Array.from(temp.querySelectorAll('table tr'))
-
-		for (const row of rows) {
-			const firstCell = row.cells?.[0]
-			if (!firstCell) continue
-			const label = (firstCell.textContent || '').replace(/ /g, ' ').trim()
-			if (!label) continue
-			const normalizedLabel = normalizeCategoryLabel(label)
-			const mappedCategoryName = tableRowCategoryMap[normalizedLabel]
-			const isMatch = mappedCategoryName ? mappedCategoryName === category.name : normalizedLabel === normalizeCategoryLabel(category.name)
-			if (isMatch) return Array.from(row.cells)
+		temp.innerHTML = assessmentHtml || ''
+		for (const table of temp.querySelectorAll('table')) {
+			for (const { row, cells } of getRubricTableGrid(table)) {
+				if (isRubricHeaderRow(row) || isRubricSummaryRow(row)) continue
+				const label = cells[0]?.textContent?.trim()
+				if (resolveRubricCategory(label, currentAssessment?.categories || [], tableRowCategoryMap) === category) return cells
+			}
 		}
 		return null
 	}
 
-	// Look up the real rubric text for one color band from the matched row, using the existing
-	// "Map paragraph position to table columns" mapping (position 1 = green .. 5 = red). Returns null
-	// if there's no rubric table, no matching row, no column mapped for this band, or the cell is empty.
-	function getRubricBandText(category, color, rowCells) {
-		if (!rowCells) return null
-		const position = CATEGORY_COLOR_BAND_ORDER.indexOf(color) + 1
-		const columnIndex = tableColumnMarkMap[position]
-		if (columnIndex === undefined || columnIndex === '') return null
-		const cell = rowCells[Number(columnIndex)]
-		if (!cell) return null
-		const text = (cell.textContent || '').replace(/ /g, ' ').trim()
-		return text || null
-	}
-
-	// Go through every category in this assessment and, for each color band it supports, add a
-	// paragraph if one doesn't already exist - pulling the real descriptor text from the matching cell
-	// of the pasted rubric table when a row/column mapping is available, otherwise a placeholder to fill
-	// in by hand. Scaffolds the assessment-level template table in one click instead of adding each one
-	// by hand. Assignment-scoped regardless of whether a student happens to be selected - these are
-	// templates, not one student's feedback.
-	function fillAllCategoryColorBandTemplates() {
+	async function fillAllCategoryColorBandTemplates() {
 		if (!currentAssessment?.categories?.length) {
-			showSuccessNotification('⚠️ This assessment has no categories.')
+			showSuccessNotification('⚠️ Create categories from the rubric in Settings first.')
+			return
+		}
+		if (currentStudentId || hasPendingParagraphEdit()) {
+			showSuccessNotification('Save or cancel the paragraph edit and use assignment mode before filling rubric bands.')
+			return
+		}
+		if (!assessmentHtml.trim()) {
+			showSuccessNotification('⚠️ Paste the rubric table in Settings before filling colour bands.')
 			return
 		}
 
-		let addedFromRubricCount = 0
-		let addedPlaceholderCount = 0
-		let skippedCategoryCount = 0
-
+		let addedCount = 0
+		let filledPlaceholderCount = 0
+		const removedPlaceholderIds = new Set()
+		const configuredBands = getRubricConfiguredBands()
+		const activeColors = new Set(configuredBands.map(band => CATEGORY_COLOR_BAND_ORDER[band.position - 1]))
+		let unavailableCount = 0
 		for (const category of currentAssessment.categories) {
-			const colors = getCategoryColorBands(category)
-			if (colors.length === 0) {
-				skippedCategoryCount++
+			const cells = findRubricRowCellsForCategory(category)
+			const table = cells?.[0]?.closest('table')
+			const columns = table ? resolveRubricBandColumns(getRubricColumnHeaders(table), tableColumnMarkMap, configuredBands) : {}
+			if (!Object.keys(columns).length) {
+				unavailableCount++
 				continue
 			}
-
-			const rowCells = findRubricRowCellsForCategory(category)
-
-			for (const color of colors) {
-				const alreadyExists = paragraphs.some(paragraph =>
-					paragraph?._source !== 'student' &&
-					paragraph?.color === color &&
-					paragraphMatchesCategory(paragraph?.text, category.name)
+			if (configuredBands.length) {
+				for (const paragraph of paragraphs) {
+					if (paragraph._source === 'assignment' && !activeColors.has(paragraph.color) &&
+						!Object.hasOwn(columns, CATEGORY_COLOR_BAND_ORDER.indexOf(paragraph.color) + 1) &&
+						paragraph.text === `${category.name}: [add feedback for this band]`) removedPlaceholderIds.add(paragraph.id)
+				}
+			}
+			for (const [position, column] of Object.entries(columns)) {
+				const color = CATEGORY_COLOR_BAND_ORDER[Number(position) - 1]
+				const rubricText = (cells[column]?.textContent || '').replace(/\u00a0/g, ' ').trim()
+				if (!rubricText) {
+					unavailableCount++
+					continue
+				}
+				const existing = paragraphs.find(paragraph =>
+					paragraph?._source !== 'student' && paragraph?.color === color && paragraphMatchesCategory(paragraph?.text, category.name)
 				)
-				if (alreadyExists) continue
-
-				const rubricText = getRubricBandText(category, color, rowCells)
+				if (existing) {
+					if (existing.text === `${category.name}: [add feedback for this band]`) {
+						existing.text = `${category.name}: ${rubricText}`
+						existing.rubricBandPosition = Number(position)
+						filledPlaceholderCount++
+					}
+					continue
+				}
 				paragraphs.push({
-					id: generateId(),
-					text: `${category.name}: ${rubricText || '[add feedback for this band]'}`,
-					color,
-					_source: 'assignment',
-					createdAt: new Date().toISOString(),
-					subjectId: currentSubjectId,
-					assessmentId: currentAssessmentId
+					id: crypto.randomUUID(), text: `${category.name}: ${rubricText}`, color,
+					rubricBandPosition: Number(position), _source: 'assignment', createdAt: new Date().toISOString(),
+					subjectId: currentSubjectId, assessmentId: currentAssessmentId
 				})
-				if (rubricText) addedFromRubricCount++
-				else addedPlaceholderCount++
+				addedCount++
 			}
 		}
-
-		const addedCount = addedFromRubricCount + addedPlaceholderCount
-		if (addedCount > 0) saveAssessmentData()
-		showSuccessNotification(`✅ Added ${addedCount} paragraph${addedCount === 1 ? '' : 's'} (${addedFromRubricCount} from the rubric table, ${addedPlaceholderCount} placeholder). Skipped ${skippedCategoryCount} categor${skippedCategoryCount === 1 ? 'y' : 'ies'} with no color-band marking mode.`)
+		if (removedPlaceholderIds.size) {
+			paragraphs = paragraphs.filter(paragraph => !removedPlaceholderIds.has(paragraph.id))
+			selectedParagraphs = new Set([...selectedParagraphs].filter(id => !removedPlaceholderIds.has(id)))
+		}
+		if (addedCount || filledPlaceholderCount || removedPlaceholderIds.size) await saveAssessmentData()
+		const result = `Added ${addedCount} paragraphs from the rubric. Filled ${filledPlaceholderCount} existing placeholders.${removedPlaceholderIds.size ? ` Removed ${removedPlaceholderIds.size} unused placeholders.` : ''}`
+		showSuccessNotification(unavailableCount
+			? `⚠️ ${result} Some rows or bands could not be filled. Map rubric columns in Settings and check that their cells contain descriptions.`
+			: `✅ ${result} Your written feedback has been kept.`)
 	}
 
 	async function runEvidenceCheck(categoryName) {
@@ -3424,6 +3393,32 @@
 			showNotification = true
 			setTimeout(() => showNotification = false, 3000)
 		}
+	}
+
+	async function createCategoriesFromRubric(labels = tableRowLabels) {
+		if (!currentAssessment) return
+		if (hasPendingParagraphEdit()) {
+			highlightEditingParagraphSaveWarning()
+			showSuccessNotification('Save or cancel the paragraph edit before creating categories.')
+			return
+		}
+		const categories = [...(currentAssessment.categories || [])]
+		const mappings = { ...tableRowCategoryMap }
+		let addedCount = 0
+		for (const label of labels) {
+			let category = categories.find(item => normalizeCategoryName(item.name) === normalizeCategoryName(label))
+			if (!category) {
+				category = { id: crypto.randomUUID(), name: label, order: categories.length, markingMode: 'none', colorMarks: {} }
+				categories.push(category)
+				addedCount++
+			}
+			const key = normalizeCategoryLabel(label)
+			if (Object.prototype.hasOwnProperty.call(mappings, key)) delete mappings[key]
+		}
+		tableRowCategoryMap = mappings
+		currentAssessment = { ...currentAssessment, categories: normalizeCategoryOrder(categories), tableRowCategoryMap: mappings }
+		await saveAssessmentData({ force: true, skipSelections: true })
+		showSuccessNotification(`Created ${addedCount} categor${addedCount === 1 ? 'y' : 'ies'} from the rubric. Category maxima use the last Marks column when available.`)
 	}
 
 	function addCategory() {
@@ -4243,14 +4238,24 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		if (!currentAssessment?.categories || !categoryName) return undefined
 		const category = currentAssessment.categories.find(cat => cat.name === categoryName)
 		if (!category) return undefined
-		const rawValue = category.allocatedMarks
+		const rawValue = rubricCategoryMarks.get(categoryName) ?? category.allocatedMarks
 		if (rawValue === undefined || rawValue === null) return undefined
 		const numericValue = parseMark(rawValue)
 		return Number.isFinite(numericValue) ? numericValue : undefined
 	}
 
+	function getCurrentAssessmentForMarking() {
+		return {
+			...currentAssessment,
+			categories: (currentAssessment?.categories || []).map(category => {
+				const maximum = rubricCategoryMarks.get(category.name)
+				return maximum === undefined ? category : { ...category, allocatedMarks: maximum }
+			})
+		}
+	}
+
 	function getCurrentMarkSummary() {
-		return getMarkSummary(currentAssessment || {}, categoryMarks)
+		return getMarkSummary(getCurrentAssessmentForMarking(), categoryMarks)
 	}
 
 	function getTotalMarks() {
@@ -4258,7 +4263,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	}
 
 	function getAssessmentTotalInfo() {
-		const maximum = getAssessmentMaximum(currentAssessment || {})
+		const maximum = getAssessmentMaximum(getCurrentAssessmentForMarking())
 		return { value: maximum ?? 0, hasValue: maximum !== null }
 	}
 
@@ -5959,7 +5964,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					}
 				} else if (effectiveMode === 'percentage') {
 					const categoryObj = byExactName[finalCategory] || byNormalizedName[normalizeCategoryName(finalCategory)]
-					const allocatedMarks = categoryObj?.allocatedMarks
+					const allocatedMarks = getCategoryAllocatedMarks(categoryObj?.name)
 					const range = getMarksRange(color, allocatedMarks)
 					const bounds = getColorPercentageBounds(color)
 					let minMarks = null
@@ -6406,7 +6411,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const normalize = (str) => (str || '')
 				.toString()
 				.replace(/\u00a0/g, ' ')
-				.replace(/\([^)]*\)/g, '') // drop parenthetical mark hints
 				.replace(/\s+/g, ' ')
 				.trim()
 				.toLowerCase()
@@ -6457,11 +6461,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				}
 			})
 
-			// Build UI-order paragraph cache by category for position lookup.
-			// Keyed with the same paren-stripping `normalize` as rowKey/effectiveKey above -
-			// groupedParagraphCaches.categoryParagraphsByNormalized uses normalizeCategoryName
-			// instead, which keeps "(LO1)"-style suffixes and never matches, so the highlight
-			// silently never applies for any category named that way.
+			// Preserve category suffixes so similarly named categories keep separate marks and highlights.
 			const getCategoryParagraphsInOrder = (catKey) => {
 				const group = groupedParagraphs.find(g => normalize(g.category) === catKey)
 				return group ? Object.values(group.knowledgeAreas || {}).flat() : []
@@ -6469,10 +6469,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 			const tables = Array.from(container.querySelectorAll('table'))
 		tables.forEach(table => {
-			const rows = Array.from(table.querySelectorAll('tr'))
+			const rows = getRubricTableGrid(table)
 			if (!rows.length) return
+			const rubricHeaders = getRubricColumnHeaders(table)
 
-			const headerCells = Array.from(rows[0].children)
+			const headerCells = rows[0].cells
 			const dataStartIndex = headerCells.length > 1 ? 1 : 0 // assume first column is row label
 			let marksColumnIndex = -1
 			headerCells.forEach((cell, idx) => {
@@ -6483,7 +6484,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			})
 			const headerTextsRaw = headerCells.slice(dataStartIndex).map(cell => cell.textContent || '')
 			const headerValueCandidates = headerTextsRaw.map(text => extractNumber(text)).filter(val => Number.isFinite(val))
-			const headerIsPresent = headerCells.some(cell => cell.tagName === 'TH') || headerValueCandidates.length > 0
+			const headerIsPresent = isRubricHeaderRow(rows[0].row) || headerValueCandidates.length > 0
 			const headerTexts = headerIsPresent ? headerTextsRaw : []
 			const headerValues = headerIsPresent ? headerTextsRaw.map(text => extractNumber(text)) : []
 			const inferredColumns = Math.max(1, headerCells.length - dataStartIndex)
@@ -6492,30 +6493,27 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 				const dataRows = headerIsPresent ? rows.slice(1) : rows
 
-				dataRows.forEach(row => {
-					const cells = Array.from(row.children)
+				dataRows.forEach(({ row, cells }) => {
+					if (isRubricHeaderRow(row) || isRubricSummaryRow(row)) return
 					if (cells.length <= dataStartIndex) return
 					const rawLabel = cells[0].textContent || ''
 				const rowKey = normalize(rawLabel)
 				// Allow manual row->category mapping to drive mark lookup/highlighting when labels differ
-				const mappedCategoryName = tableRowCategoryMap?.[rowKey]
-				const mappedCategoryKey = mappedCategoryName ? normalize(mappedCategoryName) : ''
-				const effectiveKey = mappedCategoryKey || rowKey
+				const categoryObj = resolveRubricCategory(rawLabel, currentAssessment?.categories || [], tableRowCategoryMap)
+				if (!categoryObj) return
+				const effectiveKey = normalize(categoryObj.name)
 
 				// Populate Marks column text if present (keep existing behavior)
 				if (marksColumnIndex >= 0 && marksColumnIndex < cells.length) {
-					const categoryObj = currentAssessment?.categories?.find(cat =>
-						normalize(cat.name) === effectiveKey || normalize(cat.name) === rowKey || normalize(cat.name) === mappedCategoryKey
-					)
-					const markValue = marksMap[effectiveKey] ?? marksMap[rowKey] ?? marksMap[mappedCategoryKey]
-					const allocated = Number.parseFloat(categoryObj?.allocatedMarks)
+					const markValue = marksMap[effectiveKey]
+					const allocated = getCategoryAllocatedMarks(categoryObj.name)
 					const markDisplay = markValue ?? '—'
 					cells[marksColumnIndex].textContent = Number.isFinite(allocated) && allocated > 0 ? `${markDisplay} / ${allocated}` : `${markDisplay}`
 				}
 
 				// Use ONLY row label + paragraph position -> column mapping for highlighting
 				let columnIndex = -1
-				const columnMarkMap = currentAssessment?.tableColumnMarkMap || tableColumnMarkMap || {}
+				const columnMarkMap = resolveRubricBandColumns(rubricHeaders, tableColumnMarkMap, getRubricConfiguredBands())
 				
 				if (Object.keys(columnMarkMap).length > 0) {
 					// Get all paragraphs for this row/category in UI order
@@ -6525,8 +6523,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					const selectedPara = categoryParagraphsList.find(p => selectedParagraphs.has(p.id))
 					
 					if (selectedPara) {
-						// Paragraph position is its index within the full category list (1-based)
-						const paragraphPosition = categoryParagraphsList.findIndex(p => p.id === selectedPara.id) + 1
+						// Use the band colour even when older feedback has no saved rubric position.
+						const sourceParagraph = paragraphs.find(p => p.id === selectedPara.id)
+						const paragraphPosition = CATEGORY_COLOR_BAND_ORDER.indexOf(sourceParagraph?.color || selectedPara.color) + 1 || sourceParagraph?.rubricBandPosition || categoryParagraphsList.findIndex(p => p.id === selectedPara.id) + 1
 						
 						// Look up which column this position should highlight
 						const mappedColumnIndex = columnMarkMap[paragraphPosition]
@@ -8034,6 +8033,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									{#if showAssessmentHtml}
 									<label class="form-label fw-bold" for="assessmentHtmlInput">Paste HTML snippet (e.g., rubric table):</label>
 									<p class="text-muted mb-2 small">If you want a table-based result in the PDF, paste your HTML table below, then click Generate PDF.</p>
+									<div class="alert alert-info small mb-3" role="note" aria-label="Rubric table format" id="rubricTableFormat">
+										<div class="fw-semibold mb-1">Rubric table format</div>
+										<ul class="mb-2 ps-3">
+											<li><strong>First column:</strong> the criterion or category name.</li>
+											<li><strong>Middle columns:</strong> four or five colour bands, with a feedback description in each cell. Use colour names, grade labels, or percentage ranges as column headings.</li>
+											<li><strong>Last column:</strong> label it <strong>Marks</strong> and enter the maximum for that row, such as <strong>25</strong> or <strong>12.5</strong>.</li>
+										</ul>
+										<p class="mb-1">Include a header row and one row per category. Match different category names using the dropdowns below; total rows are ignored.</p>
+										<p class="mb-0">Band boundaries come from Settings → Mark ranges for bands. For example, 80–100% of 25 marks displays as <strong>20–25</strong>. Blank or invalid Marks cells use configured category marks.</p>
+									</div>
 									<div class="alert alert-secondary py-2">
 										<div class="d-flex flex-column gap-2">
 											<div class="d-flex flex-column flex-md-row align-items-start gap-2">
@@ -8067,6 +8076,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									</div>
 									<textarea
 										id="assessmentHtmlInput"
+										aria-describedby="rubricTableFormat"
 										class="form-control"
 												rows="6"
 												bind:value={assessmentHtml}
@@ -8083,10 +8093,19 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											></textarea>
 											{#if tableRowLabels.length}
 												<div class="mt-3">
-													<div class="d-flex align-items-center justify-content-between mb-2">
+													<div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
 														<span class="fw-bold">Match table rows to categories</span>
-														<span class="text-muted small">{tableRowLabels.length} row{tableRowLabels.length !== 1 ? 's' : ''} detected</span>
+														<span class="text-muted small flex-shrink-0">{tableRowLabels.length} row{tableRowLabels.length !== 1 ? 's' : ''} detected</span>
 													</div>
+													{#if !currentAssessment?.categories?.length}
+														<div class="mb-2">
+														<p class="small text-muted mb-2">This rubric has rows, but the assessment has no categories yet.</p>
+														<button type="button" class="btn btn-primary btn-sm" onclick={() => createCategoriesFromRubric()}>Create categories from rubric</button>
+														<p class="small text-muted mt-2 mb-0">Creates headings from these rows and reads each maximum from the last Marks column. Configure missing marks in Assessment Configuration.</p>
+													</div>
+													{:else}
+														<p class="small text-muted mb-2">Matches are automatic when names agree. Choose a category to override a match.</p>
+													{/if}
 													<div class="table-responsive">
 														<table class="table table-sm table-bordered mb-0">
 															<thead class="table-light">
@@ -8098,6 +8117,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															<tbody>
 																{#each tableRowLabels as label (label)}
 																	{@const normalizedLabel = normalizeCategoryLabel(label)}
+																	{@const automaticMatch = resolveRubricCategory(label, currentAssessment?.categories || [])}
+																	{@const savedMatch = tableRowCategoryMap[normalizedLabel]}
 																	<tr>
 																		<td class="align-middle">
 																			<small class="fw-semibold text-break">{label}</small>
@@ -8105,9 +8126,15 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																		<td>
 																			<select
 																				class="form-select form-select-sm"
-																				value={tableRowCategoryMap[normalizedLabel] || ''}
+																				aria-label={`Category for ${label}`}
+																				value={savedMatch || ''}
 																				onchange={(e) => {
 																					const selected = e.currentTarget.value
+																					if (e.currentTarget.selectedOptions[0]?.dataset.createCategory) {
+																						e.currentTarget.value = ''
+																						createCategoriesFromRubric([label])
+																						return
+																					}
 																					const key = normalizedLabel
 																					const updated = { ...tableRowCategoryMap }
 																					if (selected) {
@@ -8122,11 +8149,20 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																					saveAssessmentData({ force: true, skipSelections: true })
 																				}}
 																			>
-																				<option value="">Auto (match by name)</option>
-																				{#each (currentAssessment?.categories || []) as cat (cat.id)}
+																				<option value="">{!currentAssessment?.categories?.length ? 'Choose or create a category' : automaticMatch ? `Auto: ${automaticMatch.name}` : 'No automatic match — choose a category'}</option>
+																				{#if savedMatch && !currentAssessment?.categories?.some(cat => cat.name === savedMatch)}
+																					<option value={savedMatch}>Unavailable category: {savedMatch}</option>
+																				{/if}
+																				{#each (currentAssessment?.categories || []) as cat}
 																					<option value={cat.name}>{cat.name}</option>
 																				{/each}
+																			{#if !(currentAssessment?.categories || []).some(cat => normalizeCategoryName(cat.name) === normalizeCategoryName(label))}
+																					<option value="__create_rubric_category__" data-create-category="true">Create category from this row</option>
+																				{/if}
 																			</select>
+																			{#if savedMatch || automaticMatch}
+																				<div class="d-md-none small text-muted text-break mt-1">{savedMatch || automaticMatch.name}</div>
+																			{/if}
 																		</td>
 																	</tr>
 																{/each}
@@ -8138,34 +8174,48 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											{#if tableColumnHeaders.length}
 												<div class="mt-3">
 													<div class="d-flex align-items-center justify-content-between mb-2">
-														<span class="fw-bold">Map paragraph position to table columns</span>
-														<span class="text-muted small">Map which paragraph (1st, 2nd, etc.) highlights which column</span>
+														<span class="fw-bold">Map colour bands to rubric columns</span>
+														<span class="text-muted small">Choose automatic matching or select each band’s column</span>
 													</div>
 													<div class="table-responsive">
 														<table class="table table-sm table-bordered mb-2">
 															<thead class="table-light">
 																<tr>
-																	<th style="width: 150px;">Paragraph Position</th>
-																	<th>Highlights Column</th>
+																	<th style="width: 150px;">Colour Band</th>
+																	<th>Rubric Column</th>
 																</tr>
 															</thead>
 															<tbody>
 																{#each Array(5).fill(0).map((_, i) => i + 1) as position (position)}
 																	<tr>
 																		<td class="text-center align-middle">
-																			<span class="badge bg-info">{position}{position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th'} paragraph</span>
+																			<span class="fw-semibold">{['Green', 'Light green', 'Yellow', 'Orange', 'Red'][position - 1]}</span>
 																		</td>
 																		<td>
 																			<select
 																				class="form-select form-select-sm"
-																				bind:value={tableColumnMarkMap[position]}
-																				onchange={() => saveAssessmentData({ force: true, skipSelections: true })}
+																				aria-label={`Column for ${CATEGORY_COLOR_BAND_ORDER[position - 1]} band`}
+																				value={tableColumnMarkMap[position] === undefined ? 'auto' : tableColumnMarkMap[position] ?? ''}
+																				onchange={(e) => {
+																					const next = { ...tableColumnMarkMap }
+																					if (e.currentTarget.value === 'auto') delete next[position]
+																					else next[position] = e.currentTarget.value === '' ? '' : Number(e.currentTarget.value)
+																					tableColumnMarkMap = next
+																					if (currentAssessment) currentAssessment.tableColumnMarkMap = next
+																					saveAssessmentData({ force: true, skipSelections: true })
+																				}}
 																			>
-																				<option value="">Select column...</option>
+																				<option value="auto">{automaticBandColumns[position] !== undefined ? `Auto: ${tableColumnHeaders.find(header => header.index === automaticBandColumns[position])?.text}` : 'Auto: no matching column'}</option>
+																				<option value="">Do not use this band</option>
 																				{#each tableColumnHeaders as header (header.index)}
 																					<option value={header.index}>{header.text}</option>
 																				{/each}
 																			</select>
+																				{#if tableColumnMarkMap[position] === undefined}
+																					<div class="d-md-none small text-muted text-break mt-1">{automaticBandColumns[position] !== undefined ? tableColumnHeaders.find(header => header.index === automaticBandColumns[position])?.text : 'No matching column; this band will be skipped.'}</div>
+																				{:else if tableColumnMarkMap[position] !== '' && tableColumnMarkMap[position] !== null}
+																					<div class="d-md-none small text-muted text-break mt-1">{tableColumnHeaders.find(header => header.index === Number(tableColumnMarkMap[position]))?.text}</div>
+																				{/if}
 																		</td>
 																	</tr>
 																{/each}
@@ -8467,8 +8517,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											>
 											<small class="text-muted">
 												Category: {selectedCategory}
-												{#if currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks}
-													(Max: {currentAssessment.categories?.find(c => c.name === selectedCategory)?.allocatedMarks} marks)
+												{#if getCategoryAllocatedMarks(selectedCategory) > 0}
+													(Max: {getCategoryAllocatedMarks(selectedCategory)} marks)
 												{/if}
 											</small>
 										</div>
@@ -8645,8 +8695,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<div class="ui-tag d-flex align-items-center bg-light border rounded px-2 py-1 small">
 															<span class="text-muted me-1">
 																{category.name}
-																{#if category.allocatedMarks}
-																	<span class="text-primary">({category.allocatedMarks})</span>
+																{#if getCategoryAllocatedMarks(category.name) > 0}
+																	<span class="text-primary">({getCategoryAllocatedMarks(category.name)})</span>
 																{/if}
 																{#if category.markingMode}
 																	<span class="badge bg-info text-white" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">
@@ -9028,7 +9078,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<i class="bi bi-magic me-1"></i>Fill All Category Color Bands
 													</button>
 													<div class="small text-muted mt-2 mb-0">
-														Adds one paragraph per color band for every category — pulling text from the rubric table where it's mapped, or a placeholder to edit by hand. Skips bands that already have a paragraph.
+														Fills the colour bands present in your rubric, including four-band tables. Detects band columns automatically, honours your mappings and keeps written feedback. Mark allocations can be set afterward.
 													</div>
 												{/if}
 											</div>
@@ -9076,6 +9126,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 									{:else}
 										<div class="p-3">
 										{#each getGroupedParagraphs() as group}
+											{@const groupCategory = currentAssessment.categories?.find(category => category.name === group.category)}
+											{@const groupMarkingMode = getEffectiveMarkingMode(group.category)}
+											{@const groupMaximum = getCategoryAllocatedMarks(group.category)}
+											{@const showPercentageHint = groupMarkingMode !== 'fixed' && !(groupMaximum > 0) && Object.values(group.knowledgeAreas).flat().some(paragraph => getColorPercentageBounds(paragraph.color))}
 											<div class="card mb-3 border-start border-4 {missingParagraphCategories.has(group.category) ? 'border-danger' : 'border-info'}">
 													<div class="card-header bg-info text-white py-2">
 														<div class="d-flex flex-wrap align-items-center gap-2 w-100">
@@ -9088,6 +9142,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																		{/if}
 																	{/if}
 																</h6>
+																{#if showPercentageHint}
+																	<div class="small text-muted mt-1">
+																		Percentage bands from Settings.
+																		{#if groupCategory}
+																			<button type="button" class="btn btn-link btn-sm px-1 py-0"
+																				onclick={() => openCategoryEditModal(groupCategory)}
+																				aria-label={`Set category marks for ${group.category}`}
+																				title="Set category marks to show numeric mark ranges">Set category marks</button>
+																		{/if}
+																	</div>
+																{/if}
 															</div>
 															{#if group.category}
 																<div class="d-flex align-items-center gap-2">
@@ -9105,9 +9170,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											min="0"
 											step="0.5"
 										>
-										{#if currentAssessment.categories.find(cat => cat.name === group.category)?.allocatedMarks}
-											<span class="text-muted small fw-bold">
-												/ {currentAssessment.categories.find(cat => cat.name === group.category).allocatedMarks}
+										{#if groupMaximum > 0}
+											<span class="text-muted small fw-bold" title={rubricCategoryMarks.has(group.category) ? 'Maximum from the rubric’s last Marks column' : 'Configured category maximum'}>
+												/ {groupMaximum}
 											</span>
 										{/if}
 										{#if currentStudentId}
@@ -9207,6 +9272,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											{/if}
 															{#each paragraphs as {text, color, id, createdAt, originalIndex, fullText, source, markInfo}, displayIndex (id)}
 												{@const categorySequenceIndex = findParagraphSequenceIndex(categoryParagraphSequence, id, originalIndex)}
+												{@const displayRange = color && !markInfo && groupMarkingMode !== 'fixed' ? getMarksRange(color, groupMaximum) : null}
 										<div 
 											class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
 											class:selected-paragraph={selectedParagraphs.has(id)}
@@ -9254,19 +9320,19 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																			</div>
 																		{/if}
 																		<!-- Marks display (percentage range or fixed mark) -->
-																		{#if color && markInfo}
-																			{#if markInfo.type === 'fixed'}
+																		{#if color && (markInfo || displayRange)}
+																			{#if markInfo?.type === 'fixed'}
 																				<!-- Fixed mark mode - show specific mark -->
 																				<div class="me-3 d-flex align-items-center">
-																					<span class="badge bg-primary text-white small" title="Fixed mark for {color} color">
+																					<span class="badge bg-primary text-white small mark-range-badge" title="Fixed mark for {color} color">
 																						{Number.isFinite(Number(markInfo.value)) ? `${markInfo.value} marks` : markInfo.value}
 																					</span>
 																				</div>
-																			{:else if markInfo.type === 'percentage'}
+																			{:else if markInfo?.type === 'percentage' || displayRange}
 																				<!-- Percentage mode - show marks range -->
 																				<div class="me-3 d-flex align-items-center">
-																					<span class="badge bg-info text-white small" title="Marks range for {color} color (percentage mode)">
-																						{markInfo.value}
+																					<span class="badge bg-info text-white small mark-range-badge" title={`${groupMaximum > 0 ? 'Marks range' : 'Percentage band'} for ${color} from Settings`}>
+																						{markInfo?.value || displayRange}
 																					</span>
 																				</div>
 																			{/if}
@@ -10264,6 +10330,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					<div class="modal-body">
 						<div class="mb-3">
 							<div class="form-label fw-bold">Category Marking Mode:</div>
+							{#if rubricCategoryMarks.has(editingCategory.name)}
+								<p class="small text-muted">This category uses {rubricCategoryMarks.get(editingCategory.name)} marks from the rubric. Configured category marks apply only when no valid rubric marks are available.</p>
+							{/if}
 							<select class="form-select" bind:value={editingCategory.markingMode}>
 								<option value="none">None - No color marking</option>
 								<option value="percentage">Percentage - Use percentage ranges</option>

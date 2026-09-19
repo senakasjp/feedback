@@ -239,3 +239,10 @@ html[data-bs-theme] body {
   color: var(--ui-danger-ink) !important;
 }
 #app :is(.btn-success, .btn-outline-success) { border-color: var(--ui-success-ink) !important; }
+
+#app .paragraph-item .mark-range-badge {
+  background-color: var(--ui-soft) !important;
+  color: var(--ui-ink) !important;
+  border: 1px solid var(--ui-border);
+  font-variant-numeric: tabular-nums;
+}
