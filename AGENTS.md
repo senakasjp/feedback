@@ -68,3 +68,9 @@ The index is built on first run and cached automatically. If `semble` is not on 
 4. Optionally use `mcp__semble__find_related` with a promising result's `file_path` and `line` to discover related implementations.
 5. Use Grep/Glob/Read only when you need exhaustive literal matches or quick confirmation of an exact string.
 <!-- SEMBLE_END -->
+
+## Browser tests and AeroSpace
+
+- Run automated browser checks headlessly. Do not add `--headed`, `--ui`, or `PWDEBUG=1` unless the user explicitly requests visible browser debugging. Visible Chrome test windows trigger AeroSpace workspace rules and desktop flickering.
+- The Playwright config uses installed Google Chrome (`channel: 'chrome'`); ensure Chrome is installed on test machines.
+- Headless Playwright still supports screenshots and visual checks. Use one worker for local checks and avoid simultaneous browser test runs.
