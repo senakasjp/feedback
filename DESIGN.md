@@ -10,9 +10,11 @@ Tokens live in `src/styles/ui-polish.css`. Light/dark pairs: `--ui-canvas` #f4f6
 System sans-serif, no new webfont. `--ui-body` 14px; `--ui-caption` 12px; `--ui-card-title` 18px; `--ui-title` 28px. Body line height 1.55; titles 1.25 and weight 600. Metadata 12px. Preserve user-authored report formatting. Titles wrap, never ellipsize important subject names.
 
 ## 4. Layout
-4px spacing scale: `--ui-space-1/2/3/4/5/6/8` = 4/8/12/16/20/24/32px. Max shell 1800px; sidebar 248px from 992px. Below 992px, sidebar is full width above content; existing mobile disclosure remains. Toolbar wraps and stays accessible at all widths. Cards use an intrinsic grid with minimum min(240px, 100%) and content-driven height. Narrow page headings and action groups wrap. No viewport-height expansion on the sidebar or generic row. Document scrolling owns the shell; existing editor/sidebar internal scrolling retained only where needed.
+4px spacing scale: `--ui-space-1/2/3/4/5/6/8` = 4/8/12/16/20/24/32px. Max shell 1800px; sidebar 344px from 992px. Below 992px, sidebar is full width above content; existing mobile disclosure remains. Toolbar wraps and stays accessible at all widths. Cards use an intrinsic grid with minimum min(240px, 100%) and content-driven height. Narrow page headings and action groups wrap. No viewport-height expansion on the sidebar or generic row. Document scrolling owns the shell; existing editor/sidebar internal scrolling retained only where needed.
 
 ## 5. Reusable components
+Desktop Navigation stays sticky with a 16px (`--ui-space-4`) viewport inset. Its height is capped to the dynamic viewport minus the top and bottom insets; its body scrolls when necessary while its header remains visible. Body horizontal clipping must not create a scroll container that traps sticky positioning. Below 992px, Navigation retains its in-flow collapsible layout.
+
 Existing Bootstrap button, form, card and modal primitives remain. New CSS codifies their shell presentation; no replacement data model/components. Subject and assessment cards share `workspace-card-grid` layout, wrapping titles, left-aligned content, and bottom-aligned actions. Main page headings share `workspace-page-heading`. Focus rings stay visible even on destructive controls. Mobile navigation exposes expanded state. All existing callbacks and labels remain. AI, saving, importing, exporting, duplication, marking and reports retain their existing behavior.
 
 ## 6. Interaction

@@ -38,6 +38,7 @@
 }
 html body {
   height: auto !important;
+  overflow-x: clip !important;
   min-height: 100dvh;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: var(--ui-body);
@@ -95,7 +96,10 @@ html body {
   color: var(--ui-ink) !important;
 }
 #app .app-sidebar-column .card-header .btn { color: var(--ui-accent) !important; border-color: var(--ui-border) !important; }
-#app .app-sidebar-column > .card > .card-body { padding: var(--ui-space-5) !important; }
+#app .app-sidebar-column > .card > .card-body {
+  min-height: 0;
+  padding: var(--ui-space-5) !important;
+}
 #app .app-sidebar-column .btn { white-space: normal; overflow-wrap: anywhere; text-align: left; }
 #app .app-sidebar-column .card { padding: 0; }
 #app .app-main-column > nav { margin-bottom: var(--ui-space-5); }
@@ -147,8 +151,13 @@ html body {
 #app .ai-settings-menu .btn { color: var(--ui-accent) !important; border-color: var(--ui-border) !important; }
 #app .ai-settings-menu .btn:hover { background: var(--ui-soft) !important; }
 @media (min-width: 992px) {
-  #app .app-sidebar-column { width: 248px; }
-  #app .app-main-column { width: calc(100% - 248px); }
+  #app .app-sidebar-column { width: 344px; }
+  #app .app-sidebar-column > .card {
+    top: var(--ui-space-4) !important;
+    max-height: calc(100dvh - 2 * var(--ui-space-4)) !important;
+  }
+  #app .app-sidebar-column > .card > .card-header { flex-shrink: 0; }
+  #app .app-main-column { width: calc(100% - 344px); }
 }
 @media (max-width: 991px) {
   #app .app-sidebar-column, #app .app-main-column { width: 100%; }
