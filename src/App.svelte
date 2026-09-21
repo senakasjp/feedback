@@ -4286,6 +4286,24 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return getAssessmentForMarking({ ...currentAssessment, rubricHtml: assessmentHtml, tableRowCategoryMap })
 	}
 
+	function getAllocatedCategoryTotal() {
+		const total = (getCurrentAssessmentForMarking().categories || []).reduce((sum, category) => sum + (parseMark(category.allocatedMarks) ?? 0), 0)
+		return Number(total.toPrecision(15))
+	}
+
+	async function fillCategoryMarksFromTable() {
+		if (!currentAssessment || !rubricCategoryMarks.size) return
+		if (hasPendingParagraphEdit()) {
+			highlightEditingParagraphSaveWarning()
+			return
+		}
+		const count = rubricCategoryMarks.size
+		currentAssessment = getCurrentAssessmentForMarking()
+		await saveAssessmentData({ force: true, skipSelections: true })
+		const unmatched = currentAssessment.categories.filter(category => !rubricCategoryMarks.has(category.name))
+		showSuccessNotification(`Filled ${count} category maximum${count === 1 ? '' : 's'} from the table.${unmatched.length ? ' No valid table marks for: ' + unmatched.map(category => category.name).join(', ') + '. Existing allocations retained.' : ''} Student marks and Total Marks are unchanged.`)
+	}
+
 	function getCurrentMarkSummary() {
 		return getMarkSummary(getCurrentAssessmentForMarking(), categoryMarks)
 	}
@@ -9066,7 +9084,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												>
 											{#if currentAssessment}
 												<div class="text-muted small ms-1">
-													({currentAssessment.totalMarks ?? 0} allocated)
+													({getAllocatedCategoryTotal()} allocated)
 												</div>
 											{/if}
 										</div>
@@ -9074,6 +9092,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								</div>
 								{#if currentAssessment}
 									<div class="px-3 pt-3">
+										<div class="mb-3">
+											<button type="button" class="btn btn-primary btn-sm" onclick={fillCategoryMarksFromTable} disabled={!rubricCategoryMarks.size || hasPendingParagraphEdit()}>Fill category marks from table</button>
+											<div class="form-text">Copies category maxima from the rubric’s Marks column. Student marks and Total Marks stay unchanged.</div>
+										</div>
 										{#if getCurrentMarkSummary().allocationMismatch || getCurrentMarkSummary().invalidCategories.length}
 											<div class="alert alert-warning" role="alert">{getStudentMarkInfo().display}</div>
 										{/if}

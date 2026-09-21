@@ -2,7 +2,7 @@
 
 Category marks must be finite, non-negative and no greater than their effective maximum. Blank means unmarked; zero is a valid mark. AI `Marks: X/Y` suggestions must use the category's exact maximum as Y. Invalid suggestions are rejected without applying a mark.
 
-Mark entry and the Students with Marks summary share `getAssessmentForMarking` in `src/utils/rubricMarks.js`. A valid maximum in the rubric’s last Marks column takes precedence over the configured category allocation, using the saved row-to-category mapping. Categories without a valid rubric maximum retain their configured allocation. Resolution never rewrites stored allocations or student marks.
+Mark entry and the Students with Marks summary share `getAssessmentForMarking` in `src/utils/rubricMarks.js`. A valid maximum in the rubric’s last Marks column takes precedence over the configured category allocation, using the saved row-to-category mapping. Categories without a valid rubric maximum retain their configured allocation. Automatic resolution never rewrites stored allocations or student marks. The explicit “Fill category marks from table” action saves recognized rubric maxima into category settings, retaining unmatched allocations. It does not change awarded student marks or Total Marks. The Paragraphs header shows the sum of effective category allocations, so a genuine mismatch remains visible.
 
 The assessment maximum is the positive configured total, or the sum of category maxima when no positive total is configured. A configured total that disagrees with the category allocations prevents a final percentage. Existing invalid marks are preserved for correction and flagged, rather than silently clamped. Duplicate category names also prevent completion.
 
