@@ -85,3 +85,11 @@ Remember the outer page scroll position separately for each subject, assessment,
 `src/lib/UploadedDocuments.svelte` owns selection and original-file attachment; `src/lib/DocxDocument.svelte` owns rendering states and zoom; `src/utils/docxPreview.js` reads and renders originals. `src/App.svelte` connects uploads, persistence and scroll restoration; `src/lib/Sidebar.svelte` supplies Navigation buttons.
 
 Headless browser checks cover original DOCX page breaks, margins, colors, bold text, tables, saved previews, legacy attachment, invalid files, student isolation, zoom and the marks-scroll round trip. Visual checks cover 375px, 768px and 1280px in light and dark themes with synthetic data. Native packaging and process launch were verified separately; browser checks do not verify native storage or all complex Word layouts.
+
+## Weighted marks summary
+
+The Students with Marks table must use the same effective rubric category maxima as mark entry. Valid maxima from the rubric’s last Marks column take precedence over configured allocations, with saved row mappings respected and configured values retained as fallback. Resolve a copy of the assessment; do not alter saved category allocations or student marks.
+
+Parse numeric assessment weights consistently, including numeric strings. Display weighted contributions to one decimal place and use the same calculated results for table exports. Missing required marks, invalid marks, and genuine allocation mismatches still prevent completion and a final grade; never fabricate a result to remove N/A.
+
+Verification: 20 headless browser checks and 12 unit checks passed, including rubric allocation precedence, numeric/string weights, CSV export, and incomplete/invalid mark protection. Synthetic results showed 80 at 40% = 32.0 and 90 at 60% = 54.0, for 86.0 overall (A). Native packaging, installation and process launch were also verified; production student records were not inspected or modified.

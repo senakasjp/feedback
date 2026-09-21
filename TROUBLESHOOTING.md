@@ -3,6 +3,12 @@
 > **New:** PDF rubric export now respects manual row → category mapping for marks/highlighting (no more `undefined` marks in the PDF).
 
 
+## Raw Marks Appear but Weighted Contribution Shows N/A
+
+Older builds used configured category allocations in the summary while mark entry used maxima from the rubric’s last Marks column. This could display a raw total such as 90 but no 60% contribution. The corrected build shares rubric maximum resolution across both views and accepts numeric-string weights.
+
+With an assessment maximum of 100, 90 marks at a 60% weight should contribute 54.0. If N/A remains after updating, check missing required category marks, invalid or duplicate categories, and whether the effective category maxima add up to the configured assessment total. Keep these validation checks enabled; changing the weight alone cannot repair incomplete marking.
+
 ## Desktop App Doesn't Reflect Recent Code Changes
 
 **Symptoms**: A feature works when tested via `npm run dev` in a browser, but the installed `/Applications/Feedback.app` doesn't show it at all — even after toggling every relevant setting in the UI.
