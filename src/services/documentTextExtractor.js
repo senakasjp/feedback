@@ -171,7 +171,7 @@ async function extractImagesFromDocx(file, mammoth) {
       const mimeType = image.contentType || 'image/png'
       const { dataUrl, mimeType: finalMimeType } = await downscaleImageIfNeeded(`data:${mimeType};base64,${base64}`)
       images.push({ mimeType: finalMimeType, dataUrl })
-      return {}
+      return { src: dataUrl }
     })
   })
 
@@ -218,7 +218,7 @@ export async function extractTextFromFile(file) {
   throw new Error(`Unsupported file type for ${file?.name || 'upload'}. Use PDF, DOCX, TXT, MD, HTML, CSV, or JSON.`)
 }
 
-export function createUploadedDocumentRecord({ file, extractedText, images = [], documentType, scope = 'assessment' }) {
+export function createUploadedDocumentRecord({ file, extractedText, images = [], docxBase64 = '', documentType, scope = 'assessment' }) {
   return {
     id: `${scope}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: file.name,
@@ -226,6 +226,7 @@ export function createUploadedDocumentRecord({ file, extractedText, images = [],
     size: file.size || 0,
     documentType,
     extractedText: normaliseWhitespace(extractedText),
+    docxBase64,
     images: Array.isArray(images) ? images : [],
     uploadedAt: new Date().toISOString()
   }

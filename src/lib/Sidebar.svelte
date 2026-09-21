@@ -7,6 +7,8 @@
 	/** @type {any} */
 	export let currentAssessment = null;
 	export let currentView = '';
+	export let activeFeedbackTab = 'enter-data';
+	export let onSwitchFeedbackTab = (tab) => {};
 	export let currentStudentId = '';
 	export let studentName = '';
 	export let studentPhoto = '';
@@ -172,6 +174,17 @@
 							<i class="bi bi-arrow-left me-2"></i>Back to Subjects
 						</button>
 						
+						{#if currentView === 'feedback'}
+							<nav class="d-grid gap-2 mt-2 mb-3" aria-label="Switch between marks and document">
+								<button type="button" class="btn btn-sm w-100 {activeFeedbackTab === 'enter-data' ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={activeFeedbackTab === 'enter-data'} onclick={() => onSwitchFeedbackTab('enter-data')}>
+									<i class="bi bi-pencil-square me-2" aria-hidden="true"></i>Marks
+								</button>
+								<button type="button" class="btn btn-sm w-100 {activeFeedbackTab === 'documents' ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={activeFeedbackTab === 'documents'} onclick={() => onSwitchFeedbackTab('documents')}>
+									<i class="bi bi-file-earmark-text me-2" aria-hidden="true"></i>DOCX Viewer
+								</button>
+							</nav>
+						{/if}
+
 						<!-- Current Session Info - Only show in feedback page (3rd level) -->
 						{#if currentView === 'feedback' && currentAssessment}
 							<div class="mt-1 mb-1">

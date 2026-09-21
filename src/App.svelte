@@ -1,6 +1,6 @@
 <script>
 	import { invoke } from '@tauri-apps/api/core'
-	import { onMount, untrack } from 'svelte'
+	import { onMount, untrack, tick } from 'svelte'
 	import jsPDF from 'jspdf'
 	import html2canvas from 'html2canvas'
 	import Sidebar from './lib/Sidebar.svelte'
@@ -14,6 +14,8 @@
 	import ImportParagraphsModal from './lib/ImportParagraphsModal.svelte'
 	import AssignmentExportModal from './lib/AssignmentExportModal.svelte'
 	import AboutModal from './lib/AboutModal.svelte'
+	import UploadedDocuments from './lib/UploadedDocuments.svelte'
+	import { readDocxSource } from './utils/docxPreview.js'
 	
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags } from './utils/helpers.js'
@@ -174,6 +176,20 @@
 	let showAppLogModal = $state(false)
 	let appLogEntries = $state([])
 	let activeFeedbackTab = $state('enter-data')
+	const feedbackScrollPositions = new Map()
+	let feedbackSwitchSequence = 0
+	async function switchFeedbackTab(tab) {
+		if (tab === activeFeedbackTab) return
+		const context = JSON.stringify([currentSubject?.id, currentAssessmentId, currentStudentId])
+		const positions = feedbackScrollPositions.get(context) || {}
+		positions[activeFeedbackTab] = window.scrollY
+		feedbackScrollPositions.set(context, positions)
+		activeFeedbackTab = tab
+		const sequence = ++feedbackSwitchSequence
+		await tick()
+		if (sequence !== feedbackSwitchSequence || context !== JSON.stringify([currentSubject?.id, currentAssessmentId, currentStudentId])) return
+		window.scrollTo({ top: positions[tab] ?? 0, behavior: 'instant' })
+	}
 	let lastStudentEffectAssessmentId = $state(null)
 	let lastStudentEffectStudentId = $state(null)
 	
@@ -2125,6 +2141,22 @@
 		studentSubmissionDocuments = Array.isArray(nextDocuments) ? nextDocuments : []
 	}
 
+	async function attachOriginalDocx(documentId, scope, docxBase64) {
+		const documents = scope === 'student' ? getSafeStudentSubmissionDocuments() : assessmentReferenceDocuments
+		if (!documents.some(document => document.id === documentId)) throw new Error('The selected document is no longer available.')
+		const updated = documents.map(document => document.id === documentId ? { ...document, docxBase64 } : document)
+		if (scope === 'student') {
+			updateStudentSubmissionDocuments(updated)
+			if (!await persistCurrentStudentEvaluationData()) {
+				updateStudentSubmissionDocuments(documents)
+				throw new Error('Could not save the original document. Please try again.')
+			}
+		} else {
+			updateAssessmentReferenceDocuments(updated)
+			await saveAssessmentData({ force: Boolean(currentStudentId), skipSelections: true })
+		}
+	}
+
 	function getSafeStudentSubmissionDocuments() {
 		return Array.isArray(studentSubmissionDocuments) ? studentSubmissionDocuments : []
 	}
@@ -2205,9 +2237,11 @@
 			let extractionFailures = 0
 			for (const file of files) {
 				let extractedText = ''
+				let docxBase64 = ''
 				let images = []
 				let extractionError = ''
 				try {
+					if (/\.docx$/i.test(file.name)) docxBase64 = await readDocxSource(file);
 					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
@@ -2218,6 +2252,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					docxBase64,
 					images,
 					documentType: selectedAssessmentDocumentType,
 					scope: 'assessment'
@@ -2285,9 +2320,11 @@
 			let extractionFailures = 0
 			for (const file of nonPdfFiles) {
 				let extractedText = ''
+				let docxBase64 = ''
 				let images = []
 				let extractionError = ''
 				try {
+					if (/\.docx$/i.test(file.name)) docxBase64 = await readDocxSource(file);
 					({ text: extractedText, images } = await extractTextFromFile(file))
 				} catch (error) {
 					extractionFailures += 1
@@ -2298,6 +2335,7 @@
 				const record = createUploadedDocumentRecord({
 					file,
 					extractedText,
+					docxBase64,
 					images,
 					documentType: selectedStudentDocumentType,
 					scope: 'student'
@@ -7647,6 +7685,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			<!-- Sidebar -->
 			<div class="col-lg-3 col-md-4 col-12 mb-4 app-sidebar-column">
 				<Sidebar
+					{activeFeedbackTab}
+					onSwitchFeedbackTab={switchFeedbackTab}
 					{subjects}
 					{currentSubject}
 					{currentAssessment}
@@ -7894,15 +7934,24 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					<div class="row mb-3">
 						<div class="col-12">
 							<div class="feedback-tab-bar d-flex flex-wrap gap-2">
-								<button type="button" class="btn btn-sm {activeFeedbackTab === 'enter-data' ? 'btn-primary' : 'btn-outline-secondary'}" onclick={() => activeFeedbackTab = 'enter-data'}>
+								<button type="button" class="btn btn-sm {activeFeedbackTab === 'enter-data' ? 'btn-primary' : 'btn-outline-secondary'}" onclick={() => switchFeedbackTab('enter-data')}>
 									<i class="bi bi-pencil-square me-1"></i>Enter Data
 								</button>
-								<button type="button" class="btn btn-sm {activeFeedbackTab === 'settings' ? 'btn-primary' : 'btn-outline-secondary'}" onclick={() => activeFeedbackTab = 'settings'}>
+								<button type="button" class="btn btn-sm {activeFeedbackTab === 'settings' ? 'btn-primary' : 'btn-outline-secondary'}" onclick={() => switchFeedbackTab('settings')}>
 									<i class="bi bi-gear me-1"></i>Settings
+								</button>
+								<button type="button" class="btn btn-sm {activeFeedbackTab === 'documents' ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={activeFeedbackTab === 'documents'} onclick={() => switchFeedbackTab('documents')}>
+									<i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>DOCX Viewer
 								</button>
 							</div>
 						</div>
 					</div>
+
+					{#if activeFeedbackTab === 'documents'}
+						{#key `${currentAssessmentId}:${currentStudentId}`}
+							<UploadedDocuments assessmentDocuments={assessmentReferenceDocuments} studentDocuments={getSafeStudentSubmissionDocuments()} hasStudent={Boolean(currentStudentId)} {studentName} {getDocumentTypeLabel} onAttachOriginal={attachOriginalDocx} />
+						{/key}
+					{/if}
 
 					<div class:disabled-tab-content={activeFeedbackTab !== 'settings'}>
 

@@ -15,6 +15,26 @@ System sans-serif, no new webfont. `--ui-body` 14px; `--ui-caption` 12px; `--ui-
 ## 5. Reusable components
 Desktop Navigation stays sticky with a 16px (`--ui-space-4`) viewport inset. Its height is capped to the dynamic viewport minus the top and bottom insets; its body scrolls when necessary while its header remains visible. Body horizontal clipping must not create a scroll container that traps sticky positioning. Below 992px, Navigation retains its in-flow collapsible layout.
 
+### Navigation panel specification
+
+The final desktop column width is **344px**, increased from 248px in 32px steps (280px, 312px, then 344px). This is the whole Bootstrap column width, including its gutter padding, rather than the inner card width. Keep the main column paired with it using `width: calc(100% - 344px)` and retain the 24px (`--ui-space-6`) row gutter.
+
+| Layout condition | Required behavior |
+| --- | --- |
+| Viewport at least 992px wide | Navigation follows document scrolling using `position: sticky`, with `top: var(--ui-space-4)` and the existing stacking level of 1020. |
+| Short desktop window or long navigation content | Cap the card at `calc(100dvh - 2 * var(--ui-space-4))`. Keep its height content-driven; do not stretch it to fill the window. |
+| Navigation content exceeds the height cap | Scroll the card body with `overflow-y: auto` and `min-height: 0`. Keep the Navigation header visible with `flex-shrink: 0`, and allow access to every action at the bottom. |
+| Viewport below 992px wide | Both columns use 100% width. Navigation sits above content with `position: relative`, no height cap, and its existing Show/Hide Navigation disclosure. |
+| Viewport at most 575px wide | Retain 16px workspace padding and navigation buttons at least 40px high. |
+
+The document remains the page scroll owner. The `html body` override uses `height: auto` and `overflow-x: clip` so horizontal clipping does not create an intermediate scrolling ancestor that prevents the card from sticking. Retain `min-height: 100dvh` on the body.
+
+Panel appearance continues to use the shared light/dark tokens: surface background, 1px border, 12px radius, subtle shadow, and soft header background. Header padding is 16px vertically and 20px horizontally; body padding is 20px. Action labels are left-aligned and wrap naturally. Navigation, session details, and save/load/export/print actions keep their existing order and behavior. No new animation accompanies scrolling.
+
+Implementation: `src/lib/Sidebar.svelte` provides the card and scrollable body; `src/styles/ui-polish.css` owns the final width, responsive rules, theme styling, and sticky overrides.
+
+Verification for this change: headless Chrome checks passed at 1280px, 768px, and 375px widths in both themes, including a 480px-high window. Desktop scrolling retained 16px top and bottom clearance, internal scrolling exposed the bottom actions, and no horizontal page overflow was observed. Native packaging and launch were verified separately; browser layout checks do not verify native storage.
+
 Existing Bootstrap button, form, card and modal primitives remain. New CSS codifies their shell presentation; no replacement data model/components. Subject and assessment cards share `workspace-card-grid` layout, wrapping titles, left-aligned content, and bottom-aligned actions. Main page headings share `workspace-page-heading`. Focus rings stay visible even on destructive controls. Mobile navigation exposes expanded state. All existing callbacks and labels remain. AI, saving, importing, exporting, duplication, marking and reports retain their existing behavior.
 
 ## 6. Interaction
@@ -34,3 +54,26 @@ The same surface, border, typography, field, and action tokens apply to subjects
 Semantic action foregrounds retain their red/green meaning with readable theme variants: `--ui-success-ink` #146c43/#75b798 and `--ui-danger-ink` #b02a37/#ea868f. These apply to action labels and assessment summaries, not rubric band fills or user-authored feedback.
 
 Mandatory marking requirement: AI mark allocation must include a substantive rubric-based rationale for every mark, including zero and full marks, with specific evidence and reasons for credit and withheld marks. Show the complete saved rationale adjacent to the mark controls in a wrapping, theme-aware panel; never require opening a modal to read it. Reject AI allocations with an empty judgement or gap explanation before applying marks.
+
+## DOCX viewer and mark-entry navigation
+
+The feedback screen has Enter Data, Settings, and DOCX Viewer tabs. Navigation also provides full-width Marks and DOCX Viewer buttons directly below Back to Subjects. Both routes use the same tab-switch handler; the sidebar buttons expose the active view with `aria-pressed` and existing primary/outline styles.
+
+### Original Word documents
+
+- Preserve original DOCX bytes as `docxBase64` alongside the extracted text and images used for marking, for both assessment-reference and student uploads.
+- Render originals with locally bundled `docx-preview`, preserving supported page sizes, margins, fonts, tables, images, headers, footers, and page breaks. Do not substitute extracted text or Mammoth HTML. Complex Word layouts and pagination may differ from Microsoft Word.
+- Group file choices into assessment references and selected-student uploads. Changing assessment or student resets the viewer and excludes the previous student's files.
+- Older uploads offer Attach original DOCX directly in the viewer. Require the expected filename, validate rendering, and persist the source without changing awarded marks. Show loading and error states.
+- Render pages on a gray canvas inside an empty-sandbox iframe with restrictive CSP. Disable embedded HTML chunks, active content, and external links. Document colors remain intact in either app theme.
+- Provide Fit width and 75%, 100%, 125%, and 150% zoom. The viewing area is 75vh with a 320px minimum height and internal scrolling. Controls use shared spacing, border, radius, and surface tokens.
+
+### Returning to marks
+
+Remember the outer page scroll position separately for each subject, assessment, student, and feedback tab for the current app session. Restore it after the destination panel renders. Returning with Marks resumes the previous mark-entry location without resetting entered marks. This does not promise restoration of the document iframe's internal page or zoom after leaving the viewer. On narrow screens the buttons remain inside the existing Show Navigation disclosure.
+
+### Implementation and verification
+
+`src/lib/UploadedDocuments.svelte` owns selection and original-file attachment; `src/lib/DocxDocument.svelte` owns rendering states and zoom; `src/utils/docxPreview.js` reads and renders originals. `src/App.svelte` connects uploads, persistence and scroll restoration; `src/lib/Sidebar.svelte` supplies Navigation buttons.
+
+Headless browser checks cover original DOCX page breaks, margins, colors, bold text, tables, saved previews, legacy attachment, invalid files, student isolation, zoom and the marks-scroll round trip. Visual checks cover 375px, 768px and 1280px in light and dark themes with synthetic data. Native packaging and process launch were verified separately; browser checks do not verify native storage or all complex Word layouts.
