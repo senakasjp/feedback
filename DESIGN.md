@@ -53,7 +53,15 @@ The same surface, border, typography, field, and action tokens apply to subjects
 
 Semantic action foregrounds retain their red/green meaning with readable theme variants: `--ui-success-ink` #146c43/#75b798 and `--ui-danger-ink` #b02a37/#ea868f. These apply to action labels and assessment summaries, not rubric band fills or user-authored feedback.
 
-Mandatory marking requirement: AI mark allocation must include a substantive rubric-based rationale for every mark, including zero and full marks, with specific evidence and reasons for credit and withheld marks. Show the complete saved rationale adjacent to the mark controls in a wrapping, theme-aware panel; never require opening a modal to read it. Reject AI allocations with an empty judgement or gap explanation before applying marks.
+Mandatory marking requirement: AI mark allocation must include a substantive rubric-based rationale for every mark, including zero and full marks, with specific evidence and reasons for credit and withheld marks. Keep the saved rationale hidden until the assessor clicks the question-mark (Why this mark?) button beside the mark controls. Show the full rationale in the existing modal; closing it returns to the marking view without changing marks. Reject AI allocations with an empty judgement or gap explanation before applying marks.
+
+## Bulk RAG action and image attachments
+
+“Improve all with RAG” uses the same solid primary-blue Bootstrap button style (`btn btn-primary btn-sm`) as “Assign marks to all headings.” Retain its progress spinner, disabled state, and existing action. Delete remains a separate danger action. Use the shared theme styles rather than a custom colour.
+
+Before submitting image attachments to either AI provider, detect PNG, JPEG, GIF, and WebP from their bytes and normalize the MIME label and data URL. Convert browser-decodable BMP images to PNG. If an image is unsupported or unreadable, stop before sending the request and explain that it must be replaced with PNG or JPEG and the document uploaded again. Never silently discard image evidence; preserve the full submission text.
+
+Verification: headless browser checks covered both providers' request formats, unsupported-image rejection before a request, BMP pixel preservation, and the button in light, dark, and narrow layouts. AI responses were mocked; these checks do not establish which attachment caused a historical provider error. Native build, installation, and launch were verified separately.
 
 ## DOCX viewer and mark-entry navigation
 
