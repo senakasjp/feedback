@@ -1,5 +1,9 @@
 # Changelog
 
+> **Improved (22 Sep 2026):** Assessment cards retain saved insertion order, placing new cards after existing ones. Category mark setup now has a matching panel and is hidden while a student is selected. Student actions are numbered: 1. Assign marks, 2. Improve all with RAG.
+
+> **Improved (22 Sep 2026):** RAG feedback and prompt preview include the allocated mark, category maximum and saved rationale. Feedback explains the existing grading decision using the full submission and rubric, with instructions to preserve the score and flag conflicting evidence.
+
 > **Fix (22 Sep 2026):** Assessment additions and deletions now update the canonical subject record after Total Marks edits, preventing a stale assessment list from being saved and reappearing after restart.
 
 > **New (22 Sep 2026):** “Fill category marks from table” saves valid rubric maxima into category settings without changing student marks or Total Marks. The allocated label now sums effective category maxima instead of repeating Total Marks.

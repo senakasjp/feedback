@@ -103,3 +103,13 @@ Place “Fill category marks from table” above the allocation warning in the P
 After replacing a subject during a Total Marks edit, refresh the active subject reference. Assessment-list changes must update the canonical subject in `subjects` by ID before saving and refresh the active reference. Adding, deleting, or replacing an assessment must survive reload without reverting earlier Total Marks changes. This does not automatically restore previously missing assessments.
 
 Verification used synthetic browser records: rubric fill preserved student marks, saved allocations survived reload, and create/delete-create workflows survived reload after changing Total Marks. Light/dark captures at 375px, 768px and 1280px verified the fill action. Native packaging and launch were checked separately.
+
+## Assessment order and marking workflow (22 September 2026)
+
+Assessment cards follow saved insertion order. New and duplicated assessments appear after existing cards, to the right when space permits, then wrap naturally onto the next row. Reloading preserves this order.
+
+In the Paragraphs panel, show “Category mark setup” only when no student is selected. Use the shared bordered, rounded, padded soft panel, a primary-blue table-icon button and concise helper text. Hide the whole setup panel once a student is loaded.
+
+Student actions show the recommended sequence: **1. Assign marks to all headings**, then **2. Improve all with RAG**. Preserve numbering during progress, existing disabled states and the separate danger action for deleting comments. RAG helper text explains that comments use allocated marks, saved rationale, the rubric and the full submission.
+
+Verified with headless browser checks at 375px, 768px and 1280px in light/dark themes. Native packaging, installation in Applications and launch were also verified.
