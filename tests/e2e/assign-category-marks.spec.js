@@ -255,3 +255,30 @@ for (const mark of [0, 8]) {
     await expect(page.getByRole('region', { name: 'Mark rationale for Safety', exact: true })).toHaveCount(0)
   })
 }
+
+
+test('RAG comment request includes allocated zero mark and saved rationale', async ({ page }) => {
+  await openMarking(page, 0)
+  await page.getByRole('button', { name: 'Assign marks for Safety', exact: true }).click()
+  await expect(page.getByRole('spinbutton', { name: 'Marks for Safety', exact: true })).toHaveValue('0')
+  await page.unroute('https://api.openai.com/**')
+  let prompt = ''
+  await page.route('https://api.openai.com/**', async route => {
+    const body = route.request().postDataJSON()
+    if (route.request().url().includes('/embeddings')) {
+      await route.fulfill({ json: { data: (Array.isArray(body.input) ? body.input : [body.input]).map((_, index) => ({ index, embedding: [1, 0, 0] })) } })
+      return
+    }
+    prompt = JSON.stringify(body.messages)
+    await route.fulfill({ json: { choices: [{ message: { content: 'The evidence does not meet the criterion. Explain the measurement method to improve.' } }] } })
+  })
+  const card = page.locator('.card.border-start').filter({ has: page.getByRole('heading', { name: 'Safety', exact: true }) })
+  await card.getByRole('button', { name: /Improve with RAG/ }).click()
+  await expect.poll(() => prompt).toContain('Allocated mark: 0 / 10')
+  expect(prompt).toContain('Saved rationale:')
+  expect(prompt).toContain('Measured response time: 2 ms')
+  expect(prompt).toContain('Preserve the allocated mark')
+  expect(prompt).toContain('END OF FULL SUBMISSION')
+  await expect(card.locator('textarea').first()).toHaveValue(/The evidence does not meet/)
+  await expect(page.getByRole('spinbutton', { name: 'Marks for Safety', exact: true })).toHaveValue('0')
+})

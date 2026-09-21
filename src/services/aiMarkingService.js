@@ -594,7 +594,7 @@ function buildStudentSubmissionImageMessages(images = []) {
   ]
 }
 
-export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', allocatedMark = null, markMaximum = null, markRationale = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
   const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, studentSubmission].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
@@ -622,6 +622,10 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           student?.displayName || student?.id ? `Student: ${student?.displayName || student?.id}` : '',
           `Retrieval mode: ${retrievalMode}`,
           '',
+          'Existing grading decision:',
+          allocatedMark !== null ? `Allocated mark: ${allocatedMark}${markMaximum !== null ? ` / ${markMaximum}` : ''}` : 'Allocated mark: Not provided. Do not invent a mark.',
+          `Saved rationale: ${markRationale || 'Not provided. Do not invent a saved rationale.'}`,
+          '',
           'Assessor short draft:',
           shortFeedback || 'Not provided.',
           '',
@@ -635,6 +639,10 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           '- Rewrite and improve the assessor short draft using only the data above.',
           '- Prioritise evidence and references that match the selected criterion/category.',
           '- Keep the assessor intent and judgement aligned with the provided instructions.',
+          '- Use the allocated mark and saved rationale to explain the grading decision in student-facing feedback, including why credit was awarded and what limited the mark.',
+          '- Preserve the allocated mark. Do not regrade, suggest a different score, or output a Marks: line.',
+          '- Support the explanation with the submission and rubric. Do not invent evidence to justify the mark; explicitly flag any material conflict between the saved rationale and the evidence for assessor review.',
+          '- If the mark or rationale is absent, use the available context without pretending a grading decision was supplied.',
           '- Return plain feedback text only.',
           ...buildClosingInstructionsReminder(answerInstructions)
         ].filter(Boolean).join('\n')
@@ -713,11 +721,14 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
   }
 }
 
-export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', allocatedMark = null, markMaximum = null, markRationale = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { messages, retrievedContext, retrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
     assessment,
     categoryName,
     shortFeedback,
+    allocatedMark,
+    markMaximum,
+    markRationale,
     student,
     studentSubmission,
     studentSubmissionDocuments,
