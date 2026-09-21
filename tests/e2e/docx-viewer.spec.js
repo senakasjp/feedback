@@ -125,6 +125,10 @@ test('Navigation buttons restore the last marks position', async ({ page }) => {
       await switcher.scrollIntoViewIfNeeded()
       await expect(switcher).toBeVisible()
       expect(await switcher.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+      const [marks, viewer] = await switcher.locator('button').evaluateAll(buttons => buttons.map(button => { const rect = button.getBoundingClientRect(); return { top: rect.top, left: rect.left, right: rect.right, width: rect.width } }))
+      expect(marks.top).toBeCloseTo(viewer.top, 0)
+      expect(marks.width).toBeCloseTo(viewer.width, 0)
+      expect(viewer.left).toBeGreaterThan(marks.right)
       await page.locator('.app-sidebar-column').screenshot({ path: `/tmp/feedback-switch-${theme}-${width}.png` })
     }
   }

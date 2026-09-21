@@ -57,7 +57,7 @@ Mandatory marking requirement: AI mark allocation must include a substantive rub
 
 ## DOCX viewer and mark-entry navigation
 
-The feedback screen has Enter Data, Settings, and DOCX Viewer tabs. Navigation also provides full-width Marks and DOCX Viewer buttons directly below Back to Subjects. Both routes use the same tab-switch handler; the sidebar buttons expose the active view with `aria-pressed` and existing primary/outline styles.
+The feedback screen has Enter Data, Settings, and DOCX Viewer tabs. Navigation also provides equal-width Marks and DOCX Viewer buttons side by side in a two-column row directly below Back to Subjects. Keep an 8px gap and allow labels to wrap within their column on narrow screens. Both routes use the same tab-switch handler; the sidebar buttons expose the active view with `aria-pressed` and existing primary/outline styles.
 
 ### Original Word documents
 

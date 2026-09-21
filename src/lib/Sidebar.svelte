@@ -175,7 +175,7 @@
 						</button>
 						
 						{#if currentView === 'feedback'}
-							<nav class="d-grid gap-2 mt-2 mb-3" aria-label="Switch between marks and document">
+							<nav class="d-grid gap-2 mt-2 mb-3" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" aria-label="Switch between marks and document">
 								<button type="button" class="btn btn-sm w-100 {activeFeedbackTab === 'enter-data' ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={activeFeedbackTab === 'enter-data'} onclick={() => onSwitchFeedbackTab('enter-data')}>
 									<i class="bi bi-pencil-square me-2" aria-hidden="true"></i>Marks
 								</button>
