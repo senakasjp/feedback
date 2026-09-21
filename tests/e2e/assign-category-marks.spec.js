@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-async function openMarking(page, awardedMark, delayed = false, fixed = false) {
+async function openMarking(page, awardedMark, delayed = false, fixed = false, judgement = 'Evidence assessed against the rubric.') {
   let release
   let sent
   const requests = []
@@ -16,7 +16,7 @@ async function openMarking(page, awardedMark, delayed = false, fixed = false) {
     if (typeof delayed !== 'string' || delayed === categoryName) sent(body)
     if (delayed === true || delayed === categoryName) await responseGate
     await route.fulfill({ json: { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
-      criteria: [{ criterion_name: categoryName, awarded_mark: mark, judgement: 'Evidence assessed against the rubric.', evidence: ['Measured response time: 2 ms'], improvement_advice: 'Document measurement limits.', suggested_feedback: 'Measured response time is supported.' }],
+      criteria: [{ criterion_name: categoryName, awarded_mark: mark, judgement, evidence: ['Measured response time: 2 ms'], improvement_advice: 'Document measurement limits.', suggested_feedback: 'Measured response time is supported.' }],
       overall_feedback: 'Category assessed.'
     }) } }] } })
   })
@@ -60,6 +60,7 @@ for (const mark of [8, 0]) {
     await page.getByRole('button', { name: 'Assign marks for Safety', exact: true }).click()
     const request = await requestReceived
     const prompt = JSON.stringify(request.messages)
+    expect(prompt).toContain('MANDATORY MARK RATIONALE')
     expect(prompt).toContain('END OF FULL SUBMISSION')
     expect(prompt).toContain('require measurements and discuss limitations')
     await expect(page.getByRole('spinbutton', { name: 'Marks for Safety', exact: true })).toHaveValue(String(mark))
@@ -67,6 +68,7 @@ for (const mark of [8, 0]) {
     await expect(paragraphCheckbox(page, mark === 8 ? 'Limited evidence.' : 'Strong measured evidence.')).not.toBeChecked()
     await expect(paragraphCheckbox(page, 'Independent feedback.')).toBeChecked()
     await expect(page.getByRole('spinbutton', { name: 'Marks for Other', exact: true })).toHaveValue('9')
+    await expect(page.getByRole('region', { name: 'Mark rationale for Safety', exact: true })).toContainText('Measured response time: 2 ms')
     await page.getByRole('button', { name: 'Why this mark?', exact: true }).click()
     await expect(page.locator('.modal.show')).toContainText('Measured response time: 2 ms')
     await page.locator('.modal.show .btn-close').click()
@@ -239,3 +241,15 @@ test('bulk marking rejects results when an unselected matching paragraph was del
   await expect(page.getByRole('spinbutton', { name: 'Marks for Other', exact: true })).toHaveValue('3')
   await expect(paragraphCheckbox(page, 'Independent feedback.')).not.toBeChecked()
 })
+
+for (const mark of [0, 8]) {
+  test(`rejects a missing mandatory rationale for ${mark} marks`, async ({ page }) => {
+    await openMarking(page, mark, false, false, '   ')
+    const input = page.getByRole('spinbutton', { name: 'Marks for Safety', exact: true })
+    await input.fill('3')
+    await page.getByRole('button', { name: 'Assign marks for Safety', exact: true }).click()
+    await expect(page.getByText(/rationale and explanation of gaps are mandatory/)).toBeVisible()
+    await expect(input).toHaveValue('3')
+    await expect(page.getByRole('region', { name: 'Mark rationale for Safety', exact: true })).toHaveCount(0)
+  })
+}
