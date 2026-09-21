@@ -9102,10 +9102,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								</div>
 								{#if currentAssessment}
 									<div class="px-3 pt-3">
-										<div class="mb-3">
-											<button type="button" class="btn btn-primary btn-sm" onclick={fillCategoryMarksFromTable} disabled={!rubricCategoryMarks.size || hasPendingParagraphEdit()}>Fill category marks from table</button>
-											<div class="form-text">Copies category maxima from the rubric’s Marks column. Student marks and Total Marks stay unchanged.</div>
-										</div>
+										{#if !currentStudentId}
+											<div class="border rounded p-3 bg-light mb-3">
+												<div class="fw-semibold mb-2">Category mark setup</div>
+												<button type="button" class="btn btn-primary btn-sm" onclick={fillCategoryMarksFromTable} disabled={!rubricCategoryMarks.size || hasPendingParagraphEdit()}><i class="bi bi-table me-1" aria-hidden="true"></i>Fill category marks from table</button>
+												<div class="form-text">Set each category’s maximum marks from the rubric’s Marks column.</div>
+											</div>
+										{/if}
 										{#if getCurrentMarkSummary().allocationMismatch || getCurrentMarkSummary().invalidCategories.length}
 											<div class="alert alert-warning" role="alert">{getStudentMarkInfo().display}</div>
 										{/if}
@@ -9117,7 +9120,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															onclick={assignMarksToAllHeadings}
 															disabled={Boolean(assigningMarkCategory) || hasPendingParagraphEdit()}
 															aria-label="Assign marks to all headings">
-															<i class="bi bi-magic me-1"></i>{assigningMarkCategory ? 'Assigning marks…' : 'Assign marks to all headings'}
+															<i class="bi bi-magic me-1"></i>1. {assigningMarkCategory ? 'Assigning marks…' : 'Assign marks to all headings'}
 														</button>
 														<div class="form-text" role="status">{assigningMarkCategory ? 'Assessing: ' + assigningMarkCategory : 'Assess the submission against each rubric heading, fill its marks box and select the matching colour band.'}</div>
 													</div>
@@ -9129,9 +9132,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													>
 														{#if improvingAllWithRag}
 															<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-															Improving all with RAG...
+															2. Improving all with RAG...
 														{:else}
-															<i class="bi bi-diagram-3 me-1"></i>Improve all with RAG
+															<i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>2. Improve all with RAG
 														{/if}
 													</button>
 													<button
@@ -9142,7 +9145,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														<i class="bi bi-trash me-1"></i>Delete all student RAG comments
 													</button>
 													<div class="small text-muted mt-2 mb-0">
-														Runs "Improve with RAG" for every category in turn, expanding each category's draft using the rubric and this student's submission. Delete clears every category's draft comment for this student.
+														Runs "Improve with RAG" for every category in turn, generating comments from the allocated marks, saved rationale, rubric and this student's submission. Delete clears every category's draft comment for this student.
 													</div>
 												{:else}
 													<button
