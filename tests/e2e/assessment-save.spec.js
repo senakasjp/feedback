@@ -9,6 +9,7 @@ test(`assessment creation persists after editing total marks, deletion=${removeO
     localStorage.setItem('feedback-navigation-state-v1', JSON.stringify({ view: 'subjects' }))
     localStorage.setItem('save-qa-seeded', 'true')
   })
+  await page.setViewportSize({ width: 1800, height: 1100 })
   await page.goto('/')
   await page.getByRole('button', { name: 'Open subject Save QA', exact: true }).click()
   await page.getByRole('button', { name: /Open Feedback/ }).click()
@@ -23,10 +24,20 @@ test(`assessment creation persists after editing total marks, deletion=${removeO
   await page.getByRole('button', { name: /Add Assessment$/ }).last().click()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('feedback-subjects')).subjects[0].assessments.map(a => a.name))).toEqual(removeOld ? ['New assessment'] : ['Old assessment', 'New assessment'])
   if (!removeOld) expect(await page.evaluate(() => JSON.parse(localStorage.getItem('feedback-subjects')).subjects[0].assessments[0].totalMarks)).toBe(80)
+  if (!removeOld) {
+    const cards = page.locator('.assessment-card')
+    await expect(cards.first()).toContainText('Old assessment')
+    await expect(cards.last()).toContainText('New assessment')
+    const first = await cards.first().boundingBox()
+    const last = await cards.last().boundingBox()
+    expect(last.x).toBeGreaterThan(first.x)
+    await cards.first().locator('..').screenshot({ path: '/tmp/assessment-card-order.png' })
+  }
   await page.reload()
   const subject = page.getByRole('button', { name: 'Open subject Save QA', exact: true })
   if (await subject.isVisible()) await subject.click()
   await expect(page.getByRole('heading', { name: 'New assessment', exact: true })).toBeVisible()
+  await expect(page.locator('.assessment-card').last()).toContainText('New assessment')
   await expect(page.getByRole('heading', { name: 'Old assessment', exact: true })).toHaveCount(removeOld ? 0 : 1)
 })
 }

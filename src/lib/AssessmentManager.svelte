@@ -114,11 +114,6 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		return `para-${Date.now()}-${Math.random().toString(16).slice(2)}-${index}`;
 	}
 
-	// Sort assessments alphabetically by name
-	let sortedAssessments = $derived(
-		[...assessments].sort((a, b) => a.name.localeCompare(b.name))
-	)
-
   // Local state
 	let showDeleteConfirm = $state(false);
 	let assessmentToDelete = $state(null);
@@ -1710,9 +1705,9 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 		</div>
 	{/if}
 
-	{#if sortedAssessments.length > 0}
+	{#if assessments.length > 0}
 		<div class="workspace-card-grid">
-			{#each sortedAssessments as assessment (assessment.id)}
+			{#each assessments as assessment (assessment.id)}
 				<div class="border rounded p-3 shadow-sm d-flex flex-column assessment-card">
 					<!-- Header Section -->
 					<div class="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">
