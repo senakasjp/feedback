@@ -4371,6 +4371,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					const assessments = [...subjects[subjectIndex].assessments]
 					assessments[assessmentIndex] = updatedAssessment
 					subjects[subjectIndex] = { ...subjects[subjectIndex], assessments }
+					currentSubject = subjects[subjectIndex]
 					saveSubjects()
 				}
 			}
@@ -7808,7 +7809,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 								}}
 								onUpdateAssessments={(updatedAssessments) => {
 									if (currentSubject) {
-										currentSubject.assessments = updatedAssessments;
+										const subjectIndex = subjects.findIndex(subject => subject.id === currentSubject.id);
+										if (subjectIndex === -1) return;
+										subjects[subjectIndex] = { ...subjects[subjectIndex], assessments: updatedAssessments };
+										currentSubject = subjects[subjectIndex];
 										saveSubjects();
 									}
 								}}
