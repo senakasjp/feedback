@@ -29,7 +29,7 @@ test('normalizes assessment maxima and subject weights before assigning grades',
   assert.equal(result.weightedByStudent.student.a.weightedMarks, 16);
   assert.equal(result.weightedByStudent.student.b.weightedMarks, 15);
   assert.equal(result.summaryByStudent.student.percentage, 62);
-  assert.equal(result.gradeByStudent.student, 'C');
+  assert.equal(result.gradeByStudent.student, 'C+');
 });
 
 test('zero is marked; blanks, missing criteria, invalid marks and allocation mismatches are incomplete', () => {

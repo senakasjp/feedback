@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildCategoryMarkingRequest } from '../src/services/categoryMarkingService.js'
-import { DEFAULT_GRADE_RANGES } from '../src/utils/markingRules.js'
+import { DEFAULT_MARK_RANGES } from '../src/utils/markingRules.js'
 
 const makeInput = () => ({
   assessment: {
@@ -39,8 +39,8 @@ test('uses default percentage bands when assessment has none', () => {
   const input = makeInput()
   input.assessment.percentageRanges = []
   const request = buildCategoryMarkingRequest(input)
-  assert.deepEqual(request.assessment.percentageRanges, DEFAULT_GRADE_RANGES)
-  assert.notEqual(request.assessment.percentageRanges, DEFAULT_GRADE_RANGES)
+  assert.deepEqual(request.assessment.percentageRanges, DEFAULT_MARK_RANGES)
+  assert.notEqual(request.assessment.percentageRanges, DEFAULT_MARK_RANGES)
 })
 
 test('accepts submission images when extracted text is absent', () => {

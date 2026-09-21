@@ -1,4 +1,4 @@
-import { DEFAULT_GRADE_RANGES, getMarkBands, parseMark } from '../utils/markingRules.js'
+import { DEFAULT_MARK_RANGES, getMarkBands, parseMark } from '../utils/markingRules.js'
 
 export const CATEGORY_MARKING_PROMPT = `Assign a mark for the single supplied criterion by assessing the student's full submission against the assessment rubric and criterion requirements.
 Use the rubric descriptors and allocated maximum to judge demonstrated achievement. Do not grade the wording of existing feedback or use previous marks as an anchor.
@@ -30,7 +30,7 @@ export function buildCategoryMarkingRequest({
     throw new Error('Add the student submission or uploaded submission images before assigning marks.')
   }
   const percentageRanges = (assessment.percentageRanges?.length
-    ? assessment.percentageRanges : DEFAULT_GRADE_RANGES).map(range => ({ ...range }))
+    ? assessment.percentageRanges : DEFAULT_MARK_RANGES).map(range => ({ ...range }))
   const markingMode = category.markingMode || assessment.markingMode || 'none'
   const colorMarks = Object.fromEntries(['green', 'lightgreen', 'yellow', 'orange', 'red']
     .map(color => [color, parseMark(category.colorMarks?.[color])])

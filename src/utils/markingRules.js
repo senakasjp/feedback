@@ -68,7 +68,7 @@ export function getMarkSummary(assessment, marks = {}) {
   return { total, hasMarks, isComplete, maximum, percentage: isComplete ? total / maximum * 100 : null, allocationMismatch, invalidCategories };
 }
 
-export const DEFAULT_GRADE_RANGES = Object.freeze([
+export const DEFAULT_MARK_RANGES = Object.freeze([
   { color: 'red', lowerPercentage: 0, upperPercentage: 40, grade: 'F', label: 'Fail' },
   { color: 'orange', lowerPercentage: 40, upperPercentage: 50, grade: 'D', label: 'Pass' },
   { color: 'yellow', lowerPercentage: 50, upperPercentage: 65, grade: 'C', label: 'Satisfactory' },
@@ -76,9 +76,23 @@ export const DEFAULT_GRADE_RANGES = Object.freeze([
   { color: 'green', lowerPercentage: 80, upperPercentage: 100, grade: 'A', label: 'Excellent' }
 ].map(Object.freeze));
 
+export const DEFAULT_GRADE_RANGES = Object.freeze([
+  { color: 'red', lowerPercentage: 0, upperPercentage: 40, grade: 'F', label: 'Fail' },
+  { color: 'orange', lowerPercentage: 40, upperPercentage: 50, grade: 'D', label: 'Fail' },
+  { color: 'yellow', lowerPercentage: 50, upperPercentage: 55, grade: 'C-', label: 'Pass' },
+  { color: 'yellow', lowerPercentage: 55, upperPercentage: 60, grade: 'C', label: 'Pass' },
+  { color: 'yellow', lowerPercentage: 60, upperPercentage: 65, grade: 'C+', label: 'Pass' },
+  { color: 'lightgreen', lowerPercentage: 65, upperPercentage: 70, grade: 'B-', label: 'Good' },
+  { color: 'lightgreen', lowerPercentage: 70, upperPercentage: 75, grade: 'B', label: 'Good' },
+  { color: 'lightgreen', lowerPercentage: 75, upperPercentage: 80, grade: 'B+', label: 'Good' },
+  { color: 'green', lowerPercentage: 80, upperPercentage: 85, grade: 'A-', label: 'Excellent' },
+  { color: 'green', lowerPercentage: 85, upperPercentage: 90, grade: 'A', label: 'Excellent' },
+  { color: 'green', lowerPercentage: 90, upperPercentage: 100, grade: 'A+', label: 'Excellent' }
+].map(Object.freeze));
+
 function normalizedRanges(ranges) {
   if (!Array.isArray(ranges)) return [];
-  const source = ranges.length ? ranges : DEFAULT_GRADE_RANGES;
+  const source = ranges.length ? ranges : DEFAULT_MARK_RANGES;
   const normalized = source.map(range => ({ ...range, lower: parseMark(range?.lowerPercentage), upper: parseMark(range?.upperPercentage) }));
   if (normalized.some(range => range.lower === null || range.upper === null || range.lower < 0 || range.upper > 100 || range.lower >= range.upper || typeof range.color !== 'string' || !range.color.trim())) return [];
   normalized.sort((a, b) => a.lower - b.lower);
@@ -99,7 +113,7 @@ export function getGradeInfo(percentage, ranges = []) {
   const number = parseMark(percentage);
   const unclassified = { grade: 'N/A', label: 'Unclassified', color: 'secondary' };
   if (number === null || number < 0 || number > 100) return unclassified;
-  const range = normalizedRanges(ranges).find(band => number >= band.lower && (number < band.upper || (band.upper === 100 && number === 100)));
+  const range = normalizedRanges(Array.isArray(ranges) && ranges.length === 0 ? DEFAULT_GRADE_RANGES : ranges).find(band => number >= band.lower && (number < band.upper || (band.upper === 100 && number === 100)));
   if (!range) return unclassified;
   const colorLabel = range.color === 'lightgreen' ? 'Light green' : range.color.charAt(0).toUpperCase() + range.color.slice(1);
   return { grade: range.grade || colorLabel, label: range.label || colorLabel, color: range.color };

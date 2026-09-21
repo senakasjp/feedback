@@ -19,7 +19,7 @@
 	
 	// Import utility functions
 	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags } from './utils/helpers.js'
-	import { parseMark, validateCategoryMark, getAssessmentMaximum, getMarkSummary, getMarkBands, getGradeInfo, DEFAULT_GRADE_RANGES } from './utils/markingRules.js'
+	import { parseMark, validateCategoryMark, getAssessmentMaximum, getMarkSummary, getMarkBands, getGradeInfo, DEFAULT_MARK_RANGES } from './utils/markingRules.js'
 	import { extractMarkSuggestion } from './utils/aiMarkSuggestion.js'
 	import { normalizeCategoryLabel, resolveRubricCategory } from './utils/rubricCategoryMatching.js'
 	import { inferRubricBandColumns, resolveRubricBandColumns } from './utils/rubricBandColumns.js'
@@ -898,7 +898,7 @@
 
 	$effect(() => {
 		const ranges = currentAssessment?.percentageRanges
-		rubricBands = [...(ranges?.length ? ranges : DEFAULT_GRADE_RANGES)]
+		rubricBands = [...(ranges?.length ? ranges : DEFAULT_MARK_RANGES)]
 			.sort((a, b) => Number(b.lowerPercentage) - Number(a.lowerPercentage))
 			.map(range => ({ ...range, label: range.label || range.color, lower: range.lowerPercentage, upper: range.upperPercentage }))
 		rubricBandsError = ''

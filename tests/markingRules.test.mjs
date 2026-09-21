@@ -32,7 +32,9 @@ test('summaries exclude stale keys and distinguish zero, missing and invalid mar
 });
 
 test('default grading handles fractional boundaries and invalid values', () => {
-  for (const [score, grade] of [[0, 'F'], [39.99, 'F'], [40, 'D'], [49.99, 'D'], [50, 'C'], [64.99, 'C'], [65, 'B'], [79.99, 'B'], [80, 'A'], [100, 'A']]) assert.equal(getGradeInfo(score).grade, grade);
+  for (const [score, grade] of [[0, 'F'], [39.99, 'F'], [40, 'D'], [49.99, 'D'], [50, 'C-'], [54.99, 'C-'], [55, 'C'], [59.99, 'C'], [60, 'C+'], [64.99, 'C+'], [65, 'B-'], [69.99, 'B-'], [70, 'B'], [74.99, 'B'], [75, 'B+'], [79.99, 'B+'], [80, 'A-'], [84.99, 'A-'], [85, 'A'], [89.99, 'A'], [90, 'A+'], [100, 'A+']]) assert.equal(getGradeInfo(score).grade, grade);
+  assert.equal(getGradeInfo(45).label, 'Fail');
+  assert.equal(getMarkBands().length, 5);
   for (const score of [null, '', NaN, Infinity, -1, 101]) assert.equal(getGradeInfo(score).grade, 'N/A');
 });
 
