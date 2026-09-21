@@ -1,3 +1,5 @@
+import { normalizeAiImage } from './aiImageContent.js'
+
 /**
  * LLM Provider Registry
  * Each provider adapts the shared chat-completion call shape to its own API.
@@ -126,16 +128,17 @@ function extractOpenAiMessageText(payload = {}) {
 // Message builders produce provider-agnostic content parts ({ type: 'text', text } and
 // { type: 'image', mimeType, data }). Adapt image parts to each provider's own wire format here -
 // text parts already match both OpenAI's and Anthropic's shape, so they pass through unchanged.
-function adaptMessageContent(content, providerId) {
+async function adaptMessageContent(content, providerId) {
   if (!Array.isArray(content)) {
     return content
   }
 
-  return content.map(part => {
+  return Promise.all(content.map(async part => {
     if (part?.type !== 'image') {
       return part
     }
 
+    part = await normalizeAiImage(part)
     const raw = String(part.data || '')
     const base64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw
     const mimeType = part.mimeType || 'image/png'
@@ -146,7 +149,7 @@ function adaptMessageContent(content, providerId) {
 
     const dataUrl = raw.startsWith('data:') ? raw : `data:${mimeType};base64,${base64}`
     return { type: 'image_url', image_url: { url: dataUrl } }
-  })
+  }))
 }
 
 function splitSystemAndTurns(messages = []) {
@@ -235,7 +238,7 @@ export async function callChatCompletion({ providerId = DEFAULT_PROVIDER_ID, mod
     throw new Error(`${provider.label} API key is not configured. Add it in Settings > API Keys, or in the .env file.`)
   }
 
-  const adaptedMessages = messages.map(message => ({ ...message, content: adaptMessageContent(message.content, providerId) }))
+  const adaptedMessages = await Promise.all(messages.map(async message => ({ ...message, content: await adaptMessageContent(message.content, providerId) })))
 
   const response = await fetch(provider.chatUrl, {
     method: 'POST',
