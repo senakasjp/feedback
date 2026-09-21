@@ -24,7 +24,7 @@
 	import { normalizeCategoryLabel, resolveRubricCategory } from './utils/rubricCategoryMatching.js'
 	import { inferRubricBandColumns, resolveRubricBandColumns } from './utils/rubricBandColumns.js'
 	import { isRubricHeaderRow, getRubricTableGrid, getRubricColumnHeaders } from './utils/rubricTable.js'
-	import { getRubricCategoryMarks, isRubricSummaryRow } from './utils/rubricMarks.js'
+	import { getAssessmentForMarking, getRubricCategoryMarks, isRubricSummaryRow } from './utils/rubricMarks.js'
 	import { getMotivationalMessage } from './utils/motivationalMessages.js'
 	import { debugInfo, debugLog, isVerboseDebugEnabled } from './utils/debug.js'
 	
@@ -4283,13 +4283,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	}
 
 	function getCurrentAssessmentForMarking() {
-		return {
-			...currentAssessment,
-			categories: (currentAssessment?.categories || []).map(category => {
-				const maximum = rubricCategoryMarks.get(category.name)
-				return maximum === undefined ? category : { ...category, allocatedMarks: maximum }
-			})
-		}
+		return getAssessmentForMarking({ ...currentAssessment, rubricHtml: assessmentHtml, tableRowCategoryMap })
 	}
 
 	function getCurrentMarkSummary() {

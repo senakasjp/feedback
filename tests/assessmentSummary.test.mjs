@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
-import { getAssessmentMaximum, getGradeInfo, getMarkSummary } from '../src/utils/markingRules.js';
+import { getAssessmentForMarking } from '../src/utils/rubricMarks.js';
+import { parseMark, getAssessmentMaximum, getGradeInfo, getMarkSummary } from '../src/utils/markingRules.js';
 
 const source = readFileSync(new URL('../src/lib/AssessmentManager.svelte', import.meta.url), 'utf8');
 const start = source.indexOf('function buildStudentSummaryCache()');
@@ -16,7 +17,7 @@ const summarize = (assessments, evaluations) => runInNewContext(`${builder}\nbui
   assessments,
   students: [{ id: 'student' }],
   studentEvaluations: { student: evaluations },
-  getAssessmentMaximum, getMarkSummary,
+  parseMark, getAssessmentForMarking, getAssessmentMaximum, getMarkSummary,
   getGrade: percentage => getGradeInfo(percentage).grade,
 });
 

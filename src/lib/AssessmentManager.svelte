@@ -4,7 +4,8 @@
 import { generateCSVContent } from './printUtils.js'
 import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../utils/exportColumns.js'
 	import { debugLog } from '../utils/debug.js'
-	import { getAssessmentMaximum, getMarkSummary, getGradeInfo, DEFAULT_GRADE_RANGES } from '../utils/markingRules.js'
+	import { getAssessmentForMarking } from '../utils/rubricMarks.js'
+	import { parseMark, getAssessmentMaximum, getMarkSummary, getGradeInfo, DEFAULT_GRADE_RANGES } from '../utils/markingRules.js'
 	import jsPDF from 'jspdf'
 	const console = { ...globalThis.console, log: debugLog, info: debugLog }
 
@@ -308,7 +309,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 						studentData[assessment.id] = evaluationData;
 						
 						// Check if student has marks for this assessment
-						if (getMarkSummary(assessment, evaluationData.categoryMarks || {}).hasMarks) {
+						if (getMarkSummary(getAssessmentForMarking(assessment), evaluationData.categoryMarks || {}).hasMarks) {
 							hasMarksForSubject = true;
 						}
 					}
@@ -322,7 +323,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 							studentData[assessment.id] = evaluationData;
 							
 							// Check if student has marks for this assessment
-							if (getMarkSummary(assessment, evaluationData.categoryMarks || {}).hasMarks) {
+							if (getMarkSummary(getAssessmentForMarking(assessment), evaluationData.categoryMarks || {}).hasMarks) {
 								hasMarksForSubject = true;
 							}
 						}
@@ -422,15 +423,16 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 	}
 
 	function buildStudentSummaryCache(): StudentSummaryCache {
+		const markingAssessments = assessments.map(assessment => ({ ...getAssessmentForMarking(assessment), weight: parseMark(assessment.weight) }));
 		const marksByStudent = {};
 		const weightedByStudent = {};
 		const summaryByStudent = {};
 		const gradeByStudent = {};
 		const maxRawMarksByAssessment = {};
-		const weightCarryingAssessments = assessments.filter(assessment => Number.isFinite(assessment?.weight) && assessment.weight > 0);
+		const weightCarryingAssessments = markingAssessments.filter(assessment => Number.isFinite(assessment?.weight) && assessment.weight > 0);
 		const weightCarryingCount = weightCarryingAssessments.length;
 
-		for (const assessment of assessments) {
+		for (const assessment of markingAssessments) {
 			maxRawMarksByAssessment[assessment.id] = getAssessmentMaximum(assessment);
 		}
 
@@ -444,7 +446,7 @@ import { buildHiddenColumnSet, isColumnHidden, normalizeColumnLabel } from '../u
 			let hasAnyMarks = false;
 			let assessmentsWithMarks = 0;
 
-			for (const assessment of assessments) {
+			for (const assessment of markingAssessments) {
 				const assessmentId = assessment?.id;
 				if (!assessmentId) continue;
 				const evaluation = studentEvaluations?.[studentId]?.[assessmentId];

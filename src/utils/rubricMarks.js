@@ -62,3 +62,16 @@ export function getRubricCategoryMarks(root, categories = [], manualMap = {}) {
   }
   return marks
 }
+
+export function getAssessmentForMarking(assessment) {
+  if (!assessment?.rubricHtml) return assessment
+  const root = document.createElement('div')
+  root.innerHTML = assessment.rubricHtml
+  const maxima = getRubricCategoryMarks(root, assessment.categories || [], assessment.tableRowCategoryMap || {})
+  return {
+    ...assessment,
+    categories: (assessment.categories || []).map(category => maxima.has(category.name)
+      ? { ...category, allocatedMarks: maxima.get(category.name) }
+      : category)
+  }
+}
