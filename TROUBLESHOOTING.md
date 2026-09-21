@@ -9,6 +9,12 @@ Older builds used configured category allocations in the summary while mark entr
 
 With an assessment maximum of 100, 90 marks at a 60% weight should contribute 54.0. If N/A remains after updating, check missing required category marks, invalid or duplicate categories, and whether the effective category maxima add up to the configured assessment total. Keep these validation checks enabled; changing the weight alone cannot repair incomplete marking.
 
+## Assessment Additions or Deletions Revert After Restart
+
+A stale active-subject reference could remain after changing Total Marks. Subsequent assessment-list edits then changed that older object while saving the canonical subject, leaving the old assessment list on disk. The fix synchronizes the active subject after Total Marks changes and writes assessment-list updates to the canonical subject by ID.
+
+Update the installed app, then verify new list changes survive reopening. Existing missing assessments are not automatically restored by this code fix. Inspect saved assessment files read-only before considering a separate recovery; do not overwrite the data folder with bundled or development copies.
+
 ## Desktop App Doesn't Reflect Recent Code Changes
 
 **Symptoms**: A feature works when tested via `npm run dev` in a browser, but the installed `/Applications/Feedback.app` doesn't show it at all — even after toggling every relevant setting in the UI.

@@ -1,5 +1,9 @@
 # Changelog
 
+> **Fix (22 Sep 2026):** Assessment additions and deletions now update the canonical subject record after Total Marks edits, preventing a stale assessment list from being saved and reappearing after restart.
+
+> **New (22 Sep 2026):** “Fill category marks from table” saves valid rubric maxima into category settings without changing student marks or Total Marks. The allocated label now sums effective category maxima instead of repeating Total Marks.
+
 > **Fix (Sep 2026):** Students with Marks now uses the same rubric-derived category maxima as mark entry. This fixes weighted contributions, totals and grades showing N/A when the rubric supplies valid maxima but configured category allocations differ or are missing. Numeric-string assessment weights are also recognized. Saved allocations and marks remain unchanged; incomplete and invalid results remain blocked.
 
 > **Simplified (Sep 2026):** Removed "Check Citations" and the per-student excerpting/embedding logic for "Improve with RAG" — both were point-fixes for the same underlying gap (narrowing the student's submission drops anything that doesn't score well by keyword/semantic similarity to a category, e.g. a bibliography or a contradicting claim in another chapter). "Improve with RAG" now sends the student's full submission text for every category, the same way "Evidence Check" and "AI Draft" already did — no excerpting, no special cases.

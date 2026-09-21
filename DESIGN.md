@@ -93,3 +93,13 @@ The Students with Marks table must use the same effective rubric category maxima
 Parse numeric assessment weights consistently, including numeric strings. Display weighted contributions to one decimal place and use the same calculated results for table exports. Missing required marks, invalid marks, and genuine allocation mismatches still prevent completion and a final grade; never fabricate a result to remove N/A.
 
 Verification: 20 headless browser checks and 12 unit checks passed, including rubric allocation precedence, numeric/string weights, CSV export, and incomplete/invalid mark protection. Synthetic results showed 80 at 40% = 32.0 and 90 at 60% = 54.0, for 86.0 overall (A). Native packaging, installation and process launch were also verified; production student records were not inspected or modified.
+
+## Filling category allocations from the rubric
+
+Place “Fill category marks from table” above the allocation warning in the Paragraphs panel using the shared primary button style. Disable it when no valid rubric maxima are available or a paragraph edit is pending. Copy recognized maxima into category settings, retain unmatched allocations, and explain unmatched categories after saving. Keep student-awarded marks and Total Marks unchanged. Show the actual sum of effective category allocations beside Total Marks; a genuine mismatch must remain visible.
+
+## Assessment list persistence
+
+After replacing a subject during a Total Marks edit, refresh the active subject reference. Assessment-list changes must update the canonical subject in `subjects` by ID before saving and refresh the active reference. Adding, deleting, or replacing an assessment must survive reload without reverting earlier Total Marks changes. This does not automatically restore previously missing assessments.
+
+Verification used synthetic browser records: rubric fill preserved student marks, saved allocations survived reload, and create/delete-create workflows survived reload after changing Total Marks. Light/dark captures at 375px, 768px and 1280px verified the fill action. Native packaging and launch were checked separately.
