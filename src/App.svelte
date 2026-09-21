@@ -9097,7 +9097,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 													</div>
 													<button
 														type="button"
-														class="btn btn-outline-info btn-sm"
+														class="btn btn-primary btn-sm"
 														onclick={improveAllCategoriesWithRag}
 														disabled={improvingAllWithRag}
 													>
@@ -9234,10 +9234,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											</button>
 										{/if}
 										{#if currentStudentId && categoryMarkJustification[group.category]}
-<section class="mark-rationale small" aria-label={`Mark rationale for ${group.category}`}>
-<strong>Mark rationale</strong>
-<div class="mark-rationale-text">{categoryMarkJustification[group.category]}</div>
-</section>
 											<button
 												type="button"
 												class="btn btn-outline-light btn-sm"
@@ -9855,16 +9851,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 
 <style>
-.mark-rationale {
-  flex: 1 1 100%;
-  min-width: 0;
-  padding: var(--ui-space-3);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-surface);
-  color: var(--ui-ink);
-}
-.mark-rationale-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 	/* App-specific styles - most styles moved to design-system.css and components.css */
 	

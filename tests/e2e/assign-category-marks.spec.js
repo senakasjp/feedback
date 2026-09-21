@@ -68,9 +68,11 @@ for (const mark of [8, 0]) {
     await expect(paragraphCheckbox(page, mark === 8 ? 'Limited evidence.' : 'Strong measured evidence.')).not.toBeChecked()
     await expect(paragraphCheckbox(page, 'Independent feedback.')).toBeChecked()
     await expect(page.getByRole('spinbutton', { name: 'Marks for Other', exact: true })).toHaveValue('9')
-    await expect(page.getByRole('region', { name: 'Mark rationale for Safety', exact: true })).toContainText('Measured response time: 2 ms')
+    await expect(page.getByRole('region', { name: 'Mark rationale for Safety', exact: true })).toHaveCount(0)
+    await expect(page.locator('.modal.show')).toHaveCount(0)
     await page.getByRole('button', { name: 'Why this mark?', exact: true }).click()
     await expect(page.locator('.modal.show')).toContainText('Measured response time: 2 ms')
+    await page.locator('.modal.show').screenshot({ path: `/tmp/rationale-dialog-${mark}.png` })
     await page.locator('.modal.show .btn-close').click()
     await page.screenshot({ path: `/tmp/feedback-assigned-${mark}.png`, fullPage: true })
     const notificationClose = page.getByRole('button', { name: 'Close notification', exact: true })
@@ -81,7 +83,7 @@ for (const mark of [8, 0]) {
         if (theme === 'dark') await page.getByRole('button', { name: 'Switch to Dark Mode', exact: true }).click()
         for (const width of [375, 768, 1280]) {
           await page.setViewportSize({ width, height: 900 })
-          await card.locator('.card-header').evaluate(element => element.scrollIntoView({ block: 'center' }))
+          await card.locator('.card-header').evaluate(element => element.scrollIntoView({ block: 'center', behavior: 'instant' }))
           const bounds = await card.locator('.card-header').evaluate(element => {
             const header = element.getBoundingClientRect()
             return [...element.querySelectorAll('input, button')].every(control => {
