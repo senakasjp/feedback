@@ -1,5 +1,9 @@
 # Changelog
 
+> **New (22 Sep 2026):** Student materials accept PPTX files. Slide-order text, tables, speaker notes, cached chart/diagram text and supported embedded slide images are extracted for AI marking. This does not add a PowerPoint viewer or enable student PDF uploads.
+
+> **Improved (22 Sep 2026):** Paragraph-box assessor comments take priority as authoritative guidance during RAG generation and English improvement. Prompts preserve the assessor's substantive observations and judgements while retaining the allocated numeric mark and prohibiting invented supporting evidence.
+
 > **Improved (22 Sep 2026):** Per-answer instructions save on blur instead of a typing timer, with unchanged saves skipped. Save Student Data now allows unfinished paragraphs after confirmation, preserving quick-add drafts and keeping the student selected.
 
 > **New (22 Sep 2026):** Renamed the draft-clearing action to “Clear all RAG comments text boxes” and added “Clear all marks input boxes,” which confirms before clearing awarded marks and their rationales without changing feedback.

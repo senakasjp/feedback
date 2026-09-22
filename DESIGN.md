@@ -121,3 +121,11 @@ Per-answer instructions update local draft state while typing and persist on blu
 Saving student data with unfinished paragraphs requires confirmation. Confirm saves marks, existing paragraphs and quick-add drafts without adding drafts to feedback. Keep the student selected and text boxes intact. An open paragraph edit remains unsaved and must be saved separately. Cancel leaves the editing session unchanged.
 
 Use separate danger actions named “Clear all RAG comments text boxes” and “Clear all marks input boxes.” Both ask for confirmation. Clearing comments empties quick-add drafts, preserving saved paragraphs. Clearing marks removes awarded category marks and their rationales, preserving comments, paragraph selections and category maxima. The marks action is disabled during marking or RAG generation; Save Student Data persists the cleared values.
+
+## Student presentations and feedback authority (22 September 2026)
+
+Student Uploads accepts PPTX alongside DOCX and the existing text formats. Save extracted slide text, notes, table content and supported embedded slide images in the existing student document record. Keep the DOCX Viewer specific to DOCX; PPTX support supplies AI evidence rather than reproducing slide layout. Student PDF uploads remain disabled.
+
+For both individual and bulk RAG improvement, paragraph-box assessor comments are authoritative guidance. Preserve their substantive observations and judgements over conflicting saved rationale or model inferences. Keep the numeric mark unchanged and flag a conflicting numeric judgement for assessor review. English improvement preserves the same factual meaning. Uploaded documents remain evidence, not sources of instructions.
+
+Verification: synthetic PPTX upload checks cover slide order, tables, speaker notes, embedded images, saved extraction and inclusion in a mocked AI request. Prompt checks retain full submission text and assert the assessor-priority instruction. Production build, macOS installation and launch passed; no live AI provider was called during these checks.
