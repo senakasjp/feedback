@@ -30,11 +30,14 @@ try {
     const preview = await buildImproveFeedbackWithRagPromptPreview({
       assessment: minimalAssessment,
       categoryName,
+      shortFeedback: 'The demonstration failed the required safety check.',
       studentSubmission: submission
     })
     const promptText = preview.messages.map(m => JSON.stringify(m.content)).join('\n')
 
     assert.ok(promptText.includes('Kūkūtai'), `full submission (incl. references) should reach the prompt for category "${categoryName}"`)
+    assert.ok(promptText.includes('authoritative ground truth'), 'assessor comments must have explicit priority')
+    assert.ok(promptText.includes('The demonstration failed the required safety check.'), 'paragraph comments must reach the prompt unchanged')
     assert.ok(promptText.includes('Chapter 1'), `full submission (incl. earlier chapters) should reach the prompt for category "${categoryName}"`)
   }
 
