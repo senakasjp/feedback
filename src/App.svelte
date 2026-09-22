@@ -136,7 +136,6 @@
 	let showCommonPromptBox = $state(false)
 	let quickAddInstructionAssessmentKey = $state('')
 	let quickAddInstructionExpanded = $state({})
-	const quickAddInstructionSaveTimers = {}
 	let quickAddColorPicker = $state({})
 	let speechRecordingCategory = $state('')
 	let speechTranscribingByCategory = $state({})
@@ -1509,10 +1508,6 @@
 		quickAddAiInstructions = {}
 		quickAddIncludeCommonPrompt = {}
 		quickAddInstructionExpanded = {}
-		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
-			clearTimeout(quickAddInstructionSaveTimers[key])
-			delete quickAddInstructionSaveTimers[key]
-		})
 		quickAddInstructionAssessmentKey = ''
 		quickAddColorPicker = {}
 		improvingText = {}
@@ -1616,10 +1611,6 @@
 			return
 		}
 
-		Object.keys(quickAddInstructionSaveTimers).forEach(key => {
-			clearTimeout(quickAddInstructionSaveTimers[key])
-			delete quickAddInstructionSaveTimers[key]
-		})
 		syncCurrentAssessmentAiInstructionsFromQuickAdd()
 
 		const subjectIndexForSettings = subjects.findIndex(subject => subject.id === currentSubjectId)
@@ -1908,16 +1899,6 @@
 		}
 	}
 
-	function schedulePersistCategoryAiInstruction(categoryName, delayMs = 500) {
-		if (!categoryName) return
-		if (quickAddInstructionSaveTimers[categoryName]) {
-			clearTimeout(quickAddInstructionSaveTimers[categoryName])
-		}
-		quickAddInstructionSaveTimers[categoryName] = setTimeout(() => {
-			persistCategoryAiInstruction(categoryName)
-			delete quickAddInstructionSaveTimers[categoryName]
-		}, delayMs)
-	}
 
 	// Prefill category/knowledge area and focus the inline quick-add input
 	function startNewParagraphFor(categoryName, knowledgeAreaName) {
@@ -2020,10 +2001,8 @@
 	async function persistCategoryAiInstruction(categoryName, instructionValue = null) {
 		if (!currentAssessment || !currentAssessmentId || !currentSubjectId) return
 		const nextValue = instructionValue ?? quickAddAiInstructions[categoryName] ?? ''
-		if (quickAddInstructionSaveTimers[categoryName]) {
-			clearTimeout(quickAddInstructionSaveTimers[categoryName])
-			delete quickAddInstructionSaveTimers[categoryName]
-		}
+		const savedValue = buildQuickAddAiInstructionDefaults()[categoryName] || ''
+		if (String(nextValue) === savedValue) return
 		setCategoryAiInstruction(categoryName, nextValue)
 
 		const nextPerAnswerMap = {
@@ -4598,10 +4577,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 
 		// Persist assignment-level instruction edits before switching student context
 		try {
-			Object.keys(quickAddInstructionSaveTimers).forEach(key => {
-				clearTimeout(quickAddInstructionSaveTimers[key])
-				delete quickAddInstructionSaveTimers[key]
-			})
 			syncCurrentAssessmentAiInstructionsFromQuickAdd()
 			await saveAssessmentData({ force: true, skipSelections: true })
 		} catch (error) {
@@ -9736,7 +9711,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																value={quickAddAiInstructions[group.category] || ''}
 																oninput={(e) => {
 																	setCategoryAiInstruction(group.category, e.currentTarget.value)
-																	schedulePersistCategoryAiInstruction(group.category)
 																}}
 																onblur={() => persistCategoryAiInstruction(group.category)}
 															></textarea>
