@@ -1,3 +1,4 @@
+import JSZip from 'jszip'
 import { test, expect } from '@playwright/test'
 
 async function openMarking(page, awardedMark, delayed = false, fixed = false, judgement = 'Evidence assessed against the rubric.') {
@@ -321,4 +322,35 @@ test('clear marks confirms and keeps comment drafts unchanged', async ({ page })
     await page.setViewportSize({ width, height: 900 })
     await clear.locator('..').screenshot({ path: `/tmp/clear-student-boxes-${width}.png` })
   }
+})
+
+test('student PPTX upload reads slide order, tables, notes and images', async ({ page }) => {
+  const { requestReceived } = await openMarking(page, 8)
+  const zip = new JSZip()
+  const ns = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+  zip.file('ppt/presentation.xml', `<p:presentation xmlns:p="urn:p" xmlns:r="${ns}"><p:sldIdLst><p:sldId r:id="second"/><p:sldId r:id="first"/></p:sldIdLst></p:presentation>`)
+  zip.file('ppt/_rels/presentation.xml.rels', `<Relationships><Relationship Id="first" Type="${ns}/slide" Target="slides/slide1.xml"/><Relationship Id="second" Type="${ns}/slide" Target="slides/slide2.xml"/></Relationships>`)
+  const slide = text => `<p:sld xmlns:p="urn:p" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:p><a:r><a:t>${text}</a:t></a:r></a:p></p:sld>`
+  zip.file('ppt/slides/slide1.xml', slide('Final slide evidence'))
+  zip.file('ppt/slides/slide2.xml', slide('First slide evidence').replace('</p:sld>', '<a:tbl><a:tr><a:tc><a:p><a:r><a:t>Table cell evidence</a:t></a:r></a:p></a:tc></a:tr></a:tbl></p:sld>'))
+  zip.file('ppt/slides/_rels/slide2.xml.rels', `<Relationships><Relationship Id="notes" Type="${ns}/notesSlide" Target="../notesSlides/notesSlide2.xml"/><Relationship Id="image" Type="${ns}/image" Target="../media/image1.png"/></Relationships>`)
+  zip.file('ppt/notesSlides/notesSlide2.xml', slide('Speaker note evidence'))
+  zip.file('ppt/media/image1.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', { base64: true })
+  await expect(page.locator('#studentDocumentUpload')).toHaveAttribute('accept', /\.pptx/)
+  await page.locator('#studentDocumentUpload').setInputFiles({
+    name: 'evidence.pptx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    buffer: await zip.generateAsync({ type: 'nodebuffer' })
+  })
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('student-evaluation-student-a'))?.studentSubmissionDocuments?.[0])
+  await expect.poll(async () => (await read())?.extractedText).toContain('Speaker note evidence')
+  const document = await read()
+  expect(document.extractedText).toContain('Table cell evidence')
+  expect(document.extractedText.indexOf('First slide evidence')).toBeLessThan(document.extractedText.indexOf('Final slide evidence'))
+  expect(document.images).toHaveLength(1)
+  expect(document.images[0].mimeType).toBe('image/png')
+  expect(document.extractionError).toBeUndefined()
+  await page.getByRole('button', { name: 'Assign marks for Safety', exact: true }).click()
+  const request = await requestReceived
+  expect(JSON.stringify(request.messages)).toContain('Final slide evidence')
+  expect(JSON.stringify(request.messages)).toContain('Speaker note evidence')
 })

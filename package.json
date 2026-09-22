@@ -26,6 +26,7 @@
     "bootstrap": "^5.3.8",
     "docx-preview": "^0.4.0",
     "jspdf": "^3.0.2",
+    "jszip": "^3.10.2",
     "mammoth": "^1.12.0",
     "pdfjs-dist": "^5.5.207",
     "sveltestrap": "^5.11.3",

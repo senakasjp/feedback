@@ -2285,7 +2285,7 @@
 		// DOCX/TXT/etc instead, where extraction is exhaustive.
 		const pdfFiles = files.filter(file => file.name?.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf')
 		if (pdfFiles.length > 0) {
-			showSuccessNotification(`⚠️ PDF uploads are not supported for student submissions - please use DOCX, TXT, MD, HTML, CSV, or JSON instead. Skipped: ${pdfFiles.map(file => file.name).join(', ')}`)
+			showSuccessNotification(`⚠️ PDF uploads are not supported for student submissions - please use DOCX, PPTX, TXT, MD, HTML, CSV, or JSON instead. Skipped: ${pdfFiles.map(file => file.name).join(', ')}`)
 		}
 		const nonPdfFiles = files.filter(file => !pdfFiles.includes(file))
 		if (nonPdfFiles.length === 0) {
@@ -8968,7 +8968,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																id="studentDocumentUpload"
 																type="file"
 																class="form-control form-control-sm"
-																accept=".docx,.txt,.md,.html,.htm,.csv,.json"
+																accept=".docx,.pptx,.txt,.md,.html,.htm,.csv,.json"
 														multiple
 														onchange={handleStudentSubmissionUpload}
 														disabled={!currentStudentId || uploadingStudentDocument}

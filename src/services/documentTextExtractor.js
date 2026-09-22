@@ -211,11 +211,16 @@ export async function extractTextFromFile(file) {
     return extractTextFromDocx(file)
   }
 
+  if (extension === 'pptx' || file?.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+    const { extractTextFromPptx } = await import('./pptxTextExtractor.js')
+    return extractTextFromPptx(await readFileAsArrayBuffer(file), downscaleImageIfNeeded)
+  }
+
   if (TEXT_FILE_EXTENSIONS.has(extension) || String(file?.type || '').startsWith('text/')) {
     return extractTextFromTextFile(file, extension)
   }
 
-  throw new Error(`Unsupported file type for ${file?.name || 'upload'}. Use PDF, DOCX, TXT, MD, HTML, CSV, or JSON.`)
+  throw new Error(`Unsupported file type for ${file?.name || 'upload'}. Use PDF, DOCX, PPTX, TXT, MD, HTML, CSV, or JSON.`)
 }
 
 export function createUploadedDocumentRecord({ file, extractedText, images = [], docxBase64 = '', documentType, scope = 'assessment' }) {
