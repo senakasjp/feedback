@@ -113,3 +113,11 @@ In the Paragraphs panel, show “Category mark setup” only when no student is 
 Student actions show the recommended sequence: **1. Assign marks to all headings**, then **2. Improve all with RAG**. Preserve numbering during progress, existing disabled states and the separate danger action for deleting comments. RAG helper text explains that comments use allocated marks, saved rationale, the rubric and the full submission.
 
 Verified with headless browser checks at 375px, 768px and 1280px in light/dark themes. Native packaging, installation in Applications and launch were also verified.
+
+## Draft editing and clearing controls (22 September 2026)
+
+Per-answer instructions update local draft state while typing and persist on blur. Remove timed typing saves; unchanged values skip persistence. Explicit Save and Collapse remain available.
+
+Saving student data with unfinished paragraphs requires confirmation. Confirm saves marks, existing paragraphs and quick-add drafts without adding drafts to feedback. Keep the student selected and text boxes intact. An open paragraph edit remains unsaved and must be saved separately. Cancel leaves the editing session unchanged.
+
+Use separate danger actions named “Clear all RAG comments text boxes” and “Clear all marks input boxes.” Both ask for confirmation. Clearing comments empties quick-add drafts, preserving saved paragraphs. Clearing marks removes awarded category marks and their rationales, preserving comments, paragraph selections and category maxima. The marks action is disabled during marking or RAG generation; Save Student Data persists the cleared values.

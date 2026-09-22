@@ -1,5 +1,9 @@
 # Changelog
 
+> **Improved (22 Sep 2026):** Per-answer instructions save on blur instead of a typing timer, with unchanged saves skipped. Save Student Data now allows unfinished paragraphs after confirmation, preserving quick-add drafts and keeping the student selected.
+
+> **New (22 Sep 2026):** Renamed the draft-clearing action to “Clear all RAG comments text boxes” and added “Clear all marks input boxes,” which confirms before clearing awarded marks and their rationales without changing feedback.
+
 > **Improved (22 Sep 2026):** Assessment cards retain saved insertion order, placing new cards after existing ones. Category mark setup now has a matching panel and is hidden while a student is selected. Student actions are numbered: 1. Assign marks, 2. Improve all with RAG.
 
 > **Improved (22 Sep 2026):** RAG feedback and prompt preview include the allocated mark, category maximum and saved rationale. Feedback explains the existing grading decision using the full submission and rubric, with instructions to preserve the score and flag conflicting evidence.
