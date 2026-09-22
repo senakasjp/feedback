@@ -2543,12 +2543,19 @@
 	function deleteAllStudentRagComments() {
 		const groups = getGroupedParagraphs()
 		if (!groups.length) return
-		if (!confirm('Delete the draft comment for every category for this student? This cannot be undone.')) return
+		if (!confirm('Clear all RAG comments text boxes for this student? Saved feedback paragraphs will stay unchanged. This cannot be undone.')) return
 
 		groups.forEach(group => {
 			quickAddText = { ...quickAddText, [group.category]: '' }
 			aiImprovedText = { ...aiImprovedText, [group.category]: false }
 		})
+	}
+
+	function clearAllStudentMarks() {
+		if (!currentStudentId || assigningMarkCategory || improvingAllWithRag) return
+		if (!confirm('Clear all marks input boxes for this student? The associated mark rationales will also be cleared. Feedback paragraphs and comment text boxes will stay unchanged. Save Student Data to keep this change.')) return
+		categoryMarks = {}
+		categoryMarkJustification = {}
 	}
 
 	// Fill the main "New paragraph" box from the existing color-banded master template for this
@@ -4706,31 +4713,13 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	async function saveStudentEvaluation() {
 		if (!currentStudentId || !currentAssessmentId) return
 
-		if (hasPendingParagraphEdit()) {
-			highlightEditingParagraphSaveWarning()
-			showSuccessNotification('⚠️ Cannot save while a paragraph is being edited. Save or cancel that paragraph first.')
-			return
-		}
-
-		// STRICT SAVING CRITERIA 2: Only save to Student if student IS selected
-		console.log('STRICT SAVING CRITERIA: Saving to student file - student selected')
-
-		// STRICT VALIDATION: Ensure student is actually selected
-		if (!currentStudentId) {
-			console.log('STRICT SAVING CRITERIA: Cannot save student data when no student is selected')
-			return
-		}
-
-		// Check for unentered text in quick-add textareas
-		const hasUnenteredText = Object.values(quickAddText).some(text => text && text.trim() !== '')
-		if (hasUnenteredText) {
-			showSuccessNotification('⚠️ Cannot save - you have unentered text in the "Add paragraph" field. Please click "Add paragraph" button or clear the text first.')
-			return
-		}
+		const hasUnsavedParagraphs = hasPendingParagraphEdit() || newParagraph.trim() !== '' ||
+			Object.values(quickAddText).some(text => text && text.trim() !== '')
+		if (hasUnsavedParagraphs && !confirm('Save student data without adding all paragraphs? Marks and existing paragraphs will be saved. Quick-add text will be kept as drafts, not added to the feedback. Any open paragraph edit will remain unsaved. The student will stay selected so you can continue editing.')) return
 
 		try {
 			// Ensure per-answer instructions are persisted to assignment when saving student data
-			await saveAssessmentData({ force: true, skipSelections: true })
+			if (!hasPendingParagraphEdit()) await saveAssessmentData({ force: true, skipSelections: true })
 
 			if (!Array.isArray(students)) {
 				console.error('Students state is invalid during save:', students)
@@ -4759,8 +4748,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			const saveSucceeded = await persistCurrentStudentEvaluationData()
 
 			if (saveSucceeded) {
-				showSuccessNotification(getMotivationalMessage('student'))
-				await handleStudentSaveCompletion()
+				showSuccessNotification(hasUnsavedParagraphs ? 'Student data saved. Unfinished paragraphs remain available for editing.' : getMotivationalMessage('student'))
+				if (!hasUnsavedParagraphs) await handleStudentSaveCompletion()
 			}
 		} catch (error) {
 			console.error('Failed to save student evaluation:', error)
@@ -9117,10 +9106,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														class="btn btn-outline-danger btn-sm ms-2"
 														onclick={deleteAllStudentRagComments}
 													>
-														<i class="bi bi-trash me-1"></i>Delete all student RAG comments
+														<i class="bi bi-trash me-1" aria-hidden="true"></i>Clear all RAG comments text boxes
+													</button>
+
+													<button type="button" class="btn btn-outline-danger btn-sm ms-2"
+														onclick={clearAllStudentMarks}
+														disabled={Boolean(assigningMarkCategory) || improvingAllWithRag || Object.values(improvingTextWithRag).some(Boolean)}>
+														<i class="bi bi-eraser me-1" aria-hidden="true"></i>Clear all marks input boxes
 													</button>
 													<div class="small text-muted mt-2 mb-0">
-														Runs "Improve with RAG" for every category in turn, generating comments from the allocated marks, saved rationale, rubric and this student's submission. Delete clears every category's draft comment for this student.
+														Runs "Improve with RAG" for every category in turn, generating comments from the allocated marks, saved rationale, rubric and this student's submission. Clear comments empties the draft text boxes. Clear marks empties awarded marks and their rationales.
 													</div>
 												{:else}
 													<button

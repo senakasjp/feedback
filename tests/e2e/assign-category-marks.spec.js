@@ -282,3 +282,43 @@ test('RAG comment request includes allocated zero mark and saved rationale', asy
   await expect(card.locator('textarea').first()).toHaveValue(/The evidence does not meet/)
   await expect(page.getByRole('spinbutton', { name: 'Marks for Safety', exact: true })).toHaveValue('0')
 })
+
+test('student save confirms unfinished paragraphs and preserves drafts', async ({ page }) => {
+  await openMarking(page, 8)
+  const draft = page.locator('#quick-add-Safety')
+  await draft.fill('Unfinished feedback draft')
+  const save = page.locator('.app-sidebar-column').getByRole('button', { name: /Save Student Data/ })
+  page.once('dialog', async dialog => {
+    expect(dialog.message()).toContain('without adding all paragraphs')
+    await dialog.dismiss()
+  })
+  await save.click()
+  await expect(draft).toHaveValue('Unfinished feedback draft')
+  page.once('dialog', dialog => dialog.accept())
+  await save.click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('student-evaluation-student-a'))?.quickAddText?.Safety)).toBe('Unfinished feedback draft')
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('student-evaluation-student-a')))
+  expect(saved.paragraphs.some(p => p.text.includes('Unfinished feedback draft'))).toBe(false)
+  await expect(draft).toHaveValue('Unfinished feedback draft')
+})
+
+test('clear marks confirms and keeps comment drafts unchanged', async ({ page }) => {
+  await openMarking(page, 8)
+  const mark = page.getByRole('spinbutton', { name: 'Marks for Safety', exact: true })
+  await mark.fill('8')
+  const draft = page.locator('#quick-add-Safety')
+  await draft.fill('Keep this draft')
+  const clear = page.getByRole('button', { name: 'Clear all marks input boxes', exact: true })
+  page.once('dialog', dialog => dialog.dismiss())
+  await clear.click()
+  await expect(mark).toHaveValue('8')
+  page.once('dialog', dialog => dialog.accept())
+  await clear.click()
+  await expect(mark).toHaveValue('')
+  await expect(draft).toHaveValue('Keep this draft')
+  await expect(page.getByRole('button', { name: 'Clear all RAG comments text boxes', exact: true })).toBeVisible()
+  for (const width of [375, 1280]) {
+    await page.setViewportSize({ width, height: 900 })
+    await clear.locator('..').screenshot({ path: `/tmp/clear-student-boxes-${width}.png` })
+  }
+})
