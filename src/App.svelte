@@ -2464,7 +2464,15 @@
 		return { assessmentForAi, vectorIndex }
 	}
 
-	async function improveTextWithRag(categoryName) {
+	// Yes/No before a RAG run for a student with no submission text and no uploaded files -
+	// otherwise the model writes feedback with nothing to assess ("no visible evidence...").
+	function confirmRunWithoutStudentSubmission() {
+		if (!currentStudentId) return true
+		if (studentSubmissionText.trim() || getSafeStudentSubmissionDocuments().length > 0) return true
+		return confirm('This student has no submission text or uploaded materials. The AI will have no student evidence to assess.\n\nContinue anyway?')
+	}
+
+	async function improveTextWithRag(categoryName, { skipSubmissionCheck = false } = {}) {
 		const shortText = stripHtmlTags((quickAddText[categoryName] || '').trim())
 		const answerInstructions = getCombinedAnswerInstructions(categoryName)
 
@@ -2472,6 +2480,8 @@
 			showSuccessNotification(`⚠️ ${getCurrentAiProviderLabel()} API key is not configured. Please add your API key to the .env file.`)
 			return
 		}
+
+		if (!skipSubmissionCheck && !confirmRunWithoutStudentSubmission()) return
 
 		improvingTextWithRag = { ...improvingTextWithRag, [categoryName]: true }
 
@@ -2524,10 +2534,11 @@
 	// Run improveTextWithRag for every category in turn, for the currently selected student -
 	// same per-category action as the "Improve with RAG" button, just looped across the assessment.
 	async function improveAllCategoriesWithRag() {
+		if (!confirmRunWithoutStudentSubmission()) return
 		improvingAllWithRag = true
 		try {
 			for (const category of currentAssessment?.categories || []) {
-				await improveTextWithRag(category.name)
+				await improveTextWithRag(category.name, { skipSubmissionCheck: true })
 			}
 		} finally {
 			improvingAllWithRag = false
@@ -2536,19 +2547,14 @@
 
 	// Clear the draft comment box for every category, for the currently selected student -
 	// the undo for "Improve all with RAG" (or any typed/improved draft) before it's saved as a paragraph.
-	// Keys off getGroupedParagraphs()'s own `group.category` (not currentAssessment.categories[].name) -
-	// the textarea reads quickAddText[group.category], and that key can differ from the canonical
-	// category name (e.g. parsed-from-text formatting of an "(LO1)"-style suffix), which silently left
-	// the visible textarea uncleared.
+	// Wipes every key, not a per-category list: drafts are written under both group.category (textarea)
+	// and currentAssessment.categories[].name (Improve all), which can differ (e.g. an "(LO1)"-style
+	// suffix), and clearing only one set left visible textareas uncleared.
 	function deleteAllStudentRagComments() {
-		const groups = getGroupedParagraphs()
-		if (!groups.length) return
 		if (!confirm('Clear all RAG comments text boxes for this student? Saved feedback paragraphs will stay unchanged. This cannot be undone.')) return
 
-		groups.forEach(group => {
-			quickAddText = { ...quickAddText, [group.category]: '' }
-			aiImprovedText = { ...aiImprovedText, [group.category]: false }
-		})
+		quickAddText = {}
+		aiImprovedText = {}
 	}
 
 	function clearAllStudentMarks() {

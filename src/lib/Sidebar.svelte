@@ -225,7 +225,7 @@
 											{/if}
 										{#if currentStudentId && studentName}
 											<div class="mb-2">
-												Student: {getStudentFirstName(studentName)}
+												Student: <strong class="text-danger">{getStudentFirstName(studentName)}</strong>
 											</div>
 											{:else if currentStudentId}
 												<div class="mb-2 text-muted">
