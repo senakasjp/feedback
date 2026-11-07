@@ -457,8 +457,14 @@ function applyCategoryPriority(rankedChunks = [], categoryName = '') {
   }
 }
 
+// Standing rigor rule for every marking/feedback prompt: without it, models tend to reward topical
+// coverage (right metrics named, well-linked to safety) over whether the task's actual evidentiary
+// bar was met, so a response full of unverified self-proposed figures and shaky citations scores as
+// "mostly correct" instead of "criterion not satisfied" - the exact gap a human reviewer wouldn't miss.
+const RIGOR_SYSTEM_INSTRUCTION = 'Assess task compliance, not just topical relevance. If a task requires calculations, measurements, or published results and the response only offers self-proposed or hypothetical target values, treat that requirement as unmet regardless of how well the response otherwise identifies or discusses the topic. A citation must actually support the specific claim it is attached to, and a reference that cannot be verified counts against the response. Reserve the top marking band for requirements actually satisfied with evidence, not merely described, planned, or asserted.'
+
 function buildSystemMessages(globalSystemInstructions = '', baseSystemPrompt = '') {
-  const messages = []
+  const messages = [{ role: 'system', content: RIGOR_SYSTEM_INSTRUCTION }]
 
   const basePrompt = normaliseWhitespace(baseSystemPrompt)
   if (basePrompt) {
