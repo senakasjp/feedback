@@ -1,6 +1,6 @@
 # Feedback Manager
 
-Tauri 2 + Svelte 5 desktop app (v3.3.4) for student feedback, AI-assisted marking, and PDF/HTML reports. Uses Bootstrap, jsPDF, mammoth, PDF.js, and Tesseract.
+Tauri 2 + Svelte 5 desktop app (v3.3.5) for student feedback, AI-assisted marking, and PDF/HTML reports. Uses Bootstrap, jsPDF, mammoth, PDF.js, and Tesseract.
 
 ## Check the version first
 
@@ -15,6 +15,9 @@ Tauri 2 + Svelte 5 desktop app (v3.3.4) for student feedback, AI-assisted markin
 - `src/lib/Sidebar.svelte`, `SubjectManager.svelte`, `AssessmentManager.svelte`: active navigation and management surfaces. Verify imports/render paths; some older components are unused.
 - `src/styles/`, `src/app.css`: styles, including dark mode. Read `DESIGN.md` for UI changes.
 - `src/services/aiMarkingService.js`, `openaiService.js`: AI providers and prompt construction.
+- `src/services/markingSkillsService.js`: reads `~/.agents/skills/senaka-marking-*/SKILL.md` and builds the skill system messages injected into every marking and paragraph prompt. See `docs/marking-skills.md`.
+- `src/services/studentMaterialsService.js`: reads `~/Documents/senaka-marking-materials/<student id>/` and fills the submission box when a student is selected. See `docs/student-materials.md`.
+- `src/services/assessmentRubricsService.js`: reads `~/Documents/senaka-marking-rubric/<assessment>/` and attaches the newest rubric as a Rubric document when an assessment opens. See `docs/assessment-rubric.md`.
 - `src/services/documentTextExtractor.js`: DOCX/PDF extraction and OCR.
 - `src-tauri/src/lib.rs`: native storage and desktop commands.
 - `CLAUDE.md`: detailed architecture and behavioral context; check facts against code.

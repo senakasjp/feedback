@@ -18,7 +18,7 @@
 	import { readDocxSource } from './utils/docxPreview.js'
 	
 	// Import utility functions
-	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags } from './utils/helpers.js'
+	import { getColorBadgeClass, getColorHex, cleanParagraphTextForDisplay, extractKnowledgeArea, getSectionOrder, generateId, ensureParagraphsHaveIds, ensureCategoriesHaveOrder, extractMainTextFromParagraph, reconstructParagraphText, stripHtmlTags, bulletiseFeedbackPoints } from './utils/helpers.js'
 	import { parseMark, validateCategoryMark, getAssessmentMaximum, getMarkSummary, getMarkBands, getGradeInfo, DEFAULT_MARK_RANGES } from './utils/markingRules.js'
 	import { extractMarkSuggestion } from './utils/aiMarkSuggestion.js'
 	import { normalizeCategoryLabel, resolveRubricCategory } from './utils/rubricCategoryMatching.js'
@@ -26,16 +26,20 @@
 	import { isRubricHeaderRow, getRubricTableGrid, getRubricColumnHeaders } from './utils/rubricTable.js'
 	import { getAssessmentForMarking, getRubricCategoryMarks, isRubricSummaryRow } from './utils/rubricMarks.js'
 	import { getMotivationalMessage } from './utils/motivationalMessages.js'
+	import { findReportGuardrailIssues, describeGuardrailBlock, loadSpellChecker } from './utils/reportGuardrail.js'
 	import { debugInfo, debugLog, isVerboseDebugEnabled } from './utils/debug.js'
 	
 	// Import data services
 	import { studentsService } from './services/dataService.js'
 	import { buildImproveEnglishPromptPreview, improveEnglish, isOpenAIConfigured, transcribeAudioBlob } from './services/openaiService.js'
-	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, generateEvidenceCheckReport, generateStructuredMarkingDraft, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
+	import { buildAssessmentVectorIndex, buildImproveFeedbackWithRagPromptPreview, canBuildAssessmentVectorIndex, generateEvidenceCheckReport, generateStructuredMarkingDraft, improveFeedbackWithRag, isAssessmentVectorIndexCurrent } from './services/aiMarkingService.js'
 	import { assignCategoryMark } from './services/categoryMarkingService.js'
 	import { AI_CHAT_MODEL_OPTIONS, AI_PROVIDER_OPTIONS, AI_REASONING_EFFORT_OPTIONS, DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_REASONING_EFFORT, getAiModelLabel, getModelsForProvider, getProviderForModel, getReasoningEffortLabel, getSupportedReasoningEfforts, sanitizeAiChatModel, sanitizeAiProvider, sanitizeReasoningEffort } from './services/aiModelService.js'
 	import { getProvider as getLlmProvider, getStoredApiKey, isProviderConfigured, setStoredApiKey } from './services/llmProviders.js'
 	import { createUploadedDocumentRecord, extractTextFromFile, getSupportedUploadLabel } from './services/documentTextExtractor.js'
+	import { listMarkingSkills, MARKING_SKILLS_FOLDER } from './services/markingSkillsService.js'
+	import { readStudentMaterialReport, STUDENT_MATERIALS_FOLDER, buildStudentScriptFolderPath, getStudentMaterialsRoot } from './services/studentMaterialsService.js'
+	import { readAssessmentRubric, ASSESSMENT_RUBRICS_FOLDER, buildAssessmentRubricFolderPath, decideRubricAttachment, getAssessmentRubricsRoot, RUBRIC_DOCUMENT_TYPE, RUBRIC_SOURCE_KIND } from './services/assessmentRubricsService.js'
 	
 	// Import constants
 	import { PDR_CATEGORIES, STUDIO4_CATEGORIES, STUDIO5_CATEGORIES } from './utils/constants.js'
@@ -83,6 +87,16 @@
 	let students = $state([]) // Student management
 	let percentageRanges = $state([]) // Percentage ranges for feedback
 	let globalAiSystemInstructions = $state('')
+	// Marking skills discovered under ~/.agents/skills/senaka-marking-*.
+	// markingSkillSelection === null means "all discovered skills are on".
+	let markingSkills = $state([])
+	let markingSkillsRoot = $state(MARKING_SKILLS_FOLDER)
+	let markingSkillsAvailable = $state(null)
+	let markingSkillsLoading = $state(false)
+	let markingSkillsError = $state('')
+	let markingSkillSelection = $state(null)
+	let studentMaterialsRoot = $state(STUDENT_MATERIALS_FOLDER)
+	let assessmentRubricsRoot = $state(ASSESSMENT_RUBRICS_FOLDER)
 	let currentSubjectId = $state(null)
 	let currentAssessmentId = $state(null)
 	let currentSubject = $state(null)
@@ -119,7 +133,17 @@
 	let showAssessmentHtml = $state(false)
 	let lockPdfPortrait = $state(false)
 	let showTotalMarksWarning = $state(false) // Show warning modal
-	let categoryWarnings = $state({}) // Store per-category warning state (missing paragraphs/marks)
+	let showReportGuardrailModal = $state(false) // Report blocked because assessor notes or AI wording were found
+	let reportGuardrailFindings = $state([]) // Paragraph findings shown in the guardrail modal
+	let reportGuardrailParagraphIds = $state(new Set()) // Paragraphs highlighted in the editor
+	let reportGuardrailStatus = $state('fail') // Guardrail result shown before downloading: 'pass' or 'fail'
+	let reportGuardrailCheckedCount = $state(0) // Paragraphs checked in the last guardrail pass
+	let reportGuardrailSkippedCount = $state(0) // Findings skipped in the last guardrail pass
+	let reportGuardrailSkippedKeys = $state([]) // Skipped findings, each tied to a student, assessment and paragraph text
+	const categoryWarnings = $derived.by(() => buildCategoryWarnings())
+	const activeMarkingSkills = $derived.by(() => markingSkills.filter(skill => isMarkingSkillEnabled(skill)))
+	const enabledMarkingSkillCount = $derived.by(() => activeMarkingSkills.length)
+	const activeMarkingSkillCharacters = $derived.by(() => activeMarkingSkills.reduce((total, skill) => total + (Number(skill.characters) || 0), 0))
 	let showNotification = $state(false) // Show success notification
 	let notificationMessage = $state('') // Notification message
 	let notificationVariant = $state('success') // success | danger
@@ -928,7 +952,6 @@
 		}
 		currentAssessment.percentageRanges = ranges
 		await saveAssessmentData({ skipSelections: true })
-		refreshCategoryWarnings()
 		return true
 	}
 
@@ -1124,6 +1147,9 @@
 				students = parsed.students || []
 				percentageRanges = parsed.percentageRanges || []
 				globalAiSystemInstructions = parsed.appSettings?.aiMarkingSystemInstructions || ''
+				markingSkillSelection = Array.isArray(parsed.appSettings?.aiMarkingSkillIds)
+					? parsed.appSettings.aiMarkingSkillIds.filter(id => typeof id === 'string')
+					: null
 			}
 		} catch (error) {
 			console.log('Tauri not available, using browser storage')
@@ -1137,6 +1163,9 @@
 					students = parsed.students || []
 					percentageRanges = parsed.percentageRanges || []
 					globalAiSystemInstructions = parsed.appSettings?.aiMarkingSystemInstructions || ''
+					markingSkillSelection = Array.isArray(parsed.appSettings?.aiMarkingSkillIds)
+						? parsed.appSettings.aiMarkingSkillIds.filter(id => typeof id === 'string')
+						: null
 				}
 			} catch (localError) {
 				console.error('Failed to load from localStorage:', localError)
@@ -1161,7 +1190,8 @@
 			students,
 			percentageRanges,
 			appSettings: {
-				aiMarkingSystemInstructions: globalAiSystemInstructions.trim()
+				aiMarkingSystemInstructions: globalAiSystemInstructions.trim(),
+				aiMarkingSkillIds: markingSkillSelection
 			}
 		}
 		
@@ -1477,6 +1507,10 @@
 				console.error('Failed to load from localStorage:', localError)
 				initializeEmptyData()
 			}
+		}
+
+		if (currentAssessmentId === assessmentId) {
+			await loadAssessmentRubricFromFolder()
 		}
 	}
 	
@@ -1937,10 +1971,10 @@
 
 		try {
 			promptPreviewTitle = `Improve Prompt - ${categoryName}`
-			promptPreviewMessages = buildImproveEnglishPromptPreview(text, answerInstructions)
-			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference())
+			promptPreviewMessages = buildImproveEnglishPromptPreview(text, answerInstructions, activeMarkingSkills)
+			const result = await improveEnglish(text, answerInstructions, getCurrentAiModelPreference(), activeMarkingSkills)
 			// Strip any HTML tags that might have been introduced
-			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || ''))
+			const cleanedText = bulletiseFeedbackPoints(applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || '')))
 			quickAddText = { ...quickAddText, [categoryName]: cleanedText }
 			// Mark this text as AI-improved for styling
 			aiImprovedText = { ...aiImprovedText, [categoryName]: true }
@@ -1970,6 +2004,54 @@
 	async function persistGlobalAiSettings() {
 		await saveSubjects()
 		showSuccessNotification('Global AI system instructions saved.')
+	}
+
+	function isMarkingSkillEnabled(skill) {
+		if (!skill?.id) return false
+		if (markingSkillSelection === null) return true
+		return markingSkillSelection.includes(skill.id)
+	}
+
+	async function loadMarkingSkills({ silent = false } = {}) {
+		markingSkillsLoading = true
+		markingSkillsError = ''
+		try {
+			const listing = await listMarkingSkills()
+			markingSkills = listing.skills || []
+			markingSkillsRoot = listing.root || MARKING_SKILLS_FOLDER
+			markingSkillsAvailable = Boolean(listing.available)
+			if (listing.error) {
+				markingSkillsError = listing.error
+			}
+			if (!silent && markingSkillsAvailable && markingSkills.length === 0) {
+				showSuccessNotification(`No senaka-marking-* skills found in ${markingSkillsRoot}.`)
+			}
+		} catch (error) {
+			markingSkills = []
+			markingSkillsError = error?.message || String(error)
+		} finally {
+			markingSkillsLoading = false
+		}
+	}
+
+	async function toggleMarkingSkill(skillId) {
+		const currentIds = markingSkills.map(skill => skill.id)
+		const enabledIds = markingSkillSelection === null ? currentIds : markingSkillSelection.filter(id => currentIds.includes(id))
+
+		markingSkillSelection = enabledIds.includes(skillId)
+			? enabledIds.filter(id => id !== skillId)
+			: [...enabledIds, skillId]
+
+		await persistMarkingSkillSelection()
+	}
+
+	async function setAllMarkingSkills(enabled) {
+		markingSkillSelection = enabled ? null : []
+		await persistMarkingSkillSelection()
+	}
+
+	async function persistMarkingSkillSelection() {
+		await saveSubjects()
 	}
 
 	function getDocumentTypeLabel(value, scope = 'assessment') {
@@ -2105,6 +2187,76 @@
 		if (common) parts.push(`Assessment-wide common instructions (applies to every paragraph): ${common}`)
 		if (perCategory) parts.push(`Instructions specific to this paragraph: ${perCategory}`)
 		return parts.join('\n\n')
+	}
+
+	async function copyAssessmentRubricFolderPath() {
+		const path = buildAssessmentRubricFolderPath(currentAssessment, assessmentRubricsRoot)
+		try {
+			await navigator.clipboard.writeText(path)
+			showSuccessNotification(`📋 Rubric folder path copied: ${path}`)
+		} catch {
+			showSuccessNotification('❌ Copy failed. Select the path and copy it manually.')
+		}
+	}
+
+	async function loadAssessmentRubricFromFolder() {
+		const assessment = currentAssessment
+		const assessmentId = currentAssessmentId
+		if (!assessment || !assessmentId) return
+
+		let rubric = null
+		try {
+			rubric = await readAssessmentRubric(assessment)
+		} catch (error) {
+			console.warn('Could not read the assessment rubric:', error)
+			return
+		}
+
+		if (!rubric) return
+		if (currentAssessmentId !== assessmentId || !currentAssessment) return
+
+		const documents = Array.isArray(assessmentReferenceDocuments) ? assessmentReferenceDocuments : []
+		const { action, existing: existingRubric } = decideRubricAttachment(documents, rubric)
+
+		if (action === 'skip-manual') return
+		if (action === 'skip-unchanged') return
+
+		let extractedText = ''
+		let images = []
+		let docxBase64 = ''
+		try {
+			if (/\.docx$/i.test(rubric.name)) docxBase64 = await readDocxSource(rubric.file)
+			;({ text: extractedText, images } = await extractTextFromFile(rubric.file))
+		} catch (error) {
+			console.error('Failed to extract the assessment rubric:', error)
+			showSuccessNotification(`⚠️ Found ${rubric.name} but could not read it: ${error.message}`)
+			return
+		}
+
+		if (currentAssessmentId !== assessmentId) return
+		if (!String(extractedText || '').trim()) {
+			showSuccessNotification(`⚠️ ${rubric.name} was found but no text could be extracted.`)
+			return
+		}
+
+		const record = createUploadedDocumentRecord({
+			file: rubric.file,
+			extractedText,
+			docxBase64,
+			images,
+			documentType: RUBRIC_DOCUMENT_TYPE,
+			scope: 'assessment'
+		})
+		record.sourceKind = RUBRIC_SOURCE_KIND
+		record.sourcePath = rubric.path
+		record.sourceModifiedMs = rubric.modifiedMs
+
+		const nextDocuments = existingRubric
+			? documents.map(document => document.id === existingRubric.id ? record : document)
+			: [...documents, record]
+		updateAssessmentReferenceDocuments(nextDocuments)
+		await saveAssessmentData({ force: Boolean(currentStudentId), skipSelections: true })
+		showSuccessNotification(`📘 Loaded rubric ${rubric.name} from the rubric folder.`)
 	}
 
 	function updateAssessmentReferenceDocuments(nextDocuments) {
@@ -2451,14 +2603,31 @@
 		})
 
 		if (!indexIsCurrent) {
-			vectorIndex = await buildAssessmentVectorIndex({
-				assessment: assessmentForAi,
-				assessmentParagraphs,
-				priorEvaluations
-			})
-			assessmentVectorIndex = vectorIndex
-			currentAssessment.aiVectorIndex = vectorIndex
-			await saveAssessmentData({ force: true, skipSelections: true })
+			// Embeddings need an OpenAI key, even when marking runs on another provider. A missing key,
+			// no embeddings access, a dead network or an API refusal must not stop feedback being
+			// written: retrieval drops to the lexical path in buildAssessmentRagContext and the run
+			// continues. The success message reports the mode actually used.
+			if (!canBuildAssessmentVectorIndex()) {
+				console.info('Skipping the assessment vector index: no OpenAI key available for embeddings. Using lexical retrieval.')
+				vectorIndex = null
+				assessmentVectorIndex = null
+				return { assessmentForAi, vectorIndex }
+			}
+
+			try {
+				vectorIndex = await buildAssessmentVectorIndex({
+					assessment: assessmentForAi,
+					assessmentParagraphs,
+					priorEvaluations
+				})
+				assessmentVectorIndex = vectorIndex
+				currentAssessment.aiVectorIndex = vectorIndex
+				await saveAssessmentData({ force: true, skipSelections: true })
+			} catch (error) {
+				console.warn('Assessment vector index could not be built. Falling back to lexical retrieval:', error)
+				vectorIndex = null
+				assessmentVectorIndex = null
+			}
 		}
 
 		return { assessmentForAi, vectorIndex }
@@ -2505,7 +2674,8 @@
 				assessmentParagraphs,
 				priorEvaluations,
 				vectorIndex,
-				globalSystemInstructions: globalAiSystemInstructions
+				globalSystemInstructions: globalAiSystemInstructions,
+				markingSkills: activeMarkingSkills
 			}
 			const preview = await buildImproveFeedbackWithRagPromptPreview(ragArgs)
 			promptPreviewTitle = `RAG Prompt - ${categoryName}`
@@ -2515,7 +2685,7 @@
 				modelPreference: getCurrentAiModelPreference()
 			})
 
-			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || '').trim())
+			const cleanedText = bulletiseFeedbackPoints(applyTrailingMarksLine(categoryName, stripHtmlTags(result.improvedText || '').trim()))
 			if (!cleanedText) {
 				throw new Error('No improved feedback was returned.')
 			}
@@ -2727,10 +2897,11 @@
 				vectorIndex,
 				globalSystemInstructions: globalAiSystemInstructions,
 				answerInstructions,
+				markingSkills: activeMarkingSkills,
 				modelPreference: getCurrentAiModelPreference()
 			})
 
-			const cleanedText = applyTrailingMarksLine(categoryName, stripHtmlTags(result.reportText || '').trim())
+			const cleanedText = bulletiseFeedbackPoints(applyTrailingMarksLine(categoryName, stripHtmlTags(result.reportText || '').trim()))
 			if (!cleanedText) {
 				throw new Error('No evidence-check report was returned.')
 			}
@@ -2784,6 +2955,7 @@
 				assessment: assessmentForAi,
 				student: getCurrentStudent(),
 				globalSystemInstructions: globalAiSystemInstructions,
+				markingSkills: activeMarkingSkills,
 				studentSubmission,
 				studentSubmissionDocuments: [...getSafeStudentSubmissionDocuments()],
 				evidenceNotes,
@@ -2877,6 +3049,7 @@
 					assessment, categoryName, student: getCurrentStudent(), studentSubmission: submission,
 					studentSubmissionDocuments: documents, assessmentParagraphs,
 					globalSystemInstructions: globalAiSystemInstructions,
+					markingSkills: activeMarkingSkills,
 					answerInstructions: getCombinedAnswerInstructions(categoryName),
 					modelPreference: getCurrentAiModelPreference()
 				})
@@ -2912,7 +3085,6 @@
 			selectedParagraphs = nextSelected
 			categoryMarks = nextMarks
 			categoryMarkJustification = nextJustifications
-			refreshCategoryWarnings()
 			showSuccessNotification(`Marks assigned to ${results.length} heading${results.length === 1 ? '' : 's'} and matching colour bands selected. Review, then save student data.`)
 		} catch (error) {
 			if (isCurrent()) showSuccessNotification(`Could not assign marks: ${error.message}`)
@@ -2952,7 +3124,7 @@
 					showSuccessNotification('⚠️ Please enter some text first')
 					return
 				}
-				const messages = buildImproveEnglishPromptPreview(shortText, answerInstructions)
+				const messages = buildImproveEnglishPromptPreview(shortText, answerInstructions, activeMarkingSkills)
 				promptPreviewMessages = messages
 				promptPreviewTitle = `Improve Prompt - ${categoryName}`
 				showPromptPreviewModal = true
@@ -2978,7 +3150,8 @@
 					assessmentParagraphs,
 					priorEvaluations,
 					vectorIndex,
-					globalSystemInstructions: globalAiSystemInstructions
+					globalSystemInstructions: globalAiSystemInstructions,
+					markingSkills: activeMarkingSkills
 				})
 
 			promptPreviewMessages = preview.messages
@@ -2996,7 +3169,7 @@
 
 		aiDraftReviewItems.forEach(item => {
 			if (item.applyFeedback && item.suggested_feedback) {
-				nextQuickAddText[item.matchedCategoryName] = item.suggested_feedback
+				nextQuickAddText[item.matchedCategoryName] = bulletiseFeedbackPoints(item.suggested_feedback)
 			}
 
 			if (item.applyMark && item.awarded_mark !== null && item.awarded_mark !== undefined) {
@@ -3007,7 +3180,6 @@
 		quickAddText = nextQuickAddText
 		categoryMarks = nextCategoryMarks
 		showAiDraftReviewModal = false
-		refreshCategoryWarnings()
 		showSuccessNotification('AI draft selections applied. Review and save when ready.')
 	}
 
@@ -3056,7 +3228,6 @@
 		if (currentStudentId && !addToAssessment) {
 			saveStudentParagraphs()
 		}
-		refreshCategoryWarnings()
 	}
 
 	function applyFormattingToQuickAdd(categoryName, { openTag, closeTag }) {
@@ -3624,7 +3795,6 @@
 			}
 		}
 
-		refreshCategoryWarnings()
 	}
 
 	function persistSelectedColorMark(valueOverride = null) {
@@ -4033,10 +4203,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		if (!paragraph || !category) return null
 		const markInfo = paragraph.markInfo
 		const bandColor = markInfo?.color || paragraph.color
-		if (markInfo?.type === 'percentage' || getEffectiveMarkingMode(category) === 'percentage') {
+		if (markInfo?.type === 'percentage' || getEffectiveMarkingMode(category) !== 'fixed') {
 			const band = getColorPercentageBounds(bandColor)
 			const maximum = getCategoryAllocatedMarks(category)
-			if (band && Number.isFinite(maximum)) return {
+			if (band && Number.isFinite(maximum) && maximum > 0) return {
 				type: 'range', min: maximum * band.lower, max: maximum * band.upper,
 				upperInclusive: band.upperInclusive, color: bandColor
 			}
@@ -4129,7 +4299,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			if (!isMarkWithinExpectation(marksValue, expectation)) {
 				const expectedText = expectation.type === 'fixed'
 					? `${expectation.value} mark${expectation.value === 1 ? '' : 's'}`
-					: `${expectation.min} - ${expectation.max} marks`
+					: `${formatMarkValue(expectation.min)}–${expectation.upperInclusive === false ? '<' : ''}${formatMarkValue(expectation.max)} marks`
 				return {
 					type: 'markMismatch',
 					color: expectation.color,
@@ -4168,7 +4338,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return null
 	}
 
-	function refreshCategoryWarnings() {
+	function buildCategoryWarnings() {
 		const categoriesToCheck = new Set(Object.keys(categoryMarks))
 		if (currentAssessment?.categories) {
 			currentAssessment.categories.forEach(cat => categoriesToCheck.add(cat.name))
@@ -4182,7 +4352,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			}
 		})
 
-		categoryWarnings = nextWarnings
+		return nextWarnings
 	}
 
 	// AI feedback text (Improve with AI/RAG, Reports Check) sometimes ends with an assessor-requested
@@ -4220,7 +4390,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			candidateIds.forEach(id => nextSelected.delete(id))
 			nextSelected.add(matchingParagraph.id)
 			selectedParagraphs = nextSelected
-			refreshCategoryWarnings()
 		}
 
 		saveAssessmentData()
@@ -4238,7 +4407,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		if (result.value === null) delete next[category]
 		else next[category] = result.value
 		categoryMarks = next
-		refreshCategoryWarnings()
 		saveAssessmentData()
 		return true
 	}
@@ -4267,7 +4435,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				}
 			}
 		}
-		refreshCategoryWarnings()
 	}
 
 	function getCategoryAllocatedMarks(categoryName) {
@@ -4487,7 +4654,8 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			students,
 			percentageRanges,
 			appSettings: {
-				aiMarkingSystemInstructions: globalAiSystemInstructions.trim()
+				aiMarkingSystemInstructions: globalAiSystemInstructions.trim(),
+				aiMarkingSkillIds: markingSkillSelection
 			}
 		}
 		try {
@@ -4574,6 +4742,59 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		setTimeout(() => { showNotification = false }, 3000)
 	}
 
+	async function copyStudentScriptFolderPath() {
+		const path = buildStudentScriptFolderPath(getCurrentStudent(), studentMaterialsRoot)
+		try {
+			await navigator.clipboard.writeText(path)
+			showSuccessNotification(`📋 Script folder path copied: ${path}`)
+		} catch {
+			showSuccessNotification('❌ Copy failed. Select the path and copy it manually.')
+		}
+	}
+
+	async function loadStudentMaterialReport(student) {
+		if (!student || !currentStudentId) return
+
+		const requestStudentId = currentStudentId
+		const requestAssessmentId = currentAssessmentId
+
+		let report = null
+		try {
+			report = await readStudentMaterialReport(student)
+		} catch (error) {
+			console.warn('Could not read the student material report:', error)
+			showSuccessNotification(`⚠️ Could not read the report for ${getStudentFullNameLabel(student)}: ${error.message}`)
+			return
+		}
+
+		if (!report) return
+		if (currentStudentId !== requestStudentId || currentAssessmentId !== requestAssessmentId) return
+
+		if (String(studentSubmissionText || '').trim()) {
+			showSuccessNotification(`ℹ️ Found ${report.name}, but the submission box already has text. Nothing was replaced.`)
+			return
+		}
+
+		try {
+			const { text } = await extractTextFromFile(report.file)
+			const cleanText = String(text || '').trim()
+
+			if (currentStudentId !== requestStudentId || currentAssessmentId !== requestAssessmentId) return
+			if (String(studentSubmissionText || '').trim()) return
+
+			if (!cleanText) {
+				showSuccessNotification(`⚠️ ${report.name} was found but no text could be extracted. Try a DOCX, PDF, TXT, MD or PPTX file.`)
+				return
+			}
+
+			studentSubmissionText = cleanText
+			showSuccessNotification(`📄 Loaded ${report.name} for ${getStudentFullNameLabel(student)}. Save student data to keep it.`)
+		} catch (error) {
+			console.error('Failed to extract the student material report:', error)
+			showSuccessNotification(`⚠️ Could not read ${report.name}: ${error.message}`)
+		}
+	}
+
 	async function selectStudent(studentId) {
 		categoryMarkRequestId += 1
 		assigningMarkCategory = ''
@@ -4624,6 +4845,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			// STRICT FILTER: Only load student evaluation data for the current assessment
 			console.log(`STRICT FILTER: Selecting student ${studentId} for assessment ${currentAssessmentId}`)
 			await loadStudentEvaluation()
+			await loadStudentMaterialReport(student)
 			quickAddAiInstructions = buildQuickAddAiInstructionDefaults()
 			quickAddIncludeCommonPrompt = buildQuickAddIncludeCommonPromptDefaults()
 		} else {
@@ -5733,7 +5955,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			selected: Array.from(selectedParagraphs)
 		})
 		
-		refreshCategoryWarnings()
 		
 		saveAssessmentData()
 	}
@@ -5752,7 +5973,6 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			selectedParagraphs = new Set(selectedParagraphs) // trigger reactivity
 		}
 		
-		refreshCategoryWarnings()
 		
 		// Save assignment data (without the deleted paragraph)
 		saveAssessmentData()
@@ -6088,7 +6308,10 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		return -1
 	}
 
-	function getSelectedTextInVisualOrder(options = {}) {
+	// Builds the report content in the same visual order as the UI. Each entry keeps its
+	// paragraph id and category, so the report guardrail can name the paragraph that failed
+	// instead of pointing at the whole report.
+	function buildSelectedReportEntries(options = {}) {
 		const skipParagraphIds = options?.skipParagraphIds instanceof Set ? options.skipParagraphIds : null
 		const hideHeaderMarks = Boolean(options?.hideHeaderMarks)
 		const normalizeContentForPdf = (value) => {
@@ -6105,14 +6328,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				.trim()
 			return text
 		}
-		console.log('🔍 DEBUG getSelectedTextInVisualOrder:', {
+		console.log('🔍 DEBUG buildSelectedReportEntries:', {
 			selectedParagraphs: Array.from(selectedParagraphs),
 			selectedCount: selectedParagraphs.size,
 			totalParagraphs: paragraphs.length
 		})
 		
 		// Use the EXACT same order as the UI display (getGroupedParagraphs)
-		const result = []
+		const entries = []
 		const processedCategories = new Set()
 		
 		console.log('🔍 Processing groups in UI order:')
@@ -6175,31 +6398,47 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						
 						// Add category header if this is the first time we see this category
 						if (!processedCategories.has(categoryName)) {
-							if (result.length > 0) {
-								result.push('')
+							if (entries.length > 0) {
+								entries.push({ type: 'blank', category: categoryName, text: '' })
 							}
 							const categoryMarksValue = categoryMarks[categoryName] || 0
 							const marksText = (!hideHeaderMarks && hasMarksValue(categoryMarks[categoryName])) ? ` [${categoryMarksValue} MARKS]` : ''
-							result.push(`${categoryName}:${marksText}`)
+							entries.push({ type: 'category', category: categoryName, text: `${categoryName}:${marksText}` })
 							processedCategories.add(categoryName)
 							console.log(`    📝 Added category header: ${categoryName}`)
 						}
 						
 						// Add the content (no knowledge area headings)
-						result.push(content)
+						entries.push({ type: 'paragraph', category: categoryName, paragraphId: paragraphObj.id, text: content })
 						console.log(`    📝 Added content: "${content.substring(0, 50)}..."`)
 					}
 				})
 			})
 		})
 		
-		const finalText = result.join('\n')
+		return entries
+	}
+
+	function getSelectedTextInVisualOrder(options = {}) {
+		const finalText = buildSelectedReportEntries(options).map(entry => entry.text).join('\n')
 		console.log('🔍 getSelectedTextInVisualOrder result:', {
 			length: finalText.length,
 			text: finalText.substring(0, 200) + (finalText.length > 200 ? '...' : '')
 		})
 
 		return finalText
+	}
+
+	// Paragraphs in the exact order and wording the PDF will print, numbered from 1.
+	function getSelectedReportParagraphs(options = {}) {
+		return buildSelectedReportEntries(options)
+			.filter(entry => entry.type === 'paragraph')
+			.map((entry, index) => ({
+				number: index + 1,
+				id: entry.paragraphId,
+				category: entry.category,
+				text: entry.text
+			}))
 	}
 
 	const HTML2CANVAS_RASTER_SCALE = 2
@@ -6632,6 +6871,55 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const htmlContent = normalizeHtmlQuotes(String(selectedHtmlText || '')).trim()
 		if (!htmlContent) return startY
 
+		// Point form for the formatted path too: the feedback arrives as flat lines where each
+		// category heading ends with ":" and every following line is one feedback point. Rebuild
+		// that structure as a heading plus a bullet list so both export paths look the same.
+		const buildPointFormHtml = (value) => {
+			const escapeText = (text) => String(text || '')
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+			const flattened = String(value || '')
+				.replace(/<\/(p|div|li)>/gi, '\n')
+				.replace(/<(p|div|li)\b[^>]*>/gi, '\n')
+				.replace(/<\/?(ul|ol)\b[^>]*>/gi, '')
+			const lines = flattened.split('\n')
+			const out = []
+			let listOpen = false
+			const closeList = () => {
+				if (listOpen) {
+					out.push('</ul>')
+					listOpen = false
+				}
+			}
+			lines.forEach((rawLine) => {
+				const plain = rawLine
+					.replace(/<br\s*\/?>/gi, ' ')
+					.replace(/<[^>]*>/g, '')
+					.replace(/&nbsp;/gi, ' ')
+					.replace(/&amp;/gi, '&')
+					.trim()
+				if (!plain) {
+					closeList()
+					return
+				}
+				const isHeading = /^(.+?):(?:\s*\[(.+?)\])?$/.test(plain)
+				if (isHeading) {
+					closeList()
+					out.push(`<p class="pdf-point-heading">${escapeText(plain)}</p>`)
+					return
+				}
+				if (!listOpen) {
+					out.push('<ul class="pdf-points">')
+					listOpen = true
+				}
+				const contentHtml = rawLine.trim().replace(/^(?:[•▪◦‣·*]+|[-–—])\s+/, '')
+				out.push(`<li>${contentHtml}</li>`)
+			})
+			closeList()
+			return out.join('')
+		}
+
 		const pageHeight = doc.internal.pageSize.getHeight()
 		const pxPerMm = 96 / 25.4
 		const maxContentWidthMm = pageWidth - (margin * 2)
@@ -6652,13 +6940,17 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		container.style.color = '#000000'
 		container.style.backgroundColor = '#ffffff'
 		container.style.padding = '0'
-		container.innerHTML = htmlContent.replace(/\n/g, '<br/>')
+		container.innerHTML = buildPointFormHtml(htmlContent)
 
 		const styleElement = document.createElement('style')
 		styleElement.textContent = `
 			.pdf-feedback-html { width: 100%; box-sizing: border-box; font-size: 10pt; color: #000; background: #fff; }
 			.pdf-feedback-html p { margin: 0; line-height: 1.35; }
 			.pdf-feedback-html br { line-height: 1.35; }
+			.pdf-feedback-html .pdf-point-heading { font-weight: 700; margin: 12px 0 4px 0; }
+			.pdf-feedback-html .pdf-point-heading:first-child { margin-top: 0; }
+			.pdf-feedback-html ul.pdf-points { margin: 0 0 4px 0; padding-left: 18px; list-style: disc outside; }
+			.pdf-feedback-html ul.pdf-points li { margin: 0 0 5px 0; padding-left: 2px; line-height: 1.35; }
 		`
 		container.prepend(styleElement)
 		document.body.appendChild(container)
@@ -6926,6 +7218,19 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold')
 		}
 
+		// Skips one guardrail finding at a time. The download continues only when
+		// nothing is left, so the first press on a two-item report shows one item.
+		function skipReportGuardrailFinding() {
+			const next = reportGuardrailFindings[0]
+			if (!next) return
+			if (!reportGuardrailSkippedKeys.includes(next.key)) {
+				reportGuardrailSkippedKeys = [...reportGuardrailSkippedKeys, next.key]
+			}
+			addAppLog('warn', 'Report guardrail:', `Skipped paragraph ${next.paragraphNumber} (${next.label}).`)
+			showReportGuardrailModal = false
+			void generatePDF()
+		}
+
 		async function generatePDF() {
 			console.log('📄 generatePDF called')
 
@@ -6958,18 +7263,54 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 				showSuccessNotification('ℹ️ PDF generation cancelled - no paragraphs selected or text is empty. Please select paragraphs first.')
 				return
 			}
-			
-			// Check for marks warning: category marks > 0 but total marks is 0 or empty
+
+			// A mark problem must not stop the feedback report from downloading. The report is
+			// written feedback first; a mismatched allocation only means the percentage cannot be
+			// calculated, so it is reported as a warning and the PDF carries on without a grade.
 			const markSummary = getCurrentMarkSummary()
-			if (markSummary.invalidCategories.length || markSummary.allocationMismatch) {
-				showSuccessNotification('❌ Correct invalid marks or mismatched category allocations before exporting a marking report.')
-				return
+			if (markSummary.allocationMismatch) {
+				showSuccessNotification('⚠️ Category maxima do not match Total Marks. The feedback report will download without a final percentage.')
+			} else if (markSummary.invalidCategories.length) {
+				showSuccessNotification(`⚠️ Invalid marks in: ${markSummary.invalidCategories.join(', ')}. Those marks are left out and the feedback report still downloads.`)
 			}
 			const { hasValue: hasAssessmentTotal } = getAssessmentTotalInfo()
 			if (getCurrentMarkSummary().hasMarks && !hasAssessmentTotal) {
 				showTotalMarksWarning = true
 				return
 			}
+
+			// Guardrail checkpoint. It runs before any PDF is created and reports pass or fail.
+			// A report that tells the assessor to check something reads as a working note, not as
+			// written feedback, so a failed check names the paragraph and blocks the download.
+			// Spelling and grammar are checked on the same paragraphs. Names, subjects,
+			// assessments and categories are passed as allowed words so they are never flagged.
+			const reportParagraphs = getSelectedReportParagraphs()
+			const guardrailAllowedWords = [
+				studentName,
+				currentSubject?.name,
+				currentAssessment?.name,
+				...reportParagraphs.map(paragraph => paragraph?.category)
+			].filter(Boolean)
+			const guardrail = await findReportGuardrailIssues(reportParagraphs, {
+				allowedWords: guardrailAllowedWords,
+				skipKeys: reportGuardrailSkippedKeys,
+				scope: `${currentStudentId || 'no-student'}|${currentAssessment?.id || 'no-assessment'}`
+			})
+			reportGuardrailCheckedCount = reportParagraphs.length
+			reportGuardrailSkippedCount = guardrail.skippedFindings.length
+			reportGuardrailFindings = guardrail.findings
+			reportGuardrailParagraphIds = new Set(guardrail.findings.map(finding => finding.paragraphId).filter(Boolean))
+			reportGuardrailStatus = guardrail.blocked ? 'fail' : 'pass'
+			showReportGuardrailModal = true
+			if (guardrail.blocked) {
+				const paragraphNumbers = [...new Set(guardrail.findings.map(finding => finding.paragraphNumber))]
+				addAppLog('error', 'Report guardrail:', `Failed. Paragraphs: ${paragraphNumbers.join(', ')}`)
+				showSuccessNotification(`❌ ${describeGuardrailBlock(guardrail.findings)}`)
+				return
+			}
+			// Pass: Print to Download is the download action the user pressed, so the PDF carries
+			// on building and saving while the pass result stays on screen with OK.
+			addAppLog('info', 'Report guardrail:', `Passed. ${reportParagraphs.length} paragraph(s) checked.`)
 
 		const defaultMargin = 25 // Slightly larger margin for better breathing room
 		const needsLandscape = !lockPdfPortrait && shouldUseLandscapeForHtml(assessmentHtml, defaultMargin)
@@ -7135,6 +7476,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		const paragraphsToSkip = new Set()
 		const coveredSelectedParagraphIds = new Set()
 		const normalizeLine = (val) => (val || '').toString().replace(/\u00a0/g, ' ').trim()
+		// AI-written points sometimes already carry their own marker ("- ", "• ", "1."). Strip it so
+		// the exported point form prints one consistent bullet instead of two markers in a row.
+		const stripLeadingListMarker = (value) => (value || '').toString()
+			.replace(/^\s*(?:[•▪◦‣·*]+|[-–—])\s+/, '')
+			.replace(/^\s*(?:\d{1,2}[.)]|\([a-zA-Z0-9]{1,2}\))\s+/, '')
+			.trim()
 		const toComparableParagraphBody = (value) => {
 			let text = cleanParagraphTextForDisplay(String(value || ''))
 			if (text.includes(': ')) {
@@ -7353,8 +7700,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			} else {
 				if (skipCurrentCategory) continue
 				if (paragraphsToSkip.has(normalizeLine(line))) continue
-				// Regular content - split long lines
-				const wrappedLines = doc.splitTextToSize(line, contentMaxLineWidth)
+				// Point form: every feedback paragraph is drawn as one bullet with a hanging indent,
+				// so wrapped text lines up under the point instead of running back to the margin.
+				const bulletIndent = 5
+				const bulletTextWidth = Math.max(20, contentMaxLineWidth - bulletIndent)
+				const pointText = stripLeadingListMarker(trimmedLine)
+				if (!pointText) continue
+				let bulletDrawn = false
+				const wrappedLines = doc.splitTextToSize(pointText, bulletTextWidth)
 				wrappedLines.forEach((wrappedLine) => {
 					if (yPosition > pageHeightBody - margin) {
 						addContentPage()
@@ -7364,10 +7717,16 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 						applyBodyFontForCurrentPage()
 						yPosition = contentTopMargin
 					}
-					doc.text(wrappedLine, margin, yPosition)
+					if (!bulletDrawn) {
+						// The bullet glyph sits a little high on its baseline in NotoSans, so drop it
+						// slightly to sit in the middle of the first line's x-height.
+						doc.text('•', margin + 0.6, yPosition + 0.55)
+						bulletDrawn = true
+					}
+					doc.text(wrappedLine, margin + bulletIndent, yPosition)
 					yPosition += lineHeight
 				})
-				yPosition += paragraphGap() // slight gap between paragraphs
+				yPosition += paragraphGap() // slight gap between points
 			}
 		}
 		}
@@ -7412,6 +7771,12 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 			loadSubjects()
 			initializeDarkMode()
 			initializeAiModelSettings()
+			loadMarkingSkills({ silent: true })
+			// Warm the report guardrail dictionary so the first Print to Download
+			// does not wait for it. A failure only turns the spelling check off.
+			void loadSpellChecker()
+			getStudentMaterialsRoot().then(root => { studentMaterialsRoot = root })
+			getAssessmentRubricsRoot().then(root => { assessmentRubricsRoot = root })
 			const cleanupAppLogging = installAppLogging()
 
 		window.addEventListener('paste', handleStudentPhotoPaste)
@@ -7433,7 +7798,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="--bs-navbar-padding-y: 0.35rem;">
 	<div class="container-fluid">
 		<a class="navbar-brand d-inline-flex align-items-center gap-2 lh-1" href="/" style="font-size: 0.95rem;">
-			<span>Feedback Manager v3.3.4</span>
+			<span>Feedback Manager v3.3.5</span>
 			<span class="small text-white-50 lh-1">({__BUILD_TIME__})</span>
 		</a>
 		<div class="collapse navbar-collapse" id="navbarNav">
@@ -8307,6 +8672,69 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											></textarea>
 											<div class="form-text">System instructions control how the model behaves across every assessment.</div>
 										</div>
+										<div class="col-12">
+											<div class="border rounded p-3 bg-body-tertiary">
+												<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+													<span class="fw-bold"><i class="bi bi-mortarboard me-1"></i>Marking Skills</span>
+													<span class="badge text-bg-dark">System</span>
+													<span class="badge text-bg-secondary">{enabledMarkingSkillCount} of {markingSkills.length} active</span>
+													<button
+														type="button"
+														class="btn btn-sm btn-outline-secondary ms-auto"
+														onclick={() => loadMarkingSkills()}
+														disabled={markingSkillsLoading}
+													>
+														<i class="bi bi-arrow-repeat me-1"></i>{markingSkillsLoading ? 'Reloading...' : 'Reload skills'}
+													</button>
+												</div>
+												<p class="small text-muted mb-2">
+													Skills live in <code>{markingSkillsRoot}</code> as <code>senaka-marking-*/SKILL.md</code>. Each enabled skill is sent as system rules with every mark, draft and feedback prompt.
+												</p>
+												{#if markingSkillsAvailable === null}
+													<div class="alert alert-light border py-2 px-3 small mb-2">Reading skills from the desktop folder...</div>
+												{:else if !markingSkillsAvailable}
+													<div class="alert alert-warning py-2 px-3 small mb-2">Skills are read from the desktop app. In the browser preview no skills can be loaded.</div>
+												{:else if markingSkills.length === 0}
+													<div class="alert alert-light border py-2 px-3 small mb-2">
+														No <code>senaka-marking-*</code> skills found yet. Add a folder such as <code>senaka-marking-rubric-bands</code> with a <code>SKILL.md</code>, then press Reload skills.
+													</div>
+												{:else}
+													<div class="list-group list-group-flush mb-2">
+														{#each markingSkills as skill (skill.id)}
+															<label class="list-group-item d-flex gap-3 align-items-start bg-transparent px-0">
+																<input
+																	class="form-check-input mt-1"
+																	type="checkbox"
+																	checked={isMarkingSkillEnabled(skill)}
+																	onchange={() => toggleMarkingSkill(skill.id)}
+																>
+																<span class="flex-grow-1">
+																	<span class="d-flex flex-wrap align-items-center gap-2">
+																		<strong>{skill.name}</strong>
+																		<code class="small">{skill.id}</code>
+																		<span class="badge text-bg-light text-dark">{(skill.characters || 0).toLocaleString()} chars</span>
+																	</span>
+																	{#if skill.description}
+																		<span class="d-block small text-muted">{skill.description}</span>
+																	{/if}
+																</span>
+															</label>
+														{/each}
+													</div>
+													<div class="d-flex flex-wrap align-items-center gap-2">
+														<button type="button" class="btn btn-sm btn-outline-primary" onclick={() => setAllMarkingSkills(true)} disabled={enabledMarkingSkillCount === markingSkills.length}>Enable all</button>
+														<button type="button" class="btn btn-sm btn-outline-secondary" onclick={() => setAllMarkingSkills(false)} disabled={enabledMarkingSkillCount === 0}>Disable all</button>
+														<span class="small text-muted ms-auto">{activeMarkingSkillCharacters.toLocaleString()} characters added to each prompt</span>
+													</div>
+													{#if activeMarkingSkillCharacters > 20000}
+														<div class="alert alert-warning py-2 px-3 small mt-2 mb-0">Large skill set. Every enabled skill is sent with each prompt, which uses more tokens and leaves less room for the submission.</div>
+													{/if}
+												{/if}
+												{#if markingSkillsError}
+													<div class="alert alert-danger py-2 px-3 small mt-2 mb-0">Could not read skills: {markingSkillsError}</div>
+												{/if}
+											</div>
+										</div>
 										<div class="col-md-4">
 											<label for="academicLevelInput" class="form-label fw-bold">Academic Level</label>
 												<input
@@ -8353,6 +8781,19 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 															<span class="badge text-bg-secondary">RAG</span>
 														</div>
 														<div class="small text-muted">Upload shared assessment documents for retrieval context: {getSupportedUploadLabel()}.</div>
+													</div>
+												</div>
+												<div class="alert alert-light border py-2 px-3 small mt-2">
+													<div class="d-flex flex-wrap align-items-center gap-2">
+														<i class="bi bi-journal-bookmark"></i>
+														<span class="fw-semibold">Rubric folder:</span>
+														<code class="text-break">{buildAssessmentRubricFolderPath(currentAssessment, assessmentRubricsRoot)}</code>
+														<button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick={copyAssessmentRubricFolderPath}>
+															<i class="bi bi-clipboard me-1"></i>Copy path
+														</button>
+													</div>
+													<div class="mt-1">
+														Put the marking rubric there. When this assessment opens, the newest DOCX, PDF, TXT, MD or CSV file is attached as a <strong>Rubric</strong> document for RAG. A rubric you uploaded yourself is never replaced.
 													</div>
 												</div>
 													<div class="row g-2 align-items-end">
@@ -8937,6 +9378,19 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																	<strong>Selected Student:</strong> {currentStudentId ? getStudentFirstNameLabel(getCurrentStudent()) : 'Loading...'}
 													</div>
 												</div>
+												<div class="alert alert-light border py-2 px-3 small mt-2">
+													<div class="d-flex flex-wrap align-items-center gap-2">
+														<i class="bi bi-folder2-open"></i>
+														<span class="fw-semibold">Script folder:</span>
+														<code class="text-break">{buildStudentScriptFolderPath(getCurrentStudent(), studentMaterialsRoot)}</code>
+														<button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick={copyStudentScriptFolderPath}>
+															<i class="bi bi-clipboard me-1"></i>Copy path
+														</button>
+													</div>
+													<div class="mt-1">
+														Save this student's report in that folder. When this student is selected, the newest DOCX, PDF, TXT, MD or PPTX file is loaded into the submission box below if it is empty. Leave the folder missing and marking carries on unchanged.
+													</div>
+												</div>
 											{/if}
 												</div>
 											</div>
@@ -8953,6 +9407,9 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 												placeholder="Paste the student's submission, viva notes, or assessor evidence here for AI-assisted marking..."
 												disabled={!currentStudentId}
 											></textarea>
+											<div class="form-text">
+												Loaded from the script folder shown above. Nothing is saved until you save student data.
+											</div>
 												<div class="border rounded p-3 bg-body-tertiary mt-3">
 													<div class="fw-bold d-flex align-items-center gap-2">
 														<span>Student Uploads</span>
@@ -9282,14 +9739,14 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 														</div>
 													</div>
 													{#if categoryWarnings[group.category]}
-														<div class="alert alert-warning alert-sm m-0 rounded-0 border-0" style="border-top: 1px solid #ffc107 !important;">
+														<div class="alert alert-warning alert-sm m-0 rounded-0 border-0" role="alert" aria-label={`Mark warning for ${group.category}`} style="border-top: 1px solid #ffc107 !important;">
 															<div class="d-flex align-items-center">
 																<i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
 																<small class="mb-0 fw-bold">
 																	{#if categoryWarnings[group.category]?.type === 'missingMarks'}
 																		Warning: Paragraphs selected for this category but no marks entered. Please enter marks to include them in the final report.
 																	{:else if categoryWarnings[group.category]?.type === 'markMismatch'}
-																		Warning: Entered marks ({categoryMarks[group.category] || 0}) do not match the selected paragraph's mark range ({categoryWarnings[group.category].expected}). Adjust marks or paragraph selection.
+																		Warning: Entered marks ({categoryMarks[group.category] || 0}) do not match the selected {categoryWarnings[group.category].color === 'lightgreen' ? 'light green' : categoryWarnings[group.category].color} colour band ({categoryWarnings[group.category].expected}). Adjust marks or paragraph selection.
 																	{:else}
 																		No feedback paragraphs selected for this category. Add a paragraph to explain the mark in the report.
 																	{/if}
@@ -9331,6 +9788,7 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 											class="paragraph-item border-bottom p-3 {originalIndex === paragraphs[paragraphs.length - 1].originalIndex ? '' : 'border-bottom'}"
 											class:selected-paragraph={selectedParagraphs.has(id)}
 											class:editing-save-warning={showEditingParagraphSaveWarning && editingParagraphIndex === originalIndex}
+											class:guardrail-flagged-paragraph={reportGuardrailParagraphIds.has(id)}
 										>
 																	<div class="d-flex align-items-start">
 																		{#if currentStudentId}
@@ -9404,6 +9862,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 																				<div class="d-flex align-items-start">
 																	<div class="flex-grow-1">
 																		<div class="mb-0 fs-6 lh-base" style="white-space: pre-wrap;">{@html text}</div>
+																					{#if reportGuardrailParagraphIds.has(id)}
+																						<div class="small text-danger fw-semibold mt-1">
+																							<i class="bi bi-exclamation-triangle-fill me-1"></i>Wording or spelling to fix here. Edit this paragraph before downloading.
+																						</div>
+																					{/if}
 																		{#if formatParagraphSavedDate(createdAt)}
 																			<div class="small text-body-secondary mt-1">Saved: {formatParagraphSavedDate(createdAt)}</div>
 																		{/if}
@@ -10318,6 +10781,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 		box-shadow: inset 4px 0 0 #f08c8c;
 	}
 
+	.paragraph-item.guardrail-flagged-paragraph {
+		background: #fff1f2;
+		box-shadow: inset 4px 0 0 #dc3545;
+	}
+
 	:global([data-bs-theme="light"]) .ai-settings-menu {
 		border-color: rgba(15, 23, 42, 0.12);
 		background: rgba(255, 255, 255, 0.97);
@@ -10340,6 +10808,11 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 	:global([data-bs-theme="dark"]) .paragraph-item.editing-save-warning {
 		background: rgba(127, 29, 29, 0.35);
 		box-shadow: inset 4px 0 0 #fca5a5;
+	}
+
+	:global([data-bs-theme="dark"]) .paragraph-item.guardrail-flagged-paragraph {
+		background: rgba(127, 29, 29, 0.35);
+		box-shadow: inset 4px 0 0 #f87171;
 	}
 </style>
 
@@ -10364,6 +10837,79 @@ function moveParagraphDown(paragraphId, displayIndex, groupParagraphs) {
 					<button type="button" class="btn btn-warning" onclick={() => showTotalMarksWarning = false}>
 						<i class="bi bi-check-circle me-2"></i>I Understand
 					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Report Guardrail Modal -->
+{#if showReportGuardrailModal}
+	<div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="report-guardrail-title">
+		<div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header {reportGuardrailStatus === 'pass' ? 'bg-success' : 'bg-danger'} text-white">
+					<h5 class="modal-title" id="report-guardrail-title">
+						{#if reportGuardrailStatus === 'pass'}
+							<i class="bi bi-shield-check me-2"></i>Guardrail passed
+						{:else}
+							<i class="bi bi-shield-exclamation me-2"></i>Guardrail failed: download blocked
+						{/if}
+					</h5>
+					<button type="button" class="btn-close btn-close-white" onclick={() => showReportGuardrailModal = false} aria-label="Close report guardrail"></button>
+				</div>
+				<div class="modal-body">
+					{#if reportGuardrailStatus === 'pass'}
+						<div class="alert alert-success">
+							<strong>Pass.</strong> Checked {reportGuardrailCheckedCount} paragraph{reportGuardrailCheckedCount === 1 ? '' : 's'} in report order. No notes to the assessor, unfilled placeholders, AI wording, spelling or grammar errors were found.
+						</div>
+						<p class="mb-0 small text-body-secondary">The PDF is downloading now. Press <strong>OK</strong> to dismiss this message.</p>
+						{#if reportGuardrailSkippedCount > 0}
+							<p class="mb-0 small text-warning-emphasis">{reportGuardrailSkippedCount} item{reportGuardrailSkippedCount === 1 ? '' : 's'} skipped by you.</p>
+						{/if}
+					{:else}
+						<div class="alert alert-danger">
+							<strong>Nothing was downloaded.</strong>
+							These paragraphs contain a note to the assessor, an unfilled placeholder, chat wording, a spelling mistake or a grammar mistake. A student report must read as your written feedback, so fix the highlighted paragraphs and print again.
+						</div>
+						<p class="text-body-secondary small mb-3">Paragraph numbers follow the report order. The same paragraphs are outlined in red in the editor. <strong>Skip</strong> ignores one item at a time, and the report downloads when nothing is left.</p>
+						{#if reportGuardrailSkippedCount > 0}
+							<p class="text-warning-emphasis small mb-3">{reportGuardrailSkippedCount} item{reportGuardrailSkippedCount === 1 ? '' : 's'} skipped by you.</p>
+						{/if}
+						{#each reportGuardrailFindings as finding}
+							<div class="border-start border-4 border-danger ps-3 mb-3">
+								<div class="fw-bold">
+									Paragraph {finding.paragraphNumber}
+									{#if finding.category}<span class="text-body-secondary fw-normal"> — {finding.category}</span>{/if}
+								</div>
+								<div class="small text-danger fw-semibold mt-1">
+									<i class="bi bi-exclamation-triangle-fill me-1"></i>{finding.label}: “{finding.match}”
+								</div>
+								<div class="small mt-1">{finding.excerpt}</div>
+							</div>
+						{/each}
+					{/if}
+				</div>
+				<div class="modal-footer">
+					{#if reportGuardrailStatus === 'pass'}
+						<button type="button" class="btn btn-success" onclick={() => showReportGuardrailModal = false}>
+							<i class="bi bi-check-circle me-2"></i>OK
+						</button>
+					{:else}
+						{#if reportGuardrailFindings.length > 0}
+							<button
+								type="button"
+								class="btn btn-outline-warning"
+								onclick={skipReportGuardrailFinding}
+								title="Skip this one item and check the report again"
+							>
+								<i class="bi bi-skip-forward me-2"></i>Skip
+							</button>
+						{/if}
+						<button type="button" class="btn btn-danger" onclick={() => showReportGuardrailModal = false}>
+							<i class="bi bi-pencil-square me-2"></i>Go back and fix
+						</button>
+					{/if}
 				</div>
 			</div>
 		</div>

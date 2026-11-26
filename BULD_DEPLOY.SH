@@ -10,7 +10,10 @@ npm run tauri:build -- --bundles app
 echo "✅ Build successful"
 
 echo "[3/6] Stopping running Feedback app (if any)..."
-pkill -x Feedback || true
+# The bundle executable is named "app", so quit by bundle id first and then by path.
+osascript -e 'tell application id "com.senaka.feedback" to quit' 2>/dev/null || true
+sleep 1
+pkill -f "/Applications/Feedback.app/Contents/MacOS/app" 2>/dev/null || true
 echo "✅ Stop step completed"
 
 echo "[4/6] Removing old app from /Applications..."

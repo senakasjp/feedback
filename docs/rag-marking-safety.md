@@ -8,6 +8,8 @@ All category descriptors, rubric HTML text, question text, and uploaded document
 
 Supporting sources are ranked with category matches first, without deleting other relevant sources. Distinct passages from the same document can be selected. Identical passages are deduplicated. Template paragraphs and prior-feedback examples retain their per-type limits. Lexical, vector, and embedding-query fallback paths share these rules. The vector index version changes so old indexes are rebuilt.
 
+The vector index is optional. If embeddings cannot be built — no OpenAI key while marking runs on another provider, no embeddings access on the key, a refused request, or no network — retrieval moves to the lexical path and feedback is still generated. The success message names the retrieval mode used (`vector`, `vector-category`, `lexical` or `lexical-category`) so the assessor can see which path ran. Chunks are embedded in batches of 96, so large cohorts no longer produce one oversized embeddings request.
+
 Student submission text remains complete. Very large submissions or mandatory context can exceed a provider's context limit; these changes do not silently shorten either. A provider failure requires assessor action, not assuming missing material was assessed.
 
 ## Draft validation and citations

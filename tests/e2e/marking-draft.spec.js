@@ -56,7 +56,7 @@ test('manual marks enforce bounds, preserve zero and classify decimal percentage
   await mark.fill('-1')
   await expect(mark).toHaveValue('5')
   await mark.fill('7.95')
-  await expect(page.getByText('7.95 / 10 (79.5%) — B: Good', { exact: true })).toBeVisible()
+  await expect(page.getByText('7.95 / 10 (79.5%) — B+: Good', { exact: true })).toBeVisible()
   await mark.fill('0')
   await expect(mark).toHaveValue('0')
   await expect(page.getByText('0 / 10 (0.0%) — F: Fail', { exact: true })).toBeVisible()

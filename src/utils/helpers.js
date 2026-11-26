@@ -263,3 +263,20 @@ export function stripHtmlTags(text) {
   // Remove HTML tags using regex
   return text.replace(/<[^>]*>/g, '')
 }
+
+// Each feedback point gets a literal "• " so the comment box can be pasted into Moodle and still
+// read as a list. The PDF export takes the category name off the first line and strips this marker
+// before drawing its own bullet, so the printed report never shows two markers in a row.
+export function bulletiseFeedbackPoints(text) {
+  if (!text) return text
+  return String(text)
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(line => line
+      .replace(/^\s*(?:[•▪◦‣·*]+|[-–—])\s+/, '')
+      .replace(/^\s*(?:\d{1,2}[.)])\s+/, '')
+      .trim())
+    .filter(Boolean)
+    .map(line => `• ${line}`)
+    .join('\n')
+}

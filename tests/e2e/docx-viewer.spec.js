@@ -35,6 +35,18 @@ test('uploads and displays formatted DOCX and persists its preview', async ({ pa
   await page.locator('#assessmentDocumentUpload').setInputFiles({ name: 'Report.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: await docx() })
   await expect(page.getByText('Report.docx', { exact: true })).toBeVisible()
   await tab.click()
+  await page.evaluate(() => {
+    window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
+      if (command !== 'open_uploaded_docx') throw new Error('Browser test')
+      window.openedDocumentBytes = args.data
+    } }
+  })
+  await page.getByRole('button', { name: 'Open in default app', exact: true }).click()
+  expect(await page.evaluate(() => {
+    const source = JSON.parse(localStorage.getItem('feedback-subjects')).subjects[0].assessments[0].aiReferenceDocuments[0].docxBase64
+    return JSON.stringify(window.openedDocumentBytes) === JSON.stringify(Array.from(atob(source), ch => ch.charCodeAt(0)))
+  })).toBe(true)
+  await page.evaluate(() => { delete window.__TAURI_INTERNALS__ })
   const preview = page.frameLocator('iframe[title="DOCX preview: Report.docx"]')
   await expect(preview.getByText('Project findings', { exact: true })).toBeVisible()
   await expect(preview.getByText('Measured evidence', { exact: true })).toHaveCSS('font-weight', '700')

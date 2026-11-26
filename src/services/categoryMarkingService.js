@@ -10,7 +10,7 @@ Return only the required structured JSON, with exactly one criterion and a finit
 export function buildCategoryMarkingRequest({
   assessment, categoryName, student, studentSubmission = '', studentSubmissionDocuments = [],
   evidenceNotes = '', assessmentParagraphs = [], globalSystemInstructions = '',
-  answerInstructions = '', modelPreference = {}
+  answerInstructions = '', markingSkills = [], modelPreference = {}
 }) {
   const normalizeName = value => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
   const target = normalizeName(categoryName)
@@ -58,6 +58,7 @@ export function buildCategoryMarkingRequest({
         ? `Fixed marking mode: choose only one of the configured numeric marks in this colour-to-mark mapping: ${JSON.stringify(colorMarks)}. The app selects the colour matching that exact mark. Do not award an in-between mark.`
         : `Percentage marking mode: the app selects the colour from awarded_mark divided by the criterion maximum using these assessment percentage bands: ${JSON.stringify(percentageRanges)}`
     ].filter(Boolean).join('\n\n'),
+    markingSkills,
     modelPreference
   }
 }

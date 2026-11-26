@@ -1,11 +1,27 @@
 <script>
   import { onDestroy } from 'svelte'
+  import { invoke } from '@tauri-apps/api/core'
   let active = true
   onDestroy(() => { active = false })
   import DocxDocument from './DocxDocument.svelte'
   import { readDocxSource, renderDocxSource } from '../utils/docxPreview.js'
   let { assessmentDocuments = [], studentDocuments = [], studentName = '', hasStudent = false, getDocumentTypeLabel, onAttachOriginal } = $props()
   let selectedKey = $state('')
+  let opening = $state(false)
+  let openError = $state('')
+  async function openInDefaultApp() {
+    const source = selected?.document.docxBase64
+    if (!source || opening) return
+    opening = true
+    openError = ''
+    try {
+      await invoke('open_uploaded_docx', { data: Array.from(atob(source), character => character.charCodeAt(0)) })
+    } catch (error) {
+      openError = 'Could not open the file in its default app: ' + String(error)
+    } finally {
+      opening = false
+    }
+  }
   let attaching = $state(false)
   let attachError = $state('')
   async function attachOriginal(event) {
@@ -67,6 +83,11 @@
           <h3 class="h5 document-name">{selected.document.name}</h3>
           <p class="small text-muted">{selected.scope} · {getDocumentTypeLabel(selected.document.documentType, selected.scope === 'Student upload' ? 'student' : 'assessment')}</p>
           {#if selected.document.docxBase64}
+            <button type="button" class="btn btn-outline-primary btn-sm mb-2" onclick={openInDefaultApp} disabled={opening}>
+              <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>{opening ? 'Opening…' : 'Open in default app'}
+            </button>
+            <p class="small text-muted">Opens a temporary copy. Changes in the external app do not update this upload.</p>
+            {#if openError}<p role="alert" class="text-danger">{openError}</p>{/if}
             <DocxDocument source={selected.document.docxBase64} name={selected.document.name} />
           {:else}
             <p>The original Word file was not retained with this older upload. Choose it once below to view and save the actual document.</p>

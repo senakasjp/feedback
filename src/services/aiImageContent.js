@@ -16,6 +16,19 @@ export async function normalizeAiImage(part) {
   else if (bytes.startsWith('RIFF') && bytes.slice(8, 12) === 'WEBP') mimeType = 'image/webp'
   if (mimeType) return { ...part, mimeType, data: `data:${mimeType};base64,${base64}` }
 
+  if (['image/emf', 'image/x-emf', 'application/x-emf'].includes(declaredType) || bytes.slice(40, 44) === ' EMF') {
+    try {
+      const buffer = Uint8Array.from(bytes, character => character.charCodeAt(0)).buffer
+      validateEmfRecords(buffer)
+      const { convertMetafileToDataUrl } = await import('emf-converter')
+      const data = await convertMetafileToDataUrl(buffer, { maxWidth: 1600, maxHeight: 1600, maxCanvasDimension: 1600 })
+      if (!data?.startsWith('data:image/png;base64,')) throw new Error('EMF conversion failed')
+      return { ...part, mimeType: 'image/png', data }
+    } catch {
+      throw new Error(`An embedded image (${declaredType}) could not be converted. Export the document as PDF or replace the image with PNG or JPEG and upload it again. No AI request was sent.`)
+    }
+  }
+
   // Rasterize browser-supported formats instead of merely changing their MIME label.
   if (['image/bmp', 'image/x-ms-bmp'].includes(declaredType)) {
     try {
@@ -34,4 +47,23 @@ export async function normalizeAiImage(part) {
     }
   }
   throw new Error(`An embedded image uses an unsupported or unreadable format (${declaredType}). Replace it with PNG or JPEG and upload the document again. No AI request was sent.`)
+}
+
+function validateEmfRecords(buffer) {
+  const view = new DataView(buffer)
+  if (buffer.byteLength < 88 || view.getUint32(0, true) !== 1 || view.getUint32(4, true) < 88 || view.getUint32(40, true) !== 0x464d4520 || view.getUint32(48, true) !== buffer.byteLength) {
+    throw new Error('Invalid EMF header')
+  }
+  let offset = 0
+  let records = 0
+  while (offset + 8 <= buffer.byteLength) {
+    const type = view.getUint32(offset, true)
+    const size = view.getUint32(offset + 4, true)
+    if (size < 8 || size % 4 !== 0 || offset + size > buffer.byteLength || ++records > 200000) {
+      throw new Error('Invalid EMF record')
+    }
+    offset += size
+    if (type === 14 && size >= 20 && offset === buffer.byteLength && records === view.getUint32(52, true)) return
+  }
+  throw new Error('Incomplete EMF data')
 }

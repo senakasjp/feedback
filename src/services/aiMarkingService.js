@@ -1,9 +1,14 @@
 import { DEFAULT_AI_CHAT_MODEL, DEFAULT_AI_REASONING_EFFORT, getProviderForModel, sanitizeAiChatModel, sanitizeReasoningEffort } from './aiModelService.js'
 import { callChatCompletion, getEffectiveApiKey } from './llmProviders.js'
+import { buildMarkingSkillMessages } from './markingSkillsService.js'
 import { validateMarkingCriteria, validateMarkingDraft } from './markingDraftValidation.js'
 
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
 const EMBEDDING_MODEL = 'text-embedding-3-small'
+// Embeddings are sent in small batches. One request per chunk set broke on large cohorts (the
+// API caps the number of inputs per call), and a refused embeddings call used to abort the whole
+// "Improve with RAG" run even though chat completion would have worked.
+const EMBEDDING_BATCH_SIZE = 96
 const MAX_RETRIEVED_CHUNKS = 8
 const VECTOR_INDEX_VERSION = 2
 const REQUIRED_CONTEXT_TYPES = new Set(['rubric', 'brief', 'assignment-brief', 'rubric-support'])
@@ -31,14 +36,29 @@ function normaliseWhitespace(value) {
     .trim()
 }
 
-function normaliseParagraphText(value) {
+// Point-form feedback is written one point per line. The app, the PDF export and the report HTML
+// each draw their own bullet for a paragraph, so a model that leaves its own list marker in place
+// printed two markers in a row ("- point" under a drawn bullet). Strip the marker once here rather
+// than in each of the three renderers.
+function stripLeadingPointMarker(line) {
+  return String(line || '')
+    .replace(/^\s*(?:[•▪◦‣·*]+|[-–—])\s+/, '')
+    .replace(/^\s*(?:\d{1,2}[.)]|\([a-zA-Z0-9]{1,2}\))\s+/, '')
+    .replace(/^\s*#{1,6}\s*/, '')
+    .trim()
+}
+
+// Keeps one point per line and drops blank lines, so the assessor sees the AI answer as a short
+// list instead of one running paragraph. Collapsing single newlines here used to flatten point-form
+// output back into prose before it ever reached the text box.
+export function normaliseFeedbackPointText(value) {
   return String(value || '')
     .replace(/\r\n/g, '\n')
     .replace(/<[^>]+>/g, ' ')
-    .split(/\n{2,}/)
-    .map(paragraph => paragraph.replace(/[ \t\f\v]+/g, ' ').replace(/\n+/g, ' ').trim())
+    .split('\n')
+    .map(line => stripLeadingPointMarker(line.replace(/[ \t\f\v]+/g, ' ')))
     .filter(Boolean)
-    .join('\n\n')
+    .join('\n')
 }
 
 /**
@@ -329,16 +349,7 @@ async function getErrorMessage(response) {
   }
 }
 
-async function createEmbeddings(inputs = []) {
-  const apiKey = getEffectiveApiKey('openai')
-  if (!apiKey || apiKey === 'your-api-key-here') {
-    throw new Error('OpenAI API key is not configured. Add it in Settings > API Keys, or in the .env file.')
-  }
-
-  if (!inputs.length) {
-    return []
-  }
-
+async function requestEmbeddings(apiKey, inputs = []) {
   const response = await fetch(OPENAI_EMBEDDINGS_URL, {
     method: 'POST',
     headers: {
@@ -358,6 +369,32 @@ async function createEmbeddings(inputs = []) {
 
   const data = await response.json()
   return (data.data || []).map(item => item.embedding)
+}
+
+async function createEmbeddings(inputs = []) {
+  const apiKey = getEffectiveApiKey('openai')
+  if (!apiKey || apiKey === 'your-api-key-here') {
+    throw new Error('OpenAI API key is not configured. Add it in Settings > API Keys, or in the .env file.')
+  }
+
+  if (!inputs.length) {
+    return []
+  }
+
+  const embeddings = []
+  for (let start = 0; start < inputs.length; start += EMBEDDING_BATCH_SIZE) {
+    const batch = inputs.slice(start, start + EMBEDDING_BATCH_SIZE)
+    embeddings.push(...await requestEmbeddings(apiKey, batch))
+  }
+
+  return embeddings
+}
+
+// The vector index needs an OpenAI key even when marking runs on another provider. Callers use this
+// to skip the index and keep going with lexical retrieval instead of failing the whole run.
+export function canBuildAssessmentVectorIndex() {
+  const apiKey = getEffectiveApiKey('openai')
+  return Boolean(apiKey && apiKey !== 'your-api-key-here')
 }
 
 export async function buildAssessmentVectorIndex({ assessment, assessmentParagraphs = [], priorEvaluations = [] }) {
@@ -462,7 +499,7 @@ function applyCategoryPriority(rankedChunks = [], categoryName = '') {
 // "mostly correct" instead of "criterion not satisfied" - the exact gap a human reviewer wouldn't miss.
 const RIGOR_SYSTEM_INSTRUCTION = 'Assess task compliance, not just topical relevance. If a task requires calculations, measurements, or published results and the response only offers self-proposed or hypothetical target values, treat that requirement as unmet regardless of how well the response otherwise identifies or discusses the topic. Assess whether the supplied source material supports each cited claim. A reference that cannot be verified from the supplied material is unverified, not incorrect or fabricated. Flag it for assessor verification; do not deduct marks solely because external source access is unavailable. Deduct for citation problems only when supplied evidence demonstrates the problem under the rubric. Do not claim to have checked external sources. Reserve the top marking band for requirements actually satisfied with evidence, not merely described, planned, or asserted.'
 
-function buildSystemMessages(globalSystemInstructions = '', baseSystemPrompt = '') {
+function buildSystemMessages(globalSystemInstructions = '', baseSystemPrompt = '', markingSkills = []) {
   const messages = [{ role: 'system', content: RIGOR_SYSTEM_INSTRUCTION }]
 
   const basePrompt = normaliseWhitespace(baseSystemPrompt)
@@ -472,6 +509,8 @@ function buildSystemMessages(globalSystemInstructions = '', baseSystemPrompt = '
       content: basePrompt
     })
   }
+
+  messages.push(...buildMarkingSkillMessages(markingSkills))
 
   const extraSystemInstructions = normaliseWhitespace(globalSystemInstructions)
   if (extraSystemInstructions) {
@@ -594,7 +633,7 @@ function buildStudentSubmissionImageMessages(images = []) {
   ]
 }
 
-export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', allocatedMark = null, markMaximum = null, markRationale = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '' }) {
+export async function buildImproveFeedbackWithRagPromptPreview({ assessment, categoryName = '', shortFeedback = '', allocatedMark = null, markMaximum = null, markRationale = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', markingSkills = [] }) {
   const retrievalQuery = [categoryName, answerInstructions, evidenceNotes, studentSubmission].filter(Boolean).join('\n\n')
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
@@ -610,7 +649,7 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
     retrievalMode,
     retrievedContext,
     messages: [
-      ...buildSystemMessages(globalSystemInstructions, ''),
+      ...buildSystemMessages(globalSystemInstructions, '', markingSkills),
       ...buildPerAnswerSystemMessages(answerInstructions),
       ...(shortFeedback.trim() ? [{
         role: 'system',
@@ -647,6 +686,10 @@ export async function buildImproveFeedbackWithRagPromptPreview({ assessment, cat
           '- Preserve the allocated mark. Do not regrade, suggest a different score, or output a Marks: line.',
           '- Use the submission, rubric and saved rationale only where consistent with the authoritative assessor comments. Never override those comments with your own interpretation. Do not invent supporting evidence. If no assessor comments are provided, flag material conflicts between the rationale and evidence for assessor review.',
           '- If the mark or rationale is absent, use the available context without pretending a grading decision was supplied.',
+          '- Write the feedback in point form: one point per line, each point one or two short sentences.',
+          '- Start every point on its own line. Do not add a bullet character, dash, number, heading or label such as "Strengths". The app draws its own bullet.',
+          '- Keep one idea per point, in the order the assessor comments raise them. Do not repeat a point or merge points into a paragraph.',
+          '- If the assessor instructions ask for continuous prose, follow those instructions instead.',
           '- Return plain feedback text only.',
           ...buildClosingInstructionsReminder(answerInstructions)
         ].filter(Boolean).join('\n')
@@ -725,7 +768,7 @@ export async function buildAssessmentRagContext({ assessment, assessmentParagrap
   }
 }
 
-export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', allocatedMark = null, markMaximum = null, markRationale = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function improveFeedbackWithRag({ assessment, categoryName = '', shortFeedback = '', allocatedMark = null, markMaximum = null, markRationale = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', markingSkills = [], modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const { messages, retrievedContext, retrievalMode } = await buildImproveFeedbackWithRagPromptPreview({
     assessment,
     categoryName,
@@ -741,7 +784,8 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     priorEvaluations,
     vectorIndex,
     globalSystemInstructions,
-    answerInstructions
+    answerInstructions,
+    markingSkills
   })
 
   const { model, reasoningEffort, rawText, finishReason } = await runChatCompletion({
@@ -752,7 +796,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
     messages
   })
 
-  const improvedText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
+  const improvedText = normaliseFeedbackPointText(extractFeedbackTextFromPossibleJson(rawText))
 
   console.info('RAG feedback improvement response parsed', {
     retrievalMode,
@@ -779,7 +823,7 @@ export async function improveFeedbackWithRag({ assessment, categoryName = '', sh
   }
 }
 
-export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function generateEvidenceCheckReport({ assessment, categoryName = '', student = null, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', answerInstructions = '', markingSkills = [], modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   console.info('Evidence check request started', {
     assessment: assessment?.name || 'Unnamed assessment',
     categoryName: normaliseWhitespace(categoryName || 'General feedback'),
@@ -805,7 +849,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     maxTokens: 2200,
     reasoningEffortOverride: 'low',
     messages: [
-      ...buildSystemMessages(globalSystemInstructions, ''),
+      ...buildSystemMessages(globalSystemInstructions, '', markingSkills),
       ...buildPerAnswerSystemMessages(answerInstructions),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
       ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
@@ -832,6 +876,8 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
           '- Mention clear strengths and what evidence is missing or insufficient.',
           '- Keep the tone aligned with assessor instructions.',
           '- Do not invent evidence or claims.',
+          '- Write the report in point form: one point per line, with no bullet character, dash, number or heading. The app draws its own bullet.',
+          '- If the assessor instructions ask for continuous prose, follow those instructions instead.',
           '- Return plain feedback text only.',
           ...buildClosingInstructionsReminder(answerInstructions)
         ].filter(Boolean).join('\n')
@@ -839,7 +885,7 @@ export async function generateEvidenceCheckReport({ assessment, categoryName = '
     ]
   })
 
-  const reportText = normaliseParagraphText(extractFeedbackTextFromPossibleJson(rawText))
+  const reportText = normaliseFeedbackPointText(extractFeedbackTextFromPossibleJson(rawText))
 
   console.info('Evidence check response parsed', {
     retrievalMode,
@@ -883,7 +929,7 @@ function extractJson(text) {
   }
 }
 
-export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
+export async function generateStructuredMarkingDraft({ assessment, student, studentSubmission = '', studentSubmissionDocuments = [], evidenceNotes = '', assessmentParagraphs = [], priorEvaluations = [], vectorIndex = null, globalSystemInstructions = '', markingSkills = [], modelPreference = /** @type {{ selectedModel?: string, reasoningEffort?: string, provider?: string }} */ ({}) }) {
   const criteria = validateMarkingCriteria(buildCriteriaList(assessment))
   const { retrievedContext, retrievalMode } = await buildAssessmentRagContext({
     assessment,
@@ -900,7 +946,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
     temperature: 0.2,
     maxTokens: 2200,
     messages: [
-      ...buildSystemMessages(globalSystemInstructions, ''),
+      ...buildSystemMessages(globalSystemInstructions, '', markingSkills),
       ...buildRetrievedContextMessages(retrievedContext, retrievalMode),
       ...buildStudentSubmissionImageMessages(collectSubmissionImages(studentSubmissionDocuments)),
       {
@@ -947,6 +993,7 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
           '- Base judgements only on the provided submission, notes, and retrieved context.',
           '- Do not invent evidence or achievement claims.',
           '- Keep suggested_feedback ready to paste into the feedback app.',
+          '- Write suggested_feedback in point form: one point per line, one idea per line, with no bullet character, dash, number or heading.',
           '- Return valid JSON only.',
           ...buildClosingInstructionsReminder(assessment?.commonParagraphAiInstructions)
         ].filter(Boolean).join('\n')
@@ -960,7 +1007,10 @@ export async function generateStructuredMarkingDraft({ assessment, student, stud
   const parsed = validateMarkingDraft(extractJson(rawText), criteria)
 
   return {
-    criteria: parsed.criteria,
+    criteria: parsed.criteria.map(criterion => ({
+      ...criterion,
+      suggested_feedback: normaliseFeedbackPointText(criterion.suggested_feedback)
+    })),
     overall_feedback: normaliseWhitespace(parsed.overall_feedback),
     retrievedContext,
     retrievalMode,

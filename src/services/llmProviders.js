@@ -240,11 +240,18 @@ export async function callChatCompletion({ providerId = DEFAULT_PROVIDER_ID, mod
 
   const adaptedMessages = await Promise.all(messages.map(async message => ({ ...message, content: await adaptMessageContent(message.content, providerId) })))
 
-  const response = await fetch(provider.chatUrl, {
-    method: 'POST',
-    headers: provider.headers(apiKey),
-    body: JSON.stringify(provider.buildBody({ model, messages: adaptedMessages, temperature, maxTokens, reasoningEffort }))
-  })
+  let response
+  try {
+    response = await fetch(provider.chatUrl, {
+      method: 'POST',
+      headers: provider.headers(apiKey),
+      body: JSON.stringify(provider.buildBody({ model, messages: adaptedMessages, temperature, maxTokens, reasoningEffort }))
+    })
+  } catch (error) {
+    // A rejected key, a blocked origin and a dropped connection all arrive here as the same opaque
+    // "Failed to fetch", which used to look like the feedback button doing nothing at all.
+    throw new Error(`${provider.label} could not be reached (${error?.message || 'network error'}). Check the internet connection, then the ${provider.label} API key in Settings > API Keys.`)
+  }
 
   if (!response.ok) {
     const message = await readErrorMessage(response)
